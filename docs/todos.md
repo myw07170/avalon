@@ -151,28 +151,51 @@ src/
 
 ---
 
-## 阶段 2：可见性
+## 阶段 2：可见性 ✅ 已完成
 
 **目标**：`getKnownIdentities` 完全正确。这是整个项目最容易写错、错了又最难发现的一块。
 
-- [ ] `visibility.ts`：
+- [x] `visibility.ts` ✅ 已完成：
 ```typescript
-export function getKnownIdentities(viewerId: PlayerId, players: Player[]): Knowledge[];
+export function getKnownIdentities(viewerId: PlayerId, players: readonly Player[]): Knowledge[];
 ```
-- [ ] 实现 [rules.md §3.3](./rules.md) 的矩阵，逐条对照：
+- [x] 实现 [rules.md §3.3](./rules.md) 的矩阵，逐条对照：
       - 梅林 → 所有坏人**除莫德雷德外**的 `IS_EVIL`
       - 派西维尔 → 一条 `MERLIN_OR_MORGANA`，`playerIds` **必须按 id 升序**
       - 莫甘娜/刺客/莫德雷德/爪牙 → 互相 `IS_EVIL`，**不含奥伯伦**，也不含自己
       - 奥伯伦、忠臣 → 空数组
-- [ ] 返回的数组按 `playerId` 排序，消除任何顺序信息
+- [x] 返回的数组按 `playerId` 排序，消除任何顺序信息
+      - 排序只在唯一出口做一次，不在各分支各排一遍
+      - `EVIL_CONSPIRACY`（不含奥伯伦）**同时**充当"谁能看"和"谁被看到"两侧的判据，
+        双向盲区因此在结构上就没法只实现一半
+      - `EVIL_VISIBLE_TO_MERLIN` 从 `ROLE_TEAM` 派生（全部坏人减莫德雷德），不手抄第二遍
+      - 奥伯伦与忠臣写成显式 `case` 而不是落进 default，让"这是刻意的空"在代码里看得见
+      - viewerId 不存在、本局缺梅林或莫甘娜，都抛 `EngineError("INTERNAL")`——
+        本函数只被引擎内部调用，这两种输入只可能是引擎自己的 bug
 
-**完成标准**（每条一个测试用例）：
+**完成标准**（`visibility.test.ts`，25 个用例，已全绿）：
 
-- [ ] 梅林的 knowledge 不含莫德雷德的座位号
-- [ ] 奥伯伦的 knowledge 为空
-- [ ] 其他坏人的 knowledge 不含奥伯伦
-- [ ] 派西维尔恰好拿到一条 `MERLIN_OR_MORGANA`，且在梅林座位号 > 莫甘娜座位号的局里，`playerIds[0]` 是莫甘娜（证明确实排序了）
-- [ ] 忠臣的 knowledge 为空
+- [x] 梅林的 knowledge 不含莫德雷德的座位号，且**含**奥伯伦
+- [x] 奥伯伦的 knowledge 为空
+- [x] 其他坏人的 knowledge 不含奥伯伦
+- [x] 派西维尔恰好拿到一条 `MERLIN_OR_MORGANA`，且在梅林座位号 > 莫甘娜座位号的局里，`playerIds[0]` 是莫甘娜（证明确实排序了）
+- [x] 忠臣的 knowledge 为空
+- [x] 坏人的 knowledge 不含自己；好人（梅林除外）看不到任何 `IS_EVIL`
+- [x] 6 种人数 × 每种自由位组合 × 10 seed 的性质测试：条数、座位号合法性、升序全部逐座位断言
+      （期望条数在测试里按 `ROLE_TEAM` 独立算一遍，不复用实现里的集合常量）
+- [x] 纯函数：不改传入的 `players`、同输入同结果、打乱座位数组顺序不影响任何人的结果
+- [x] 越界/非整数 viewerId 抛 `EngineError`
+
+**已验证**（2026-08-24）：`pnpm typecheck` / `pnpm lint` 无输出，`pnpm test` 5 个文件 / 101 个用例全绿。
+
+**变异测试自查**（四条各改一次，确认都被抓住后还原）：
+
+| 变异 | 被抓 |
+| --- | --- |
+| `EVIL_CONSPIRACY` 加上 `OBERON` | 3 条断言炸（双向各一条 + 互认那条） |
+| 派西维尔那条写成 `[merlinId, morganaId]` | 2 条炸 |
+| 梅林能看到莫德雷德 | 2 条炸 |
+| 出口不排序 | 1 条炸（打乱座位顺序那条） |
 
 **易错点**：奥伯伦是**双向**盲区。只实现"别人看不到他"、忘了"他看不到别人"，或者反过来，是最常见的错。写两个方向的独立断言。
 
