@@ -147,6 +147,51 @@ export interface GameConfig {
   seed: number;
 }
 
+// --- 配置的自定义与校验 -----------------------------------------------------
+//
+// rules.md §3.2 的推荐配置是「默认值」，不是唯一合法值。
+// 锁定项：好人/坏人名额按 §2；梅林、派西维尔、莫甘娜、刺客各恰好 1。
+// 可调项：莫德雷德 0-1、奥伯伦 0-1、爪牙 0 至填满。
+// 忠臣数量由好人名额减去梅林和派西维尔算出，不由用户指定。
+
+/** 数量可由用户调整的角色。其余角色的数量被规则或名额算死 */
+export type AdjustableRole = "MORDRED" | "OBERON" | "MINION" | "LOYAL_SERVANT";
+
+/** 各角色的数量上下界，min === max 表示锁定 */
+export interface RoleBound {
+  min: number;
+  max: number;
+}
+
+/** 角色数量表。缺席的角色计 0 而不是 undefined，countsToRoles 依赖这条 */
+export type RoleCounts = Record<Role, number>;
+
+export type ConfigIssueCode =
+  /** playerCount 不在 5-10 */
+  | "PLAYER_COUNT_UNSUPPORTED"
+  /** roles.length !== playerCount */
+  | "ROLE_COUNT_MISMATCH"
+  /** 好坏人数与 §2 表格不符 */
+  | "TEAM_SPLIT_MISMATCH"
+  /** 某角色数量越出 ROLE_BOUNDS */
+  | "ROLE_BOUND_VIOLATION"
+  /** missions 与 §2 表格不符 */
+  | "MISSION_TABLE_MISMATCH"
+  /** 仅 warning：莫德雷德用在 7/8 人局，rules.md §3.1 建议 9 人以上 */
+  | "BELOW_RECOMMENDED_COUNT";
+
+/**
+ * 配置的单条问题。
+ * severity "error" 阻止开局；"warning" 只提示，不拦。
+ */
+export interface ConfigIssue {
+  severity: "error" | "warning";
+  code: ConfigIssueCode;
+  message: string;
+  /** 相关角色，UI 高亮用 */
+  roles?: Role[];
+}
+
 /** 随机源。引擎所有随机行为都必须走它，方便测试注入固定序列 */
 export type RngFn = () => number;
 
@@ -449,7 +494,9 @@ export class EngineError extends Error {
       | "DUPLICATE_SUBMISSION"
       | "GOOD_CANNOT_FAIL"
       | "INVALID_TARGET"
-      | "CONFIG_INVALID",
+      | "CONFIG_INVALID"
+      /** 引擎内部不变量被打破。正常输入下不该出现，出现即为引擎 bug */
+      | "INTERNAL",
     readonly context?: Record<string, unknown>,
   ) {
     super(message);

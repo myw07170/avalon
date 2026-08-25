@@ -26,6 +26,7 @@
       - 测试：`vitest` `@vitest/coverage-v8`
 - [x] 配置 `vitest.config.mts`，`test` 脚本指向 vitest
       （用 `.mts` 而不是 `.ts`：Next 的 package.json 没有 `"type": "module"`，Vite 会按 CommonJS 加载 `.ts` 配置并告警）
+      coverage 的 `include` 要限定到 `**/*.ts`——glob 到 `phases/README.md` 会让 v8 provider 报 `PARSE_ERROR`
 - [x] `tsconfig.json` 打开 `"strict": true`、`"noUncheckedIndexedAccess": true`
       （后者很烦，但正是它会逼你处理 `players[id]` 可能为 undefined 的情况）
       顺带打开 `noUnusedLocals` / `noUnusedParameters` / `noFallthroughCasesInSwitch`，
@@ -44,9 +45,12 @@ src/
       types.ts            ✅ 已完成
       types.test.ts       ✅ 冒烟测试：钉住 ROLE_TEAM 与 ROLE_META 不分叉
       index.ts            ✅ 公开出口，引擎外部只从这里 import
-      config.ts           人数配置表、角色配置表        阶段 1
-      rng.ts              可播种随机数                  阶段 1
-      setup.ts            创建初始状态、洗牌发牌        阶段 1
+      config.ts           ✅ 人数/角色配置表、自定义与校验
+      config.test.ts      ✅ 33 个用例
+      rng.ts              ✅ mulberry32、shuffle、pick
+      rng.test.ts         ✅ 14 个用例
+      setup.ts            ✅ 创建初始状态、洗牌发牌
+      setup.test.ts       ✅ 23 个用例
       visibility.ts       getKnownIdentities            阶段 2
       legal.ts            getLegalActions               阶段 3
       view.ts             toPlayerView                  阶段 3
@@ -81,23 +85,67 @@ src/
 
 ---
 
-## 阶段 1：静态配置与角色分配
+## 阶段 1：静态配置与角色分配 ✅ 已完成
 
 **目标**：给定人数，能产出一个合法的初始 `GameState`。
 
-- [ ] `config.ts`：把 [rules.md §2](./rules.md) 的人数配置表和 §3.2 的角色配置表写成常量。
-      - `MISSION_TABLE: Record<number, MissionConfig[]>`，注意 7 人及以上第 4 轮 `failsRequired: 2`
-      - `ROLE_PRESETS: Record<number, Role[]>`
-      - `validateConfig(config)`：断言 `roles.length === playerCount`、坏人角色数与表格一致、梅林/派西维尔/莫甘娜/刺客各恰好 1 个。不满足抛 `EngineError("CONFIG_INVALID")`
-- [ ] `rng.ts`：实现 mulberry32 或 xorshift 之类的可播种 PRNG，导出 `createRng(seed): RngFn` 和 `shuffle<T>(arr, rng): T[]`（Fisher-Yates）
-- [ ] `setup.ts`：`createGame(playerCount, humanSeat, personas, seed): GameState`
-      - 用 `shuffle` 打乱 `ROLE_PRESETS[playerCount]` 后依座位分配
-      - 首任队长用 rng 随机
-      - `phase: "ROLE_REVEAL"`，`pending` 用 `createPending()` 初始化
+- [x] `config.ts` ✅ 已完成：[rules.md §2](./rules.md)、§3.1、§3.2、§3.2.1 的代码化。
+      §3.2 的推荐配置定位为**默认值**，用户可自定义角色构成（见 §3.2.1）
+      - `TEAM_SPLIT` / `MISSION_TABLE` / `ROLE_BOUNDS` / `ROLE_PRESETS` / `ROLE_ORDER`
+      - 注意 7 人及以上第 4 轮 `failsRequired: 2`
+      - `ROLE_PRESETS` 由 `composeRoles` 推导，不手抄第二遍
+      - `getFreeEvilSlots(n)` / `getEvilOptions(n)`：坏人自由位的数量与全部合法组合，UI 直接用
+      - `composeRoles(n, freeEvilSlots)`：用户只挑自由位，锁定角色和忠臣填充全部推导，
+        让非法状态在常规路径上表示不出来
+      - `checkConfig(config): ConfigIssue[]` 纯查错不抛，UI 边编辑边调用；
+        `validateConfig` 是它的抛错版本。两者共用同一套判断，避免"UI 提示"和"引擎校验"分叉
+      - `rolesToCounts` / `countsToRoles`：数量表互转，后者按 `ROLE_ORDER` 输出保证结果稳定
+- [x] `rng.ts` ✅ 已完成：mulberry32 可播种 PRNG
+      - `createRng(seed)` / `randomInt(rng, max)` / `shuffle(arr, rng)`（Fisher-Yates，返回新数组） / `pick(arr, rng)`
+      - 不 import 其他引擎模块，保持在依赖链最底层
+      - 刻意不用 `Math.random`：不可播种就没法复现"跑 1000 局偶发崩一次"这类问题
+- [x] `setup.ts` ✅ 已完成：`createGame({ config, humanSeat, personas, rng }): GameState`
+      （用 options 对象而不是位置参数，这样能直接接收自定义过的 `config`）
+      - 用 `shuffle` 打乱 `config.roles` 后依座位分配（注意是 `config.roles`，不是 `ROLE_PRESETS`——
+        用户可能自定义过）
+      - 首任队长用 `randomInt` 随机
+      - **`phase: "SETUP"`**，`pending` 用 `createPending()` 初始化
+        - 按 [state-machine.md §2](./state-machine.md)，SETUP 负责"分配角色、确定首任队长"，
+          再由 `START_GAME` 转入 `ROLE_REVEAL`。这里若直接给 `ROLE_REVEAL`，
+          SETUP 阶段和 `START_GAME` 动作就成了死代码
+      - `makePlaceholderPersonas(n)`：占位人设，供测试和阶段 3 的随机模拟用，阶段 4 换成真人设库后删掉
 
-**完成标准**：6 种人数各建 100 局，断言角色数量分布、任务配置、坏人数量全部正确。
+**完成标准**
+
+配置层（`config.test.ts`，已全绿）：
+- [x] 6 套 `ROLE_PRESETS` 无 error，且与 §3.2 表格逐字一致
+- [x] 各人数的自由位数量为 `0,0,1,1,1,2`，合法组合数为 `1,1,3,3,3,4`
+- [x] 每个人数的每一种自由位组合都通过 `validateConfig`
+- [x] `composeRoles` 的好人侧恒为 梅林 + 派西维尔 + 忠臣×(好人名额−2)
+- [x] 10 人局允许双爪牙，但不允许双莫德雷德或双奥伯伦
+- [x] 逐条命中错误码：2 个梅林、0 个派西维尔、2 个莫德雷德、坏人数不符、`roles.length` 不符、人数越界、任务表被改
+- [x] 莫德雷德在 7 人局有 warning 无 error 且不拦开局；9 人局无提示
+- [x] `TEAM_SPLIT` / `MISSION_TABLE` / `ROLE_PRESETS` 覆盖同一组人数（几张手写表不许悄悄分叉）
+
+随机源（`rng.test.ts`，已全绿）：
+- [x] 同一种子产出同一序列，不同种子产出不同序列
+- [x] 取值落在 [0, 1)，10000 次分 10 桶每桶都在 800-1200 之间
+- [x] `shuffle` 不改传入数组、元素不增不减、同种子同结果
+- [x] `shuffle` 确实在洗：500 次里每个元素都出现在过每个位置
+- [x] 空数组/单元素不出错；`randomInt` 上界非正整数、`pick` 空数组均抛 `EngineError`
+
+发牌层（`setup.test.ts`，已全绿）：
+- [x] 6 种人数各建 100 局，断言角色数量分布、任务配置、坏人数量全部正确
+- [x] 自定义配置也能正常建局，不只是推荐配置（每个人数的每一种自由位组合都验过）
+- [x] 梅林不会每局都在 0 号位；每个角色都能出现在每个座位上；首任队长不固定
+- [x] 初始状态停在 `SETUP`，计分/轮次/历史全部归零，`pending` 是全新空对象
+- [x] 人类座位标记正确且无人设；AI 人设不复用；`humanSeat` 越界、人设数量不足均抛 `EngineError`
+- [x] 同一种子建出完全相同的一局
 
 **易错点**：不要把角色数组直接按下标发给玩家而忘了洗牌——测试会通过（数量对），但每局梅林都在 0 号位。
+
+> 这条已用变异测试验证过：把 `shuffle` 去掉改成按下标发牌，"角色分布"那条**照样全绿**，
+> 是"梅林不会每局都在 0 号位"等 4 条分布断言把它抓出来的。
 
 ---
 
@@ -141,6 +189,8 @@ export function getKnownIdentities(viewerId: PlayerId, players: Player[]): Knowl
       - `TEAM_BUILDING` 阶段只有队长有动作；返回的 `PROPOSE_TEAM` 不必穷举所有组合（C(10,5) 太多），返回一个"模板"动作 + 由调用方填 team，或只对 AI 层暴露 `teamSize` 约束
       - 不该行动的玩家返回 `[]`
 - [ ] `reduce.ts`：主入口，`assertLegal` 后按 phase 分派
+- [ ] `phases/setup.ts`：`START_GAME` 从 `SETUP` 转入 `ROLE_REVEAL`，追加 `GAME_STARTED` 事件
+      （`createGame` 已经把角色和首任队长定好了，这一步只做阶段转移和日志）
 - [ ] `phases/roleReveal.ts`：累积 `pending.acknowledged`，齐了转 `TEAM_BUILDING` 并初始化发言顺序
 - [ ] `phases/teamBuilding.ts`：校验队伍人数 === `currentMission.teamSize`、无重复、id 合法
 - [ ] `phases/discussion.ts`：`PROPOSAL_DISCUSSION` 与 `REVIEW_DISCUSSION` 共用。按 `pending.speakingOrder` 逐人推进 `speakerIndex`，非当前发言人提交 `SPEAK` 抛 `NOT_YOUR_TURN`
@@ -241,7 +291,12 @@ while (state.phase !== "GAME_OVER") {
       - `myViewAtom = atom(get => toPlayerView(get(gameStateAtom), get(mySeatAtom)))`
       - **所有组件只读 `myViewAtom`**，读 `gameStateAtom` 的组件一律视为 bug（`GAME_OVER` 复盘面板除外，它读 `view.reveal`）
 - [ ] 组件：
-      - `SetupScreen` 人数、人类座位、可选角色、mock 开关
+      - `SetupScreen` 人数、人类座位、角色配置、mock 开关
+        - 角色配置区按 `getFreeEvilSlots(n)` 决定形态：为 0（5、6 人局）时显示
+          "该人数配置固定"并列出角色，**不要渲染一个点了没反应的编辑器**
+        - 有自由位时用 `getEvilOptions(n)` 渲染选项，选中后走 `composeRoles` 得到完整 roles
+        - 用 `checkConfig` 的返回实时提示：有 error 时禁用开始按钮，warning 只显示不拦
+          （莫德雷德用在 7/8 人局就是这种情况）
       - `RoleCard` 翻牌动效展示身份与 knowledge（Framer Motion）
       - `SeatTable` 圆桌座位，标记队长、队员、已投票/已发言状态
       - `MissionTrack` 5 个任务节点 + 否决计数器
