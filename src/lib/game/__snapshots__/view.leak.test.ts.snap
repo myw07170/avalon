@@ -1,0 +1,505 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`快照 > 奥伯伦在刺杀阶段的完整视角 1`] = `
+{
+  "awaitingPlayerIds": [
+    4,
+  ],
+  "currentLeaderId": 3,
+  "currentMission": {
+    "failsRequired": 1,
+    "teamSize": 4,
+  },
+  "evilScore": 1,
+  "goodScore": 3,
+  "knowledge": [],
+  "maxRejects": 5,
+  "missionConfigs": [
+    {
+      "failsRequired": 1,
+      "teamSize": 3,
+    },
+    {
+      "failsRequired": 1,
+      "teamSize": 4,
+    },
+    {
+      "failsRequired": 1,
+      "teamSize": 4,
+    },
+    {
+      "failsRequired": 2,
+      "teamSize": 5,
+    },
+    {
+      "failsRequired": 1,
+      "teamSize": 5,
+    },
+  ],
+  "missionHistory": [
+    {
+      "attempt": 0,
+      "failCount": 1,
+      "leaderId": 0,
+      "missionIndex": 0,
+      "succeeded": false,
+      "team": [
+        0,
+        1,
+        2,
+      ],
+    },
+  ],
+  "missionIndex": 1,
+  "phase": "ASSASSINATION",
+  "players": [
+    {
+      "id": 0,
+      "isHuman": false,
+      "name": "P0",
+    },
+    {
+      "id": 1,
+      "isHuman": false,
+      "name": "P1",
+    },
+    {
+      "id": 2,
+      "isHuman": false,
+      "name": "P2",
+    },
+    {
+      "id": 3,
+      "isHuman": false,
+      "name": "P3",
+    },
+    {
+      "id": 4,
+      "isHuman": false,
+      "name": "P4",
+    },
+    {
+      "id": 5,
+      "isHuman": false,
+      "name": "P5",
+    },
+    {
+      "id": 6,
+      "isHuman": false,
+      "name": "P6",
+    },
+    {
+      "id": 7,
+      "isHuman": false,
+      "name": "P7",
+    },
+    {
+      "id": 8,
+      "isHuman": false,
+      "name": "P8",
+    },
+    {
+      "id": 9,
+      "isHuman": false,
+      "name": "P9",
+    },
+  ],
+  "progress": {
+    "required": 4,
+    "submitted": 1,
+  },
+  "proposalHistory": [
+    {
+      "approved": true,
+      "attempt": 0,
+      "forced": false,
+      "leaderId": 0,
+      "missionIndex": 0,
+      "team": [
+        0,
+        1,
+        2,
+      ],
+      "votes": {
+        "0": true,
+        "1": true,
+        "2": true,
+        "3": true,
+        "4": true,
+        "5": true,
+        "6": false,
+        "7": false,
+        "8": false,
+        "9": false,
+      },
+    },
+  ],
+  "proposedTeam": null,
+  "rejectCount": 0,
+  "reveal": null,
+  "selfId": 6,
+  "selfRole": "OBERON",
+  "selfSubmitted": false,
+  "selfTeam": "EVIL",
+  "speakingOrder": [],
+  "speeches": [
+    {
+      "attempt": 0,
+      "content": "1 号的票很难解释",
+      "missionIndex": 0,
+      "phase": "REVIEW_DISCUSSION",
+      "playerId": 3,
+      "seq": 0,
+    },
+  ],
+}
+`;
+
+exports[`快照 > 忠臣在提议讨论阶段的完整视角 1`] = `
+{
+  "awaitingPlayerIds": [
+    6,
+  ],
+  "currentLeaderId": 3,
+  "currentMission": {
+    "failsRequired": 1,
+    "teamSize": 4,
+  },
+  "evilScore": 1,
+  "goodScore": 0,
+  "knowledge": [],
+  "maxRejects": 5,
+  "missionConfigs": [
+    {
+      "failsRequired": 1,
+      "teamSize": 3,
+    },
+    {
+      "failsRequired": 1,
+      "teamSize": 4,
+    },
+    {
+      "failsRequired": 1,
+      "teamSize": 4,
+    },
+    {
+      "failsRequired": 2,
+      "teamSize": 5,
+    },
+    {
+      "failsRequired": 1,
+      "teamSize": 5,
+    },
+  ],
+  "missionHistory": [
+    {
+      "attempt": 0,
+      "failCount": 1,
+      "leaderId": 0,
+      "missionIndex": 0,
+      "succeeded": false,
+      "team": [
+        0,
+        1,
+        2,
+      ],
+    },
+  ],
+  "missionIndex": 1,
+  "phase": "PROPOSAL_DISCUSSION",
+  "players": [
+    {
+      "id": 0,
+      "isHuman": false,
+      "name": "P0",
+    },
+    {
+      "id": 1,
+      "isHuman": false,
+      "name": "P1",
+    },
+    {
+      "id": 2,
+      "isHuman": false,
+      "name": "P2",
+    },
+    {
+      "id": 3,
+      "isHuman": false,
+      "name": "P3",
+    },
+    {
+      "id": 4,
+      "isHuman": false,
+      "name": "P4",
+    },
+    {
+      "id": 5,
+      "isHuman": false,
+      "name": "P5",
+    },
+    {
+      "id": 6,
+      "isHuman": false,
+      "name": "P6",
+    },
+    {
+      "id": 7,
+      "isHuman": false,
+      "name": "P7",
+    },
+    {
+      "id": 8,
+      "isHuman": false,
+      "name": "P8",
+    },
+    {
+      "id": 9,
+      "isHuman": false,
+      "name": "P9",
+    },
+  ],
+  "progress": {
+    "required": 10,
+    "submitted": 3,
+  },
+  "proposalHistory": [
+    {
+      "approved": true,
+      "attempt": 0,
+      "forced": false,
+      "leaderId": 0,
+      "missionIndex": 0,
+      "team": [
+        0,
+        1,
+        2,
+      ],
+      "votes": {
+        "0": true,
+        "1": true,
+        "2": true,
+        "3": true,
+        "4": true,
+        "5": true,
+        "6": false,
+        "7": false,
+        "8": false,
+        "9": false,
+      },
+    },
+  ],
+  "proposedTeam": [
+    3,
+    4,
+    5,
+  ],
+  "rejectCount": 0,
+  "reveal": null,
+  "selfId": 9,
+  "selfRole": "LOYAL_SERVANT",
+  "selfSubmitted": false,
+  "selfTeam": "GOOD",
+  "speakingOrder": [
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    0,
+    1,
+    2,
+  ],
+  "speeches": [
+    {
+      "attempt": 0,
+      "content": "1 号的票很难解释",
+      "missionIndex": 0,
+      "phase": "REVIEW_DISCUSSION",
+      "playerId": 3,
+      "seq": 0,
+    },
+  ],
+}
+`;
+
+exports[`快照 > 梅林在投票阶段的完整视角 1`] = `
+{
+  "awaitingPlayerIds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    7,
+    8,
+    9,
+  ],
+  "currentLeaderId": 3,
+  "currentMission": {
+    "failsRequired": 1,
+    "teamSize": 4,
+  },
+  "evilScore": 1,
+  "goodScore": 0,
+  "knowledge": [
+    {
+      "kind": "IS_EVIL",
+      "playerId": 1,
+    },
+    {
+      "kind": "IS_EVIL",
+      "playerId": 6,
+    },
+    {
+      "kind": "IS_EVIL",
+      "playerId": 7,
+    },
+  ],
+  "maxRejects": 5,
+  "missionConfigs": [
+    {
+      "failsRequired": 1,
+      "teamSize": 3,
+    },
+    {
+      "failsRequired": 1,
+      "teamSize": 4,
+    },
+    {
+      "failsRequired": 1,
+      "teamSize": 4,
+    },
+    {
+      "failsRequired": 2,
+      "teamSize": 5,
+    },
+    {
+      "failsRequired": 1,
+      "teamSize": 5,
+    },
+  ],
+  "missionHistory": [
+    {
+      "attempt": 0,
+      "failCount": 1,
+      "leaderId": 0,
+      "missionIndex": 0,
+      "succeeded": false,
+      "team": [
+        0,
+        1,
+        2,
+      ],
+    },
+  ],
+  "missionIndex": 1,
+  "phase": "TEAM_VOTE",
+  "players": [
+    {
+      "id": 0,
+      "isHuman": false,
+      "name": "P0",
+    },
+    {
+      "id": 1,
+      "isHuman": false,
+      "name": "P1",
+    },
+    {
+      "id": 2,
+      "isHuman": false,
+      "name": "P2",
+    },
+    {
+      "id": 3,
+      "isHuman": false,
+      "name": "P3",
+    },
+    {
+      "id": 4,
+      "isHuman": false,
+      "name": "P4",
+    },
+    {
+      "id": 5,
+      "isHuman": false,
+      "name": "P5",
+    },
+    {
+      "id": 6,
+      "isHuman": false,
+      "name": "P6",
+    },
+    {
+      "id": 7,
+      "isHuman": false,
+      "name": "P7",
+    },
+    {
+      "id": 8,
+      "isHuman": false,
+      "name": "P8",
+    },
+    {
+      "id": 9,
+      "isHuman": false,
+      "name": "P9",
+    },
+  ],
+  "progress": {
+    "required": 10,
+    "submitted": 2,
+  },
+  "proposalHistory": [
+    {
+      "approved": true,
+      "attempt": 0,
+      "forced": false,
+      "leaderId": 0,
+      "missionIndex": 0,
+      "team": [
+        0,
+        1,
+        2,
+      ],
+      "votes": {
+        "0": true,
+        "1": true,
+        "2": true,
+        "3": true,
+        "4": true,
+        "5": true,
+        "6": false,
+        "7": false,
+        "8": false,
+        "9": false,
+      },
+    },
+  ],
+  "proposedTeam": [
+    3,
+    4,
+    5,
+  ],
+  "rejectCount": 0,
+  "reveal": null,
+  "selfId": 0,
+  "selfRole": "MERLIN",
+  "selfSubmitted": true,
+  "selfTeam": "GOOD",
+  "speakingOrder": [],
+  "speeches": [
+    {
+      "attempt": 0,
+      "content": "1 号的票很难解释",
+      "missionIndex": 0,
+      "phase": "REVIEW_DISCUSSION",
+      "playerId": 3,
+      "seq": 0,
+    },
+  ],
+}
+`;

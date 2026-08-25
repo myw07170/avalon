@@ -27,6 +27,12 @@ export const MAX_PLAYERS = 10;
 export const DEFAULT_MAX_REJECTS = 5;
 
 /**
+ * rules.md §1：任务积分达到此数即分出任务胜负。
+ * 好人到 3 分不等于终局——还要过刺杀那一关，判定顺序见 missionResult.ts
+ */
+export const MISSIONS_TO_WIN = 3;
+
+/**
  * 角色的规范顺序。countsToRoles 按它输出，
  * 保证同一份配置永远产出同一个数组——快照测试和配置对比都依赖这条。
  */

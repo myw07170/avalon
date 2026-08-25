@@ -203,69 +203,195 @@ export function getKnownIdentities(viewerId: PlayerId, players: readonly Player[
 
 ---
 
-## 阶段 3：状态机
+## 阶段 3：状态机 ✅ 已完成
 
 **目标**：不接 LLM、不写 UI，用随机策略能跑完整局。
 
 按阶段逐个实现，每实现一个就补对应测试，不要一次写完再测。
 
-- [ ] `legal.ts`：`getLegalActions(state, playerId): GameAction[]`
+- [x] `legal.ts` ✅ 已完成：`getLegalActions(state, playerId): GameAction[]`
       - 这是防作弊第一道闸。`MISSION_EXECUTION` 阶段好人拿到的列表里**根本没有** `success: false` 的选项
       - `TEAM_BUILDING` 阶段只有队长有动作；返回的 `PROPOSE_TEAM` 不必穷举所有组合（C(10,5) 太多），返回一个"模板"动作 + 由调用方填 team，或只对 AI 层暴露 `teamSize` 约束
       - 不该行动的玩家返回 `[]`
-- [ ] `reduce.ts`：主入口，`assertLegal` 后按 phase 分派
-- [ ] `phases/setup.ts`：`START_GAME` 从 `SETUP` 转入 `ROLE_REVEAL`，追加 `GAME_STARTED` 事件
+      - 实现时定下的几条约定，后面的 phases/* 必须跟着走：
+        - **不变量：`getLegalActions` 的每一项都能通过 `assertLegal`**。所以 `PROPOSE_TEAM`
+          模板给的是一支**合法**队伍（队长 + 最小的若干座位，升序），而不是空数组——
+          调用方照着候选项提交反而被抛错，是最难查的一类坑。选人用 `getTeamConstraint`
+        - 自由文本动作（`SPEAK` / `ASSASSIN_OPINION`）给 `content: ""` 的模板，
+          引擎不校验文本内容，那是策略问题不是合法性问题
+        - 阶段与动作类型的对应写成 `PHASE_ACTIONS` 一张表，不散成各分支的 if，
+          否则迟早出现"`getLegalActions` 给了但 `reduce` 不收"的分叉
+        - `getAwaitingPlayerIds` 一律按座位号升序返回：**"谁还没交"是公开信息，
+          "谁先交的"不是**，返回顺序不能把后者漏出去
+        - 刺杀阶段坏人按**座位号升序**逐个 `ASSASSIN_OPINION`（含奥伯伦），
+          全部说完才轮到刺客 `ASSASSINATE`；`phases/assassination.ts` 必须按同一次序结算
+        - 校验顺序决定调用方看到哪个错误码：阶段 → 座位存在 → 重复提交 → 轮没轮到 → 载荷。
+          重复投票报 `DUPLICATE_SUBMISSION` 而不是 `NOT_YOUR_TURN`
+        - 多了两个导出：`getSystemActions`（`SETUP` 给 `START_GAME`、`MISSION_RESULT` 给 `NEXT`，
+          省得每个调用方各硬编码一遍）与 `getCurrentMission`（phases/* 都要用）
+      - 越界座位号：`getLegalActions` 抛 `INTERNAL`（调用方是引擎自己），
+        `assertLegal` 抛 `NOT_YOUR_TURN`（输入来自 AI / UI，是外部输入错误）
+
+**已验证**（2026-08-24，`legal.test.ts` 73 个用例）：`pnpm typecheck` / `pnpm lint` 无输出，
+`pnpm test` 6 个文件 / 174 个用例全绿。
+
+**变异测试自查**（五条各改一次，确认都被抓住后还原）：
+
+| 变异 | 被抓 |
+| --- | --- |
+| 好人也拿到 `success: false` | 4 条炸 |
+| 刺客可在推测未完时直接 `ASSASSINATE` | 1 条炸 |
+| `TEAM_VOTE` 不判重复提交 | 1 条炸 |
+| `getAwaitingPlayerIds` 不按座位升序 | 2 条炸 |
+| 刺杀目标不校验座位号 | 1 条炸 |
+
+- [x] `reduce.ts` ✅ 已完成：主入口，`assertLegal` 后按 phase 分派
+      - 全文件只做这两件事，一条规则判断都不在里面；`rng` 目前没有阶段用得上，
+        参数保留是 [state-machine.md §3](./state-machine.md) 的回放契约
+      - 新增 `phases/transitions.ts` 装各分支共用的转移工具（发言顺序、队长顺延、
+        提议结算、终局）。放 `reduce.ts` 会形成 `reduce → phases → reduce` 的循环 import
+- [x] `phases/setup.ts`：`START_GAME` 从 `SETUP` 转入 `ROLE_REVEAL`，追加 `GAME_STARTED` 事件
       （`createGame` 已经把角色和首任队长定好了，这一步只做阶段转移和日志）
-- [ ] `phases/roleReveal.ts`：累积 `pending.acknowledged`，齐了转 `TEAM_BUILDING` 并初始化发言顺序
-- [ ] `phases/teamBuilding.ts`：校验队伍人数 === `currentMission.teamSize`、无重复、id 合法
-- [ ] `phases/discussion.ts`：`PROPOSAL_DISCUSSION` 与 `REVIEW_DISCUSSION` 共用。按 `pending.speakingOrder` 逐人推进 `speakerIndex`，非当前发言人提交 `SPEAK` 抛 `NOT_YOUR_TURN`
+- [x] `phases/roleReveal.ts`：累积 `pending.acknowledged`，齐了转 `TEAM_BUILDING`
+      - **与本条原文的偏差**：发言顺序改到【进入讨论阶段时】才算，不在这里初始化。
+        `legal.ts` 只在讨论阶段读 `pending.speakingOrder`，提前算会让一份过期的顺序
+        在 `TEAM_BUILDING` / `TEAM_VOTE` 期间躺在 `pending` 里，与
+        「进入新阶段必须清空 pending」直接冲突
+- [x] `phases/teamBuilding.ts`：校验队伍人数 === `currentMission.teamSize`、无重复、id 合法
+- [x] `phases/discussion.ts`：`PROPOSAL_DISCUSSION` 与 `REVIEW_DISCUSSION` 共用。按 `pending.speakingOrder` 逐人推进 `speakerIndex`，非当前发言人提交 `SPEAK` 抛 `NOT_YOUR_TURN`
       - 发言顺序 = 座位序，从当前队长开始，绕一圈
-- [ ] `phases/teamVote.ts`：
+- [x] `phases/teamVote.ts`：
       - 累积 `pending.votes`，重复投票抛 `DUPLICATE_SUBMISSION`
       - 齐了才结算：`approveCount * 2 > playerCount` 为通过（**严格大于半数，平票算否决**）
       - 通过 → `rejectCount = 0`，转 `MISSION_EXECUTION`
       - 否决 → `rejectCount + 1`；达到 `maxRejects` 则坏人胜（`REJECT_LIMIT`），否则队长顺延回 `TEAM_BUILDING`
       - `forcePassOnLastAttempt` 变体：进入阶段时若已是最后一次机会，直接以 `forced: true` 通过
-- [ ] `phases/mission.ts`：
+- [x] `phases/mission.ts`：
       - 非队员提交抛 `NOT_YOUR_TURN`
       - 好人提交 `success: false` 抛 `GOOD_CANNOT_FAIL`（引擎级硬约束，不是提示）
       - 齐了结算：`failCount >= currentMission.failsRequired` 判失败
       - 写入 `missionHistory` 时 `cards` **按 playerId 升序**存
-- [ ] `phases/missionResult.ts`：`NEXT` 推进
+- [x] `phases/missionResult.ts`：`NEXT` 推进
       - 好人 3 分 → `ASSASSINATION`（**不是 GAME_OVER**）
       - 坏人 3 分 → `GAME_OVER`（`THREE_MISSIONS`）
       - 都没到 → `REVIEW_DISCUSSION`
-- [ ] `phases/assassination.ts`：坏人逐个 `ASSASSIN_OPINION`（奥伯伦也参与，他也是坏人），全部说完后刺客 `ASSASSINATE`
+- [x] `phases/assassination.ts`：坏人逐个 `ASSASSIN_OPINION`（奥伯伦也参与，他也是坏人），全部说完后刺客 `ASSASSINATE`
       - 目标必须是合法座位号，否则抛 `INVALID_TARGET`
       - 命中梅林 → 坏人胜（`ASSASSINATION_HIT`）；否则好人胜（`ASSASSINATION_MISS`）
-- [ ] `view.ts`：`toPlayerView(state, playerId): PlayerView`
+- [x] `view.ts` ✅ 已完成：`toPlayerView(state, playerId): PlayerView`
       - `missionHistory` 映射成 `PublicMissionRecord`，**丢弃 `cards`**
-      - `proposalHistory` 只含已结算的
+      - `proposalHistory` 只含已结算的（`proposalHistory` 本身就只装已结算的，
+        未结算的票在 `pending.votes` 里，走不到映射函数）
       - `pending` 的任何内容都不进去，只折算成 `progress` 的两个数字和 `selfSubmitted`
       - `reveal` 仅在 `GAME_OVER` 时填充
+      - 两条写法约定，都不是风格问题：
+        - **逐字段抄写，绝不 `...record`**。展开会把 `cards` 一起带出去；更糟的是
+          将来给 `MissionRecord` 加字段时不会有任何提示，新字段会自己漏进 prompt
+        - **一律返回新数组新对象**。PlayerView 要交给 AI 层和 UI，
+          共享引用等于给了它们一条改引擎状态的后门
+      - `progress` 与 `selfSubmitted` 在同一个 switch 里算出来，防止某个阶段
+        更新了进度却忘了改 `selfSubmitted`
+      - 刺杀阶段 `progress.required` 是坏人数量——那是人数表定死的公开信息，不构成泄漏
 
 **完成标准**（对应 [state-machine.md §4](./state-machine.md)）：
 
 单元测试：
-- [ ] 投票平票判否决（6 人局 3:3）
-- [ ] `rejectCount` 在提议通过时归零
-- [ ] `rejectCount` 在新一轮开始时归零（从 REVIEW_DISCUSSION 进 TEAM_BUILDING）
-- [ ] 连续 5 次否决 → `GAME_OVER` / `REJECT_LIMIT`
-- [ ] 7 人局第 4 轮：1 张失败票**不算**失败，2 张才算
-- [ ] 5 人局第 4 轮：1 张失败票就算失败
-- [ ] 好人的 `getLegalActions` 里不含失败票
-- [ ] 好人 3 分后 `phase === "ASSASSINATION"`，`winner` 仍为 null
-- [ ] 队长每次提议后顺延一位并循环
+- [x] 投票平票判否决（6 人局 3:3）
+- [x] `rejectCount` 在提议通过时归零
+- [x] `rejectCount` 在新一轮开始时归零（从 REVIEW_DISCUSSION 进 TEAM_BUILDING）
+- [x] 连续 5 次否决 → `GAME_OVER` / `REJECT_LIMIT`
+- [x] 7 人局第 4 轮：1 张失败票**不算**失败，2 张才算
+- [x] 5 人局第 4 轮：1 张失败票就算失败
+- [x] 好人的 `getLegalActions` 里不含失败票（`legal.test.ts`，好人只有 `success: true` 一项；奥伯伦作为坏人两项都有）
+- [x] 好人 3 分后 `phase === "ASSASSINATION"`，`winner` 仍为 null
+- [x] 队长每次提议后顺延一位并循环
+
+`reduce.test.ts` 另外还钉住了这些（都属于「不写测试就一定会踩」的那类）：
+
+- 每走一步都断言 `pending` 只含当前阶段该有的字段——上一阶段的投票漏进下一阶段是本状态机最容易出的事故
+- `forcePassOnLastAttempt` 变体：`TEAM_VOTE` 被整个跳过，记录里 `forced: true` 且 `votes` 为空
+- `missionHistory.cards` 按 `playerId` 升序存（乱序提交构造）
+- 好人即使策略要求投失败也投不出去——合法动作里根本没有那一项
+- `reduce` 不改传入的 state、同输入同输出、同一初始状态跑两遍整局结果完全一致
+
+**已验证**（2026-08-24，`reduce.test.ts` 33 个用例）：`pnpm typecheck` / `pnpm lint` 无输出，
+`pnpm test` 7 个文件 / 207 个用例全绿。
+
+**变异测试自查**（六条各改一次，确认都被抓住后还原）：
+
+| 变异 | 被抓 |
+| --- | --- |
+| 平票判通过（`>=` 半数） | 1 条炸 |
+| 提议通过后不清零 `rejectCount` | 4 条炸 |
+| 新一轮不推进 `missionIndex` | 2 条炸 |
+| 好人 3 分直接终局，不进刺杀 | 4 条炸 |
+| 换队长重提时不清空 `pending` | 3 条炸 |
+| `cards` 按提交顺序存 | 4 条炸 |
 
 信息隔离测试（**单独一个文件 `view.leak.test.ts`**）：
-- [ ] 对每个角色调用 `toPlayerView`，`JSON.stringify` 结果不包含他不该知道的任何座位号
-- [ ] `PlayerView` 里任何一条任务记录都没有 `cards` / `playerId` 字段
-- [ ] `TEAM_VOTE` 未结算时，`PlayerView` 中查不到任何人的投票内容
-- [ ] 写成快照测试，任何人改 `toPlayerView` 都会立刻炸
+- [x] 对每个角色调用 `toPlayerView`，序列化结果里不出现自己以外的任何角色名
+      （比对时连引号一起找：裸着找 `ASSASSIN` 会被阶段名 `ASSASSINATION` 命中，
+      找 `MERLIN` 会被派西维尔那条 `kind: MERLIN_OR_MORGANA` 命中——后者恰恰是"分不清谁是谁"）
+- [x] `knowledge` 与可见性矩阵逐条相等；梅林看不到莫德雷德、坏人看不到奥伯伦在视角层依然成立
+- [x] `PlayerView` 里任何一条任务记录都没有 `cards` / `playerId` 字段（逐条比对 key 集合）
+- [x] `TEAM_VOTE` 未结算时，`PlayerView` 中查不到任何人的投票内容
+      （历史为空时整个视角不含 `votes` 字段；有历史时 `votes` 恰好出现 1 次）
+- [x] 未结算的任务票、刺杀推测、确认名单同样查不到，只剩 `progress` 的两个数字
+- [x] 视角里出现的字段名全在白名单内——给 `PlayerView` 加字段会立刻炸，逼你想清楚它会不会泄漏
+- [x] 写成快照测试，任何人改 `toPlayerView` 都会立刻炸（梅林 / 忠臣 / 奥伯伦三个代表性视角）
+
+**已验证**（2026-08-24，`view.test.ts` 19 个 + `view.leak.test.ts` 15 个用例）：
+`pnpm typecheck` / `pnpm lint` 无输出，`pnpm test` 9 个文件 / 241 个用例全绿。
+
+**变异测试自查**（六条各改一次，确认都被抓住后还原）：
+
+| 变异 | 被抓 |
+| --- | --- |
+| 公开任务记录改成 `...record`（带出 `cards`） | 10 条炸 |
+| `selfSubmitted` 变成"有人交过就 true" | 2 条炸 |
+| `reveal` 不判阶段 | 29 条炸 |
+| `knowledge` 绕过 `visibility.ts` 直接给全体坏人 | 8 条炸 |
+| `speeches` 不拷贝，直接给引用 | 1 条炸 |
+| 任务票进度的分母用总人数而非队伍人数 | 2 条炸 |
 
 模拟对局（`src/lib/sim/random.ts`）：
-- [ ] 全随机合法策略跑 1000 局，断言：无异常、每局到达 `GAME_OVER`、双方都赢过、任务轮数 ≤ 5
-- [ ] 同一 seed 跑两次，结果完全一致
+- [x] 全随机合法策略跑 1000 局（6 种人数轮着来），断言：无异常、每局到达 `GAME_OVER`、
+      双方都赢过、四种 `winReason` 都出现过、任务轮数 ≤ 5、比分与任务记录对得上
+- [x] 同一 seed 跑两次，结果完全一致；不同 seed 产出不同对局
+- [x] **把规则独立算一遍再和引擎的记录对**：提议的通过与否用票数重算、任务成败用失败票数与门槛重算、
+      任务票按座位升序存
+- [x] 好人从没投出过失败票——引擎级硬约束在一千局里都成立
+- [x] `simulateGame` 的 `onStep` 钩子：在真实对局产出的每一个中间状态上验一遍视角，
+      不泄漏他人身份与任务票来源（30 局，覆盖全部 9 个中间阶段）
+
+`sim/random.ts` 不做任何规则判断，只会问引擎"轮到谁"、"他能做什么"，再随机挑一个交回去。
+规则判断一旦泄漏到这里，模拟就不再是对引擎的独立检验了。
+
+**一千局的分布**（seed 0-999，与实现无关的健康度参考）：
+
+| 项目 | 结果 |
+| --- | --- |
+| 胜负 | 好人 351 / 坏人 649 |
+| 胜利原因 | `THREE_MISSIONS` 351、`ASSASSINATION_MISS` 351、`REJECT_LIMIT` 239、`ASSASSINATION_HIT` 59 |
+| 平均任务轮数 | 3.49 |
+
+随机刺客只有 1/n 的命中率（59/410 ≈ 14%），随机投票让"连续 5 次否决"变得很常见（24%）——
+这两个数字偏离真实对局是正常的，它们只用来确认没有哪条路径永远走不到。
+
+**已验证**（2026-08-24，`random.test.ts` 12 个用例）：`pnpm typecheck` / `pnpm lint` 无输出，
+`pnpm test` 10 个文件 / 253 个用例全绿，整套 3.8 秒。
+
+**变异测试自查**——这次改的是**引擎**，只跑模拟对局这一个文件，用来验证它作为验收工具的成色：
+
+| 引擎变异 | 只跑 `random.test.ts` 的结果 |
+| --- | --- |
+| 平票判通过（`>=` 半数） | 1 条炸 |
+| 失败门槛用 `<=` | 2 条炸 |
+| 好人 3 分直接终局，不进刺杀 | 5 条炸 |
+| 否决不计数 | 5 条炸 |
+
+> 前两条最初是**抓不住**的：结构完好的一千局照样跑得通。补上"把规则独立算一遍"那组断言之后才炸。
+> 这正是模拟对局最容易给人错觉的地方——跑得完不等于跑得对。
 
 > **这一组全绿之前，不要开始接 LLM。** 引擎有 bug 时接上 LLM，你会花三天时间怀疑是 prompt 写得不好。
 
