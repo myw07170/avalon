@@ -272,7 +272,7 @@ export function extractJson(raw: string): unknown {
 // provider 调用
 // ---------------------------------------------------------------------------
 
-interface ChatMessage {
+export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
 }
@@ -286,7 +286,8 @@ interface ChatMessage {
  *
  * 抛出的消息里绝不带 apiKey，也不原样回传 provider 的响应体。
  */
-async function callProvider(
+/** personas.ts 也要用这条链路，所以导出。它不认识对局，只负责把 messages 发出去 */
+export async function callProvider(
   config: LlmProviderConfig,
   messages: ChatMessage[],
 ): Promise<string> {

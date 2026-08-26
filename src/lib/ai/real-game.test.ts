@@ -23,9 +23,10 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createConfig } from "../game/config";
 import { createRng } from "../game/rng";
-import { createGame, makePlaceholderPersonas } from "../game/setup";
+import { createGame } from "../game/setup";
 import { createAiClient, readMaxRetries, readProviderConfig } from "./client";
 import { runGame, type DecisionRecord } from "./orchestrator";
+import { generatePersonas } from "./personas";
 import { renderTranscript } from "./transcript";
 
 /**
@@ -121,11 +122,19 @@ describe.skipIf(!configured)("真实模型试跑", () => {
       const client = createAiClient(config);
       const records: DecisionRecord[] = [];
 
+      // 先花一次调用生成一桌人设。占位人设让五个 AI 说一模一样的话，
+      // 而这个测试的全部意义就是人工读发言（失败会自动回退，不会让整局跑不起来）
+      const personas = await generatePersonas({
+        config,
+        count: PLAYER_COUNT,
+        onNote: (note) => say(`  ${note}`),
+      });
+
       const final = await runGame({
         state: createGame({
           config: createConfig(PLAYER_COUNT, { seed }),
           humanSeat: null,
-          personas: makePlaceholderPersonas(PLAYER_COUNT),
+          personas,
           rng,
         }),
         client,

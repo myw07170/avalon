@@ -13,6 +13,7 @@
  * 加新段落时想清楚它属于哪一类，别把身份信息塞进本该干净的段。
  */
 import { ROLE_ORDER, countEvil } from "../game/config";
+import { buildPerspective } from "./perspective";
 import {
   EngineError,
   ROLE_META,
@@ -94,6 +95,14 @@ const SPEECH_LENGTH =
  *
  * 【但不能写成"不许撒谎"】莫甘娜冒充梅林去骗派西维尔是这个游戏的核心玩法之一。
  * 禁的是"说出自己的真实角色"，不是"编造身份"——这两条差一个字，效果差一整局。
+ *
+ * 【后三条抄自参考项目 wolfcha 的「底线规则」】各自解决一个我们真跑出来的毛病：
+ * - 禁场外话术：首两局里几乎每条发言都是"里程碑/时间线/分工/可验证的进度"这种周会黑话。
+ *   模型不知道自己在牌桌上，就会退回它最熟的那套语域。反例词直接用我们踩到的那几个。
+ * - 禁编造：模型会顺口引用一句根本没人说过的话、一次没发生过的投票，而别人无从核对。
+ * - 立场连贯：同一个人上一轮咬定 3 号、下一轮改口却不给理由，整局推理就没法积累。
+ *   注意 wolfcha 的写法是"改变判断必须基于新出现的信息"——**不是禁止改口**，
+ *   禁止改口会毁掉真实对局：拿到新信息就该改。
  */
 const PUBLIC_SPEECH_RULES = [
   "这段话**所有人都看得见**，包括对面阵营的人。",
@@ -103,6 +112,11 @@ const PUBLIC_SPEECH_RULES = [
   "**别用「作为梅林……」「我是刺客……」这种开头给自己贴标签**；谈论别人的身份则完全没问题。",
   "暗示、试探、含糊其辞、甚至冒充别的身份都可以（这本来就是玩法），但不能自曝。",
   "只写你自己要说的那段话：不要复述规则，也不要替别的座位编台词。",
+  "**严禁场外话术**：不许用职业类比、行业术语、项目管理黑话。" +
+    "别说「里程碑」「分工」「时间线」「可验证的进度」这种词——这是牌桌，不是周会。",
+  "**严禁编造**：只能引用本局真实发生过的发言、投票和任务结果。没发生过的事一个字都不许编。",
+  "**立场要连贯**：你说的话得和自己之前的发言、投票对得上。" +
+    "改主意可以，但必须是因为出现了新信息，并说清楚是哪一条。",
 ].join("\n");
 
 // ---------------------------------------------------------------------------
@@ -232,15 +246,23 @@ function knowledgeSection(view: PlayerView): string {
 }
 
 function personaSection(persona: Persona): string {
-  return section(
-    "你的人设",
-    [
-      `名字：${persona.name}`,
-      `性格：${persona.traits.join("、")}`,
-      `说话风格：${persona.speechStyle}`,
-      "始终按这个人设说话，不要跳出来解释自己在扮演谁。",
-    ].join("\n"),
-  );
+  const lines = [
+    `名字：${persona.name}`,
+    `性格：${persona.traits.join("、")}`,
+    `说话风格：${persona.speechStyle}`,
+  ];
+  // 隐藏画像才是让五个人说出不同话的那部分：形容词不改变模型关注什么，
+  // "最先看票型"和"最先看语气"会（见 types.ts 的 PersonaMind）
+  if (persona.mind) {
+    lines.push(
+      `你看局势时最先注意：${persona.mind.reasoningStyle}`,
+      `你的话多话少：${persona.mind.speechLengthHabit}`,
+      `被点名或被怀疑时，你会：${persona.mind.pressureStyle}`,
+      `你容易在这里犯错：${persona.mind.mistakePattern}（不用刻意去犯，但也别假装自己不会）`,
+    );
+  }
+  lines.push("始终按这个人设说话，不要跳出来解释自己在扮演谁。");
+  return section("你的人设", lines.join("\n"));
 }
 
 function situationSection(view: PlayerView): string {
@@ -337,6 +359,55 @@ function speechSection(view: PlayerView): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * 【你的视角】——每人一组不同的切入角度。
+ *
+ * 内容由 perspective.ts 产出，那里只给**事实 + 要不要提**，绝不给立场或结论
+ * （理由见那个文件的头注释：我们和 wolfcha 各自踩过一次同样的坑）。
+ * 没有任何角度可给时整段不渲染，不写"暂无"占位——空段落只会稀释注意力。
+ */
+function perspectiveSection(view: PlayerView): string | null {
+  const hints = buildPerspective(view);
+  if (hints.length === 0) return null;
+  return section(
+    "你的视角",
+    ["以下都是你身上发生过的事，别人不一定会替你提：", ...hints.map((h) => `- ${h}`)].join("\n"),
+  );
+}
+
+/**
+ * 你排第几个说、谁已经说过了。
+ *
+ * 【为什么值得单独说一句】不给位次的话，模型不知道自己处在什么信息位置：
+ * 第一个发言的人会凭空引用"前面几位提到"，最后一个会说"再看看 X 号怎么说"——
+ * 而 X 号已经说完了。这两种毛病在首两局的记录里都出现过，wolfcha 也各写了一条防它们。
+ *
+ * 数据全部来自 view.progress 与 view.speakingOrder，不需要引擎多给任何字段。
+ *
+ * 【提议讨论里位次天然从 2 起】speakingOrder[0] 是队长，而他那一次已经被选人说明占掉了
+ * （phases/transitions.ts）。所以这里照实渲染就对了：已发言列表里本来就该有队长。
+ */
+function speakOrderLines(view: PlayerView): string[] {
+  const { speakingOrder, progress } = view;
+  if (speakingOrder.length === 0) return [];
+
+  const spoken = speakingOrder.slice(0, progress.submitted);
+  const pending = speakingOrder.slice(progress.submitted + 1);
+  const lines = [`你是第 ${progress.submitted + 1}/${progress.required} 个发言。`];
+
+  if (spoken.length === 0) {
+    lines.push("你是第一个开口的人，前面没有任何发言可以引用——别说「前面几位提到」。");
+  } else {
+    lines.push(`已发言：${seatList(spoken)}；还没发言：${seatList(pending)}。`);
+  }
+  if (pending.length === 0 && spoken.length > 0) {
+    lines.push(
+      "你是最后一个，所有人都已经说完了——别说「等座位 X 发言」或「看座位 X 怎么说」。",
+    );
+  }
+  return lines;
+}
+
+/**
  * 合法选项一律从 req.legalActions 渲染，绝不自己推。
  *
  * 最要紧的是任务票那一条：好人的候选列表里根本没有"失败"，
@@ -370,6 +441,7 @@ function decisionSection(req: AnyRequest): string {
             ? "现在是提议讨论，轮到你发言。队伍已经报出来了，投票还没开始——你的发言会影响别人怎么投。" +
               "**你从任务结果里看出了什么，得自己说出来**——别人不会自动知道你的推理。"
             : "现在是复盘讨论，轮到你发言。任务结果已经公布，指认、辩解、拉票都可以。",
+          ...speakOrderLines(view),
           `发言要求：${SPEECH_LENGTH}`,
           "你可以坦诚、含糊、试探、反驳、带节奏、保护别人，或者暂时保留判断。",
           PUBLIC_SPEECH_RULES,
@@ -488,7 +560,7 @@ function outputSection(req: AnyRequest): string {
 
 /**
  * 结构：游戏规则 → 本局配置 → 你的身份 → 你知道的 → 人设 → 当前局势
- *   → 历史（提议、投票、任务结果）→ 全场发言 → 本次决策 + 合法选项 → 输出格式。
+ *   → 历史（提议、投票、任务结果）→ 全场发言 → 你的视角 → 本次决策 + 合法选项 → 输出格式。
  *
  * 不做历史截断。5 人局满打满算 50 条发言，撑不爆上下文；真爆了应该看得见，
  * 而不是被一个 .slice(-20) 悄悄藏住（"不写容错"）。prompt.test.ts 有一条长度上界盯着。
@@ -504,7 +576,11 @@ export function buildPrompt<K extends AiDecisionKind>(req: AiDecisionRequest<K>)
     situationSection(view),
     historySection(view),
     speechSection(view),
+    // 没有角度可给时整段消失，所以这里要过滤掉 null
+    perspectiveSection(view),
     decisionSection(req),
     outputSection(req),
-  ].join("\n\n");
+  ]
+    .filter((part): part is string => part !== null)
+    .join("\n\n");
 }

@@ -170,6 +170,14 @@ const ALL_ROLE_LABELS = Object.values(ROLE_META).map((meta) => meta.label);
  */
 const CLEAN_SECTIONS = ["当前局势", "历史", "你的人设", "输出格式"];
 
+/**
+ * 同样不该出现角色名，但**允许缺席**的段。
+ *
+ * 【你的视角】没有角度可给时整段不渲染（空段落只会稀释注意力），
+ * 所以它不能进 CLEAN_SECTIONS——那张表里的段一旦缺席就算泄漏事故。
+ */
+const OPTIONAL_CLEAN_SECTIONS = ["你的视角"];
+
 const ALL_KINDS: AiDecisionKind[] = [
   "TEAM_PROPOSAL",
   "SPEECH",
@@ -197,6 +205,16 @@ describe("信息隔离", () => {
     for (const player of state.players) {
       // TEAM_PROPOSAL 的决策段不读 legalActions，所以非队长也能建，正好用来遍历全部身份
       const sections = sectionsOf(promptFor(state, player.id, "TEAM_PROPOSAL"));
+      for (const name of OPTIONAL_CLEAN_SECTIONS) {
+        // 可以缺席；出现了就得和其他干净段一样不含角色名
+        const body = sections.get(name);
+        if (body === undefined) continue;
+        for (const label of ALL_ROLE_LABELS) {
+          expect(body, `座位 ${player.id} 的【${name}】里出现了「${label}」`).not.toContain(
+            label,
+          );
+        }
+      }
       for (const name of CLEAN_SECTIONS) {
         const body = sections.get(name);
         expect(body, `缺了【${name}】段`).toBeDefined();
@@ -453,6 +471,129 @@ describe("合法选项只从 legalActions 渲染", () => {
     expect(speaking).toContain("得自己说出来");
   });
 
+  /**
+   * 底线规则的三条新增项，全部抄自参考项目 wolfcha，各治一个我们真跑出来的毛病。
+   * 尤其是场外话术那条：首两局里几乎每条发言都是"里程碑/分工/可验证的进度"。
+   */
+  it("发言规则里禁场外话术、禁编造、要求立场连贯", () => {
+    const body = sectionsOf(promptFor(build(TEN), 3, "SPEECH")).get("本次决策") ?? "";
+
+    expect(body).toContain("严禁场外话术");
+    // 抽象规则对弱模型不够用，反例词要真出现在 prompt 里
+    expect(body).toContain("里程碑");
+    expect(body).toContain("严禁编造");
+    expect(body).toContain("立场要连贯");
+    // 但不能变成"不许改口"——拿到新信息就该改
+    expect(body).toContain("改主意可以");
+  });
+
+  describe("发言顺序感", () => {
+    const discussing = (speakerIndex: number, order: PlayerId[] = [3, 4, 5, 6, 7, 8, 9, 0, 1, 2]) =>
+      sectionsOf(
+        promptFor(
+          build(
+            TEN,
+            { phase: "REVIEW_DISCUSSION", missionHistory: [MISSION_0] },
+            { speakingOrder: order, speakerIndex },
+          ),
+          order[speakerIndex] as PlayerId,
+          "SPEECH",
+        ),
+      ).get("本次决策") ?? "";
+
+    it("第一个开口的人被告知前面没有任何发言可引用", () => {
+      const body = discussing(0);
+      expect(body).toContain("你是第 1/10 个发言");
+      expect(body).toContain("前面几位提到");
+    });
+
+    it("中间的人拿到已发言与未发言两份名单", () => {
+      const body = discussing(3);
+      expect(body).toContain("你是第 4/10 个发言");
+      expect(body).toContain("已发言：座位 3、4、5");
+      expect(body).toContain("还没发言：座位 7、8、9、0、1、2");
+    });
+
+    it("最后一个被告知别再等别人说", () => {
+      const body = discussing(9);
+      expect(body).toContain("你是第 10/10 个发言");
+      expect(body).toContain("别说「等座位 X 发言」");
+    });
+
+    /**
+     * 提议讨论的游标从 1 起步——队长那一次已经被选人说明占掉了。
+     * 渲染成"你是第 1 个"就会和【全场发言】里已经有队长那条自相矛盾。
+     */
+    it("提议讨论里第一个讨论发言者是第 2 个，已发言名单含队长", () => {
+      const body =
+        sectionsOf(
+          promptFor(
+            build(
+              TEN,
+              { phase: "PROPOSAL_DISCUSSION", currentLeaderId: 3, proposedTeam: [0, 1, 2] },
+              { speakingOrder: [3, 4, 5, 6, 7, 8, 9, 0, 1, 2], speakerIndex: 1 },
+            ),
+            4,
+            "SPEECH",
+          ),
+        ).get("本次决策") ?? "";
+
+      expect(body).toContain("你是第 2/10 个发言");
+      expect(body).toContain("已发言：座位 3");
+    });
+  });
+
+  describe("【你的视角】", () => {
+    it("有角度可给时渲染，且只陈述事实", () => {
+      const state = build(TEN, {
+        phase: "PROPOSAL_DISCUSSION",
+        proposedTeam: [0, 1, 2],
+        missionHistory: [MISSION_0],
+      });
+      const body = sectionsOf(promptFor(state, 0, "SPEECH")).get("你的视角") ?? "";
+
+      expect(body).toContain("把你带上了");
+      expect(body).toContain("你上过第 1 轮那趟车");
+      // 红线：只给事实，不给结论。perspective.test.ts 里有完整的一组反向断言
+      expect(body).not.toContain("可疑");
+      expect(body).not.toContain("至少有");
+    });
+
+    it("没有角度可给时整段不出现，不写「暂无」占位", () => {
+      const prompt = promptFor(build(TEN), 3, "TEAM_PROPOSAL");
+      expect(prompt).not.toContain("【你的视角】");
+    });
+  });
+
+  it("人设带隐藏画像时，把它渲染进【你的人设】", () => {
+    const state = build(TEN);
+    const seat = state.players[3];
+    const withMind = {
+      ...state,
+      players: state.players.map((p) =>
+        p.id === 3 && p.persona
+          ? {
+              ...p,
+              persona: {
+                ...p.persona,
+                mind: {
+                  reasoningStyle: "最先看票型",
+                  speechLengthHabit: "平时很短",
+                  pressureStyle: "会先反问",
+                  mistakePattern: "容易被带",
+                },
+              },
+            }
+          : p,
+      ),
+    };
+    expect(seat).toBeTruthy();
+    const body = sectionsOf(promptFor(withMind, 3, "SPEECH")).get("你的人设") ?? "";
+
+    expect(body).toContain("最先看票型");
+    expect(body).toContain("容易被带");
+  });
+
   it("六个 kind 都能建出非空的【本次决策】段", () => {
     for (const kind of ALL_KINDS) {
       const body = sectionsOf(promptFor(missionState, 1, kind)).get("本次决策");
@@ -655,6 +796,14 @@ describe("整局", () => {
             longest = Math.max(longest, prompt.length);
             const sections = sectionsOf(prompt);
             const where = `seed ${seed} ${state.phase} 座位 ${playerId}`;
+
+            for (const name of OPTIONAL_CLEAN_SECTIONS) {
+              const body = sections.get(name);
+              if (body === undefined) continue;
+              for (const label of ALL_ROLE_LABELS) {
+                if (body.includes(label)) leaks.push(`${where}：【${name}】出现了「${label}」`);
+              }
+            }
 
             for (const name of CLEAN_SECTIONS) {
               const body = sections.get(name);

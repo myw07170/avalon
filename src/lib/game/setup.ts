@@ -29,7 +29,10 @@ export interface CreateGameOptions {
 
 /**
  * 占位人设，给引擎测试和随机模拟用。
- * 阶段 4 会换成真正有性格差异的人设库——那时这个函数就该删掉。
+ *
+ * 【不要删掉它】阶段 4 确实加了真人设（`ai/personas.ts` 开局用 LLM 生成一桌），
+ * 但那条路要发网络。这个函数是全部引擎测试与 1000 局模拟的确定性来源，
+ * 也是人设生成失败时的回退。两者各司其职，谁也替代不了谁。
  */
 export function makePlaceholderPersonas(count: number): Persona[] {
   return Array.from({ length: count }, (_, i) => ({

@@ -195,6 +195,30 @@ export interface ConfigIssue {
 /** 随机源。引擎所有随机行为都必须走它，方便测试注入固定序列 */
 export type RngFn = () => number;
 
+/**
+ * 人设的隐藏画像：这个人**打牌**时是什么样，而不是他长什么样。
+ *
+ * 字段取自参考项目 wolfcha 的 persona/playerMind——它那 14 个字段真正在起作用的就是这几类：
+ * 先注意什么、话多话少、被逼时怎么反应、会在哪儿犯错。
+ * 五个 AI 说一样的话，一半原因是它们拿到的人设只有"谨慎保守"这种形容词，
+ * 而形容词不改变模型关注什么。
+ *
+ * 【全部写自然语言，不写标签】不要 high/low/aggressive，也**不要写字数区间**
+ * （rules.md §6：中文模型对字数的感知很差，卡字数只会推高 fallback 率）。
+ *
+ * 不进 PlayerView——它由 orchestrator 单独交给 AI 层，所以加字段不影响信息隔离。
+ */
+export interface PersonaMind {
+  /** 最先注意什么：票型、发言口气、上车次数、位置关系…… */
+  reasoningStyle: string;
+  /** 平时、被追问、被指认时的长短变化 */
+  speechLengthHabit: string;
+  /** 被点名或被怀疑时怎么反应 */
+  pressureStyle: string;
+  /** 常见误判点——刻意给缺陷，真人本来就会犯错 */
+  mistakePattern: string;
+}
+
 export interface Persona {
   name: string;
   /** 性格标签，如 "谨慎保守" "咄咄逼人" */
@@ -203,6 +227,8 @@ export interface Persona {
   speechStyle: string;
   /** 头像标识，UI 用 */
   avatar?: string;
+  /** 打牌时的隐藏画像。占位人设没有，真实对局由 ai/personas.ts 生成 */
+  mind?: PersonaMind;
 }
 
 export interface Player {

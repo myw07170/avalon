@@ -496,6 +496,22 @@ const SCRIPT = `
 })();
 `;
 
+/** "一" … "十"。超过十局就用阿拉伯数字——标题里的"十三局"读着比数字别扭 */
+const CN_NUM = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+const countLabel = (n: number): string => (n <= 10 ? `${CN_NUM[n]}局` : `${n} 局`);
+
+/**
+ * 页眉里的局数与模型都从记录里算，**不写死**。
+ *
+ * 第一版把"三局"和"gpt-5-nano"直接写在模板里，结果第 4 局（gpt-5-mini）落盘之后，
+ * 页面上摆着四个标签页、标题却说"三局……跑在 gpt-5-nano 上"。这种错不会报错，
+ * 只会让人读到一份不靠谱的记录——而这个页面存在的全部意义就是给人读。
+ */
+function modelsLabel(games: PageGame[]): string {
+  const seen = [...new Set(games.map((game) => game.transcript.model.split("/").pop()?.trim() ?? ""))];
+  return seen.filter(Boolean).join(" 与 ");
+}
+
 export function renderTranscriptPage(games: PageGame[]): string {
   const totals = games.map((game) => statsOf(game.transcript).blatant);
   const trend = totals.join(" → ");
@@ -509,12 +525,12 @@ export function renderTranscriptPage(games: PageGame[]): string {
 <div class="wrap">
   <header class="masthead">
     <span class="eyebrow">阶段 4 · 人工读发言</span>
-    <h1>三局真实对局，读出来的两个 prompt 缺陷</h1>
+    <h1>${countLabel(games.length)}真实对局，读发言读出来的 prompt 缺陷</h1>
     <p class="standfirst">
-      全 AI 的 5 人局，跑在 gpt-5-nano 上。这三局是同一条修复线上的三个点：
-      第一局读出<b>公开发言自曝身份</b>与<b>好人试图打失败票</b>，
-      改 prompt 后复跑两次，<b>自曝 ${trend}</b>。
-      引擎侧的信息隔离全程正常——这两条都是自动化测不出来、只有人读发言才会发现的东西。
+      全 AI 的 5 人局，跑在 <b>${modelsLabel(games)}</b> 上。
+      前三局是同一条修复线：第一局读出<b>公开发言自曝身份</b>与<b>好人试图打失败票</b>，
+      改 prompt 后复跑，<b>自曝 ${trend}</b>。
+      引擎侧的信息隔离全程正常——这些都是自动化测不出来、只有人读发言才会发现的东西。
     </p>
   </header>
 
