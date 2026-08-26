@@ -11,6 +11,7 @@
  * 2. **一律返回新的数组和对象。** PlayerView 会被交给 AI 层和 UI，
  *    共享引用等于给了它们一条改引擎状态的后门。
  */
+import { rolesToCounts } from "./config";
 import { getAwaitingPlayerIds, getCurrentMission, requireProposedTeam } from "./legal";
 import {
   EngineError,
@@ -213,6 +214,9 @@ export function toPlayerView(state: GameState, playerId: PlayerId): PlayerView {
       name: p.name,
       isHuman: p.isHuman,
     })),
+    // 角色构成开局公开（rules.md §3.2）。取自 config.roles 而不是 players——
+    // 后者带着座位，一不小心就把"谁是什么"算进来了
+    roleComposition: rolesToCounts(state.config.roles),
     missionConfigs: state.config.missions.map((m) => ({ ...m })),
     currentMission: { ...getCurrentMission(state) },
 

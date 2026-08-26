@@ -191,7 +191,11 @@ describe("整局的信息隔离", () => {
           seen.add(state.phase);
           for (const player of state.players) {
             const view = toPlayerView(state, player.id);
-            const json = JSON.stringify(view);
+            // roleComposition 的键就是角色名，会命中下面那条按角色名做的钝断言。
+            // 它是开局公开的角色构成（rules.md §3.2），排除的正当性在
+            // view.leak.test.ts 的「角色构成是公开信息」那一组里单独证明
+            const { roleComposition: _composition, ...rest } = view;
+            const json = JSON.stringify(rest);
             const where = `seed ${seed} ${state.phase} 座位 ${player.id}`;
 
             if (json.includes('"cards"')) leaks.push(`${where}：出现了 cards`);

@@ -118,6 +118,20 @@ export function rolesToCounts(roles: readonly Role[]): RoleCounts {
   return counts;
 }
 
+/**
+ * 数量表里有几个坏人。
+ *
+ * 刻意不查 TEAM_SPLIT：那张表按人数索引，用它就得处理"人数不在表里"的分支，
+ * 而这里的输入是一份现成的构成表，直接数就行。
+ * prompt.ts 的【本局配置】与 deduction.ts 共用这一份，不留第二处实现。
+ */
+export function countEvil(counts: RoleCounts): number {
+  return ROLE_ORDER.filter((role) => ROLE_TEAM[role] === "EVIL").reduce(
+    (sum, role) => sum + counts[role],
+    0,
+  );
+}
+
 /** 按 ROLE_ORDER 输出，保证同一配置产出同一数组 */
 export function countsToRoles(counts: RoleCounts): Role[] {
   const roles: Role[] = [];

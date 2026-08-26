@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:cov": "vitest run --coverage"
+    "test:cov": "vitest run --coverage",
+    "transcripts": "vitest run src/lib/ai/transcript-page.test.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.23",

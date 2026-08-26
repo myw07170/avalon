@@ -68,6 +68,8 @@ function fillTemplate(state: GameState, action: GameAction, rng: RngFn): GameAct
         team: shuffle(candidateIds, rng)
           .slice(0, teamSize)
           .sort((a, b) => a - b),
+        // 队长的选人说明也是自由文本，与下面的 SPEAK 同样只填个模板
+        statement: `[模拟] 座位 ${action.playerId} 的选人说明`,
       };
     }
     case "SPEAK":

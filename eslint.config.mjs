@@ -26,6 +26,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // vitest 的覆盖率报告，跑过 pnpm test:cov 之后才存在。
+    // 它自带的 block-navigation.js 会报一条 unused eslint-disable，不是我们的代码
+    "coverage/**",
   ]),
 ]);
 

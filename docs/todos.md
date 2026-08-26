@@ -35,12 +35,14 @@
       最后一条对 `reduce` 里按 phase 分派的大 switch 很有用；`target` 提到 `ES2022`
 - [x] eslint 配 `no-unused-vars` 的 `argsIgnorePattern: "^_"`，与 tsconfig 的下划线约定对齐
 - [x] `.env.local.example`：`LLM_PROVIDER` / `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` / `LLM_MAX_RETRIES`
+      / `LLM_TEMPERATURE` / `LLM_TIMEOUT_MS` / `LLM_EXTRA_BODY` / `LLM_REAL_GAME`
       （`.gitignore` 的 `.env*` 会连样板一起忽略，已加 `!.env.local.example` 例外）
 - [x] 建立目录骨架（各模块已建桩，签名和注释就位，函数体统一 `throw new Error("TODO 阶段 N")`）：
 
 ```
 src/
   app/                    Next.js 路由
+    api/ai/route.ts       ✅ 已完成（+ route.test.ts 14 个用例）
   components/             UI 组件（阶段 5）
   lib/
     game/                 引擎（纯函数，禁止 import React / fetch / Date.now）
@@ -59,10 +61,22 @@ src/
       reduce.ts           reduce 主入口                 阶段 3
       phases/             各阶段的 reducer 分支         阶段 3
     ai/                   LLM 层（唯一允许发网络请求的地方）
-      schema.ts           ✅ zod schema 已写
-      prompt.ts           PlayerView -> prompt 字符串   阶段 4
-      mock.ts             AiClient 的假实现             阶段 4
-      client.ts           AiClient 接口的真实实现       阶段 4
+      schema.ts           ✅ 已完成
+      schema.test.ts      ✅ 30 个用例
+      prompt.ts           ✅ 已完成
+      prompt.test.ts      ✅ 26 个用例（含 3 份完整 prompt 快照）
+      mock.ts             ✅ 已完成
+      mock.test.ts        ✅ 21 个用例（含 100 局 mock 对局）
+      client.ts           ✅ 已完成
+      client.test.ts      ✅ 29 个用例
+      errors.ts           ✅ AiError
+      remote.ts           ✅ 浏览器侧的 AiClient
+      remote.test.ts      ✅ 7 个用例
+      orchestrator.ts     ✅ 驱动循环
+      orchestrator.test.ts ✅ 22 个用例
+      real-game.test.ts   ✅ 真实模型试跑（要 LLM_REAL_GAME=1 才跑）
+      transcript.ts       ✅ 对局记录的渲染与回读（往返测试锁死格式）
+      transcript-page.ts  ✅ 三局记录渲染成一页（pnpm transcripts）
     sim/
       random.ts           随机策略模拟对局              阶段 3
   store/
@@ -292,6 +306,8 @@ export function getKnownIdentities(viewerId: PlayerId, players: readonly Player[
       - `progress` 与 `selfSubmitted` 在同一个 switch 里算出来，防止某个阶段
         更新了进度却忘了改 `selfSubmitted`
       - 刺杀阶段 `progress.required` 是坏人数量——那是人数表定死的公开信息，不构成泄漏
+      - 阶段 4 补加了 `roleComposition`（本局角色构成，只有数量没有座位）。
+        它是开局公开信息，加它的理由和 `view.leak.test.ts` 的对应改法见阶段 4
 
 **完成标准**（对应 [state-machine.md §4](./state-machine.md)）：
 
@@ -401,31 +417,481 @@ export function getKnownIdentities(viewerId: PlayerId, players: readonly Player[
 
 **目标**：AI 能替代随机策略，且**永远不会输出非法动作**。
 
-- [ ] `ai/schema.ts`：为 `AiTeamProposal` / `AiSpeech` / `AiVote` / `AiMissionCard` / `AiAssassination` 各写一个 zod schema
-- [ ] `ai/mock.ts`：实现 `AiClient`，随机合法动作 + 模板发言。**先做这个**，它让你能在零 token 成本下调完整个调度链路
-- [ ] `ai/prompt.ts`：`buildPrompt(req: AiDecisionRequest<K>): string`
-      - **函数签名只接受 `AiDecisionRequest`，不接受 `GameState`。** 这是类型层面的防泄漏
-      - 结构：角色与能力（取 `ROLE_META`）→ 人设 → 当前局势（比分、轮次、否决数）→ 历史（提议、投票、任务结果）→ 全场发言 → 本次要做的决策 + 合法选项 → 输出格式
-      - 发言限制 80–150 字，写进 prompt
-      - 梅林的行为约束（别把坏人名单说太明）写在 prompt 里，**不写进引擎**——那是策略失误不是非法操作
-- [ ] `ai/client.ts`：真实实现
+- [x] `ai/schema.ts` ✅ 已完成：为 `AiTeamProposal` / `AiSpeech` / `AiVote` / `AiMissionCard` / `AiAssassination` 各写一个 zod schema
+      - **schema 只管形状，不管合法性**。队伍人数、好人能不能投失败、刺杀目标座位号，
+        一条都不在这里判——那些归 `assertLegal`。同一条规则写两遍必然分叉，
+        而分叉的那份一定是 schema 这份（它离 rules.md 最远）。
+        `schema.test.ts` 里专门有一组**反向**断言（人数明显不对的队伍、重复座位、
+        好人的失败票、越界的刺杀目标全都"应该通过"），拦住后人顺手往 schema 里补规则
+      - 未知字段走 `z.object` 的默认剥离，**不用 `z.strictObject`**：模型爱顺手多返回一个
+        `confidence`，为此判整次输出失败再重试是纯浪费
+      - 每个 schema 挂 `satisfies z.ZodType<AiVote>` 之类，与 `types.ts` 的接口绑死。
+        AI 层的类型漂移没有运行时症状，只能靠编译期抓
+      - `AI_SCHEMAS`（kind → schema）写成一张表而不是 switch，理由与 `legal.ts` 的
+        `PHASE_ACTIONS` 同源。类型标注让漏写一个 kind 变成编译错误
+      - `parseAiPayload` / `safeParseAiPayload`：后者返回**字符串**错误而不是 `ZodError`，
+        因为 `client.ts` 的重试循环要把它塞回下一轮 prompt 告诉模型哪里不合格
+      - `suspicions[].score` 刻意不卡 0-1：它只喂阶段 6 的热力图，
+        为一个装饰性字段触发整次重试不划算，0-1 的约定写在 prompt 里、由 UI 归一化
+- [x] `ai/mock.ts` ✅ 已完成：实现 `AiClient`，随机合法动作 + 模板发言。**先做这个**，它让你能在零 token 成本下调完整个调度链路
+      - **动作一律从 `req.legalActions` 里挑，不自由发挥。** 这让 mock 与 `sim/random.ts` 同源，
+        "好人投不出失败票"在 AI 链路上照样成立——好人的候选列表里根本没有 `success: false`
+      - 唯一的例外是组队（`legal.ts` 刻意不穷举 C(10,5)），mock 自己选人。
+        选人取材于 **`view`** 而不是 `GameState`：mock 拿到的信息必须和真实 LLM 一模一样，
+        否则调通了也不算调通
+      - `kind` 与 `legalActions` 对不上直接抛 `EngineError("INTERNAL")`。这只可能是调用方
+        （将来的 orchestrator）算错了阶段，静默兜底会让它以"AI 在错误的时机发言"的形式流到线上
+      - 输出自己也过一遍 `AI_SCHEMAS`。除了保证 mock 与真实 client 交出同一形状的东西，
+        它顺手把泛型接了回来（`req.kind` 是 `K`，`AI_SCHEMAS[req.kind].parse()` 直接返回
+        `AiDecisionPayload[K]`），**整个文件没有一处类型断言**——别在改动时把这个性质写没了
+      - `decide` 写成 `async` 但体内没有 `await`：抛错变成 rejection，与真实 client 的失败形态一致；
+        函数体仍同步执行，所以并发阶段（投票、任务票）的 rng 消耗顺序等于调用顺序，确定性不被打乱
+      - `debug.prompt` 用一行 stub，**刻意不调用 `buildPrompt`**（它还是 `throw`）。
+        prompt.ts 落地后可以换成真的，那时 mock 顺带成为 prompt 构建的冒烟测试
+- [x] `ai/prompt.ts` ✅ 已完成：`buildPrompt(req: AiDecisionRequest<K>): string`
+      - **函数签名只接受 `AiDecisionRequest`，不接受 `GameState`。** 这是类型层面的防泄漏。
+        依赖方向上也够不到：本文件只 import `types.ts` 的类型与 `ROLE_META`、`config.ts` 的两张公开表
+      - 结构：游戏规则 → 本局配置 → 你的身份 → 你知道的 → 人设 → 当前局势 → 历史 → 全场发言
+        → 本次决策 + 合法选项 → 输出格式
+      - **分节不是排版。** 测试按 `【】` 把 prompt 切成段，断言
+        【当前局势】【历史】【你的人设】【输出格式】四段里不出现任何角色名——
+        泄漏一旦发生几乎必然落在【历史】里（把任务票的投票人渲染出来是最典型的一种）。
+        其余几段可以合法出现角色名：【游戏】【本局配置】是公开规则与公开构成，
+        【你的身份】【你知道的】是本人该知道的，【全场发言】是别人说的自由文本
+        （"我觉得 3 号是梅林"不是泄漏，是玩游戏）
+      - **发言长度用句子数，不用字数**（"通常 2–5 句，被追问或只想表个态时一句话也可以"）。
+        改动理由见 [rules.md §6](./rules.md)：中文模型对字数感知很差，卡字数只会推高 fallback 率，
+        把"fallback 超过 5%"这条判据污染掉。有一条测试专门钉住"整个 prompt 里不出现任何字数区间"
+      - **合法选项一律从 `legalActions` 渲染，不自己推。** 好人的任务票决策段里
+        **根本不出现"失败"这个选项**——提了等于教模型去试一个必然被引擎拒绝的动作
+      - **输出格式给手写紧凑示例，不用 `z.toJSONSchema`**（JSON Schema 又长又费 token，
+        对模型可读性反而更差）。防分叉靠测试：把示例从 prompt 里抠出来用 `AI_SCHEMAS[kind]` parse 一遍
+      - 角色专属策略提醒（含梅林"别把坏人名单说太明"）写成 `ROLE_HINTS` 一张表，
+        **全部只在 prompt 里，不写进引擎**——那是策略失误不是非法操作
+      - **不做历史截断。** 120 局实测最长 prompt 13001 字符，撑不爆上下文；
+        真爆了应该看得见，而不是被一个 `.slice(-20)` 悄悄藏住。测试有一条 16000 字符的上界盯着
+      - 配套改了引擎：`PlayerView` 加 `roleComposition`（见下）
+- [x] `ai/client.ts` ✅ 已完成：真实实现（另含 `errors.ts` / `remote.ts` / `src/app/api/ai/route.ts`）
       - 走 Next.js Route Handler（`src/app/api/ai/route.ts`），**API key 绝不进浏览器**
       - JSON 模式 / structured output，zod 校验
       - 校验失败重试 `maxRetries` 次（默认 2），仍失败则在 `legalActions` 里随机兜底，`fallback: true`
       - 每次调用记 `debug`，供复盘面板展示
-- [ ] `ai/orchestrator.ts`：驱动循环
+      - **职责切分**：`client.ts` 整个跑在服务端（它的签名带 `apiKey`，本来就只能在那儿），
+        浏览器侧是 `remote.ts` 的 `createRemoteAiClient`——只认识一个 URL，不认识任何 key。
+        **重试也在服务端**：一次 HTTP 请求内跑完 N 次模型调用，而不是让浏览器来回 N 趟
+      - **只做 OpenAI 兼容协议**（`/chat/completions` + `Bearer` + `response_format: json_object`）。
+        deepseek / qwen / openai / 任何兼容网关都说这一套；别的协议走网关，
+        不要在 `client.ts` 里长出第二套请求分支。`.env.local.example` 的 provider 列表
+        已同步去掉 `anthropic`——留着一个跑不通的选项比不写更糟
+      - **错误边界（最要紧的一条）**：只有"模型说了胡话"才兜底
+        | 情况 | 处理 |
+        | --- | --- |
+        | 401 / 403 / 404 / 缺 key / provider 不认识 | 立即抛，一次都不重试 |
+        | 429 / 5xx / 网络不通 / 超时 | 重试；用尽仍失败则抛 |
+        | 抠不出 JSON、或不合 zod schema | 重试（把错误文本塞回下一轮）；用尽 → 随机兜底 |
+
+        理由与发言长度那次同源：**`fallback` 率是判断 prompt 好不好的唯一指标**
+        （下面完成标准里的"超过 5%"），把 401 也算进去这条判据就废了。更要命的是
+        key 配错时会静默跑出整局随机 AI，而你完全看不出来
+      - **兜底直接借 `createMockAiClient(rng).decide(req)` 的 payload**，只改 `fallback` 与 `debug`。
+        mock 已经保证"只从 `legalActions` 里选"，所以**好人的兜底票永远不会是失败票**——
+        这条引擎级硬约束不需要在 client 里再实现一遍
+      - **重试是带着反馈重问**：把上一次的原文和 `safeParseAiPayload` 给出的错误文本
+        追加成 `assistant` / `user` 两条消息。那个函数当初返回字符串而不是 `ZodError`，
+        就是为这一步准备的。网络类失败则原样重发，不往 messages 里塞东西
+      - `extractJson`：剥推理标签 → 剥 markdown 围栏 → 取第一个 `{` 到最后一个 `}` → 去尾随逗号。
+        **剥 `<think>` 是必要的而不是锦上添花**：模型常在推理块里把 JSON 先草拟一遍，
+        那时"取第一个 `{`"会把废话一起圈进来（这一条是变异测试逼出来的，见下表）。
+        刻意不引入 `ai-json-fixer` 那类激进修复依赖——清洗不动就走重试
+      - `AiError` 单独一个类型，**不复用 `EngineError`**：`mock.ts` / `prompt.ts` 抛
+        `EngineError("INTERNAL")` 是对的（那确实是引擎不变量被打破），但"对面 429 了"不是引擎的 bug，
+        混成一个类型调用方就分不清该改代码还是该改配置
+      - Route Handler 按 Next 16.3.2 的写法：用 **Web 标准 `Request` / `Response`**
+        （于是 vitest 里 `new Request(...)` 直接调，不需要起 Next）、
+        **不写 `export const runtime`**（Edge runtime 这一版已废弃，`'nodejs'` 是默认值）、
+        `export const maxDuration = 60`（一次请求内可能跑 3 次模型调用）
+      - `maxRetries` 取 `min(请求里的值, LLM_MAX_RETRIES)`：请求来自浏览器，是不可信输入，
+        不夹一下的话一个 `maxRetries: 999` 就能烧光预算
+      - `schema.ts` 里的 `aiDecisionRequestSchema` **刻意是浅的**（kind 枚举、`legalActions` 非空、
+        view / persona 是对象）。给 `PlayerView` 手抄一份全量 zod schema 必然与 `types.ts` 分叉；
+        view 畸形的唯一后果是 prompt 变难看，真正的闸门是阶段 7 的鉴权与扣费。
+        注意那里用的是 `z.custom` 而不是 `z.object({})`——**后者会把 view 的字段全剥光**，
+        是个很安静的坑，有一条测试专门钉住它
+- [x] `ai/orchestrator.ts` ✅ 已完成：驱动循环 `runGame({ state, client, rng, ... })`
+      - **循环只有一条路径，不按阶段分叉**：
 ```
-while (state.phase !== "GAME_OVER") {
-  const actors = getAwaitingPlayers(state);
-  // 人类玩家 -> 等 UI 输入；AI 玩家 -> 调 AiClient
-  // 同时行动的阶段（投票/任务票）可并发调用，逐人发言的阶段必须串行
-}
+awaiting = getAwaitingPlayerIds(state)
+  为空 → 走系统动作（START_GAME / NEXT）
+  非空 → 每个人并发决策，再按座位序逐个 reduce
 ```
+        引擎已经把「同时行动」编码在 `awaiting` 的长度里（讨论/组队/刺杀恒为 1，
+        投票/任务票/查看身份才会 >1），所以**这里不需要再抄一张阶段表**——
+        理由与 `legal.ts` 的 `PHASE_ACTIONS` 只写一处同源。
+        并发的那一批**全部基于同一个 state 快照**，这正是"同时投票、看不到别人投了什么"
+        的语义；有一条测试断言投票请求里 `progress.submitted` 恒为 0 来钉住它
+      - **最后一道合法性闸（todos 原本漏了的一条）**：LLM 可能返回**形状合法但规则非法**
+        的动作——`team: [0, 0, 1]` 座位重复、人数不对、刺杀一个不存在的座位。
+        zod 只管形状；`assertLegal` 能拦，但它要 `GameState`，而 `client.ts` 只有
+        `PlayerView`，**它验不了**。orchestrator 是第一个同时拿到状态和 AI 答案的地方，
+        所以这道闸只能在这里补——不补的话真实模型跑到一半会直接抛 `EngineError` 把整局打死。
+        换掉的动作标 `rescued: true`，而 `result.payload` 里**仍保留模型原本想做的**，
+        复盘时要看的就是这个差异
+      - 兜底动作借 `createMockAiClient(rng)`，与 `client.ts` 的 fallback 同源：
+        mock 只从 `legalActions` 里挑，好人的兜底票天然不会是失败票
+      - **人机接口用回调**：轮到人类时 `await onHumanAction({ kind, view, legalActions })`。
+        全 AI 局不传这个回调；有人类座位却不传 → 抛 `EngineError`，**不替他做决定**。
+        人类的动作不进 `DecisionRecord`——那份记录是给复盘面板看 AI 心证的
+      - **节奏控制是调用方的事**：`onDecision` 返回 promise 会被 await，
+        阶段 5 的"AI 发言之间停 800ms"在那里实现，orchestrator 不管。
+        并发阶段也按座位序逐个回调，UI 拿到的始终是一条有序的事件流
+      - `AbortSignal` 每轮开头检查一次。玩家关掉页面后循环还在烧 token，是真会花钱的
+      - `decisionKindOf` / `toGameAction` 这两张映射由本文件导出，
+        `mock.test.ts` 与 `prompt.test.ts` 里那两份临时副本**已经删掉**（当时就写着要删）
+      - `resolveAiClient(rng)` 按 `NEXT_PUBLIC_AI_MODE`（`mock` | `remote`）选 client。
+        **默认 mock 是刻意的**：不会因为忘了配开关就悄悄开始花钱。
+        注意必须写成字面量 `process.env.NEXT_PUBLIC_AI_MODE`——Next 只在构建时替换这种写法，
+        先解构 `process.env` 或用变量做下标**都不会被内联**
+      - 本文件跑在浏览器，**不 import `client.ts`**，也不读任何 `LLM_*` 变量，用源码断言钉住
 
 **完成标准**：
-- [ ] mock 模式跑 100 局全部正常结束
-- [ ] 用真实 LLM 跑 1 局 5 人全 AI 局，人工读一遍全部发言，确认没有"AI 推理得特别准"的迹象
-- [ ] `fallback` 比例统计出来，超过 5% 说明 prompt 或 schema 有问题
+- [x] mock 模式跑 100 局全部正常结束
+- [x] 跑真实 LLM 的入口已就绪：`src/lib/ai/real-game.test.ts`
+- [x] 用真实 LLM 跑 1 局 5 人全 AI 局（gpt-5-nano，seed 94938，53 次调用，好人胜）
+- [x] `fallback` 比例统计出来：**schema 兜底 0%**，合法性兜底 7.5%（4/53）
+- [x] 人工读一遍全部发言——读出两个 prompt 缺陷，已修复并复跑验证，见下方
+
+做法（要显式开开关才会跑，日常 `pnpm test` 与 CI 不受影响）：
+
+```bash
+# 1. 在项目根目录建 .env.local（已被 gitignore）
+LLM_PROVIDER=openai
+LLM_API_KEY=sk-...
+LLM_MODEL=gpt-5-nano
+LLM_EXTRA_BODY={"reasoning_effort":"minimal"}   # 推理模型不加会慢十倍
+LLM_TIMEOUT_MS=120000
+LLM_REAL_GAME=1                                 # ← 这一行才是开关
+
+# 2. 跑一局。约 50-80 次调用，两分钟上下
+pnpm vitest run src/lib/ai/real-game.test.ts
+```
+
+它会**边跑边打点**（每次决策一行，带耗时与兜底标记），结束后把全部发言、每个座位的
+真实身份、两种兜底率打印出来，并落盘到 `transcripts/real-game-<seed>.txt`（已 gitignore）。
+**全 AI 局不需要 UI，也不需要起 Next 服务器**——`/api/ai` 存在的意义是别让 key 进浏览器，
+而这个测试本来就跑在 Node 里，直接用 `createAiClient`。
+
+刻意**不断言 `fallback` 阈值**：那个数字是给人看的判断依据，
+写成断言只会让这个本来就依赖外部服务的测试更脆。
+
+#### 第一次真跑，四个坑全是配置层的，值得记下来
+
+| 症状 | 真因 | 处理 |
+| --- | --- | --- |
+| `HTTP 401`，key 明明是对的 | 用户级环境变量里有个旧 `LLM_API_KEY`，**盖住了 `.env.local`** | 保留"真实环境变量优先"（与 `@next/env` 一致，已实测），但**被盖住就报出来**，只报变量名 |
+| `HTTP 400` | `gpt-5` 系列只接受默认温度，显式发 `temperature: 0.8` 就被顶回来 | 新增 `LLM_TEMPERATURE`，写 `default` 表示**这个字段不发**（`null` ≠ 0） |
+| 每次调用超时，一局跑不完 | 推理模型吐 JSON 前先烧 1600+ reasoning token，默认 30s 不够 | 新增 `LLM_TIMEOUT_MS`；再加 `LLM_EXTRA_BODY={"reasoning_effort":"minimal"}`，实测 12.2s → 1.5s |
+| 跑完了，但**一个字都没打出来** | vitest 4 默认 reporter 把 `console.log` 整个吞掉（`--reporter=verbose` 才可见） | 改用 `process.stdout.write`，两种 reporter 都实测过；并落盘一份 |
+
+**`LLM_EXTRA_BODY` 是唯一一个 provider 专属参数的出口。** 理由与"别的协议请走兼容网关"
+同源：与其为每家模型长一个 `if`，不如开一个通用口子。它排在请求体最后，
+所以不支持 `json_object` 的模型也能从这里换掉 `response_format`；
+`model` / `messages` 明确不许覆盖——改了等于换个问题去问模型，而 `debug.prompt` 里记的
+还是原来那份，能查一天。
+
+**`LLM_REAL_GAME` 这个开关和"配没配 key"是两件事。** 一开始只按配置判断，
+结果 `.env.local` 一填好，往后每次 `pnpm test` 都真跑一局：两分钟加真金白银，而你根本没想跑。
+另外那个"被环境变量盖住"的检查**不能在模块顶层抛**——那会把整个文件炸掉，连跳过都做不到，
+于是配了 key 的机器上 `pnpm test` 直接变红。它属于"测试真要跑的那一刻"，放在 `it()` 第一行。
+
+#### 人工读发言读出来的两个 prompt 缺陷（已修）
+
+**信息隔离没有被突破**（引擎侧一切正常），但 **prompt 有两个真缺陷**，
+都是自动化测不出来、只有人工读发言才会发现的：
+
+| 缺陷 | 现象 | 修法 | 复跑结果 |
+| --- | --- | --- | --- |
+| **公开发言里自报身份** | 刺客说"作为刺客，我会观察……"，梅林说"作为梅林……" | 新增 `PUBLIC_SPEECH_RULES`，`SPEECH` 与 `TEAM_PROPOSAL` 共用；身份段标注"只有你自己知道" | 2 条 → 1 条 → **0 条** |
+| **好人试图打失败票** | 合法性兜底 7.5%（4/53），全是 `MISSION_CARD` | 在【你的身份】【本次决策】【输出格式】**各钉一次** | 7.5% → **0%** |
+
+三件值得记住的事：
+
+1. **抽象规则对弱模型不够用，要给反例。** 只写"不要说出自己的真实角色"之后，
+   第二局仍然出现"作为梅林，我更关注……"；补上"别用「作为梅林……」这种开头给自己贴标签"
+   才降到 0。
+2. **禁的是"给自己贴标签"，不是"撒谎"。** 莫甘娜冒充梅林去骗派西维尔是核心玩法，
+   规则若写成"不许撒谎"会当场毁掉整条对局线。两者只差一个字，有专门一条用例钉着。
+3. **光"不提失败这个选项"是不够的。** `legal.ts` 不给、`reduce` 里还有 `GOOD_CANNOT_FAIL`
+   兜底，模型照样去试。约束要出现在模型**最后读到**的【输出格式】里，
+   且那句话的值取自 `legalActions` 而不是写死 `true`——规则仍然只由 `legal.ts` 说了算。
+   （这条的用例第一版是假的：好人的合法值本来就是 `true`，拿真实局面断言"只能填 true"
+   验不出写死。改成手搓一个"唯一合法值是 false"的假请求才真的能证伪。）
+
+那 4 次非法动作全被 orchestrator 的 `assertLegal` 复检拦下换成合法动作，整局没崩——
+**这道 todos 里原本没写的闸，价值当场兑现了。**
+
+#### 第三个缺陷：队长的选人说明生成了却被丢掉（已修）
+
+前两个缺陷靠人工读发言发现，这一个靠**对着 rules.md 逐条核流程**才发现——它没有任何报错，
+也不影响胜负判定，自动化测试全绿。
+
+`AiTeamProposal.statement` 被 schema 卡成非空、prompt 也明确索要，但 `toGameAction` 翻译成
+引擎动作时只取了 `team`：那段公开的选人说明进不了 `state.speeches`，也就进不了任何人的
+`PlayerView`。症状在 `transcripts/real-game-94938.txt` 里看得很清楚——第 1 轮队长（4 号）
+的首条发言一个字都没提"我为什么带 1 号和 3 号"，其余四人只能对着 `proposedTeam` 干猜，
+整场讨论退化成"请座位 1 和座位 3 说明你们的计划"。
+
+修法是让说明**成为**队长的那一次发言（[rules.md §4.4](./rules.md) 的原话就是"队长先发言
+解释选人理由"）：
+
+- `PROPOSE_TEAM` 动作加 `statement` 字段，与 `SPEAK.content` 同类——引擎不校验文本内容
+- `phases/teamBuilding.ts` 把它记成一条 `phase: "TEAM_BUILDING"` 的 `Speech`
+- `enterProposalDiscussion` 的发言游标从 **1** 起步（`speakingOrder` 仍是从队长起的整圈）。
+  **不要改成把队长从 `speakingOrder` 里删掉**：保留整圈，`progress` 自然是"1/n"、
+  队长的 `selfSubmitted` 自然为 true，`view.ts` 一行不用动
+- 顺带的收益：队长每次提议少一次模型调用。5 人局跑完一局 50 条发言只用 43 次 `SPEECH`
+  调用（7 次提议各省一次）
+
+**顺带修的两处历史可读性**（不影响规则，但直接影响 AI 推理质量和人读记录）：
+
+| 问题 | 现象 | 修法 |
+| --- | --- | --- |
+| 发言分不清是第几次提议 | 一轮被否决两次就有三批发言糊在【全场发言】里，模型不知道哪句冲着哪个队伍说 | `speechLine` 渲染 `Speech.attempt`，**只标组队与提议讨论**——复盘的 attempt 是"该轮最后一次提议"，标出来会误导 |
+| transcript 分不清提议讨论 / 复盘讨论 | `real-game-94938.txt` 第 1 轮那 10 条黏成一片，人读着极易误判 | 发言行加 `[第 1 轮 第 2 次提议 提议讨论]`；`SPEECH_RE` 的新增两段写成**可选**捕获组，三份不可再生的旧记录照旧解析得动（有专门用例钉住） |
+
+#### 第四个缺陷：任务结果没有被当成线索用（已修，但先走错了一次）
+
+同样是对着 rules.md 核流程才发现的，同样不报错、测试全绿。两份真实记录里证据确凿：
+
+| 局 | 已知 | 下一轮却带了谁 |
+| --- | --- | --- |
+| `real-game-84804` | 第 2 轮 `{0,1,4}` 出 **2 张**失败票 → 这 3 人里至少 2 个坏人 | 第 3 轮直接带 `0、1` → 又失败 |
+| `real-game-319` | 第 2 轮 `{1,3,4}` 出 **2 张**失败票 | 第 3 轮带 `3、4`、第 4 轮带 `0、3、4` → 全失败 |
+
+最刺眼的一个数字：**84804 那局 35 条发言里，"失败"两个字一次都没出现过**——到第 3 轮已经挂了
+两次任务，没有一个 AI 提过任何一次任务结果。
+
+**数据一直都在**（`missionHistory` 全量进【历史】段，发言也不截断），缺的是从事实到结论那一步。
+
+##### 走错的那一版：把结论算好塞进 prompt
+
+第一版新增 `game/deduction.ts`，算出三类硬结论（至少 k 个坏人 / 整队皆坏 / 名额占满则其余人清白），
+渲染成一段【推理线索】，**每个玩家每次决策都无条件拿到同一份**，还在组队/投票/发言三处点名要求对照它。
+实现完全正确（soundness 用真实身份在 120 局里逐条验过），方向完全错误：
+
+> 现实桌游里，任务板上的**事实**（谁上过车、几张失败票）是明摆着的，
+> 但"所以这三人里至少两个坏人"这句**推论是玩家自己说出来的**——说出来才成为公共认知，
+> 说错了会被反驳，说对了是功劳。人手一份算好的答案，讨论就退化成装饰。
+
+这是整个阶段 4 里最值得记住的一次返工：**自动化测试全绿、指标也会变好看，但游戏被做坏了。**
+测试能证明实现是对的，证明不了方向是对的。
+
+##### 定版：prompt 只给方法（L2），结论留给模型自己推
+
+这条线有四级，第一版一步跨到了最右边：
+
+| 级别 | prompt 里有什么 | 模型要自己做的事 |
+| --- | --- | --- |
+| L0 | 什么都没有 | 全部 |
+| L1 | 「组队/投票前回顾各轮任务结果」 | 推理方法 + 具体推理 |
+| **L2（定版）** | 再加一句「失败票只可能来自坏人 → 那车上至少有几个坏人」及其反向 | 具体是谁、能不能同时上车 |
+| L3（撤销） | 直接给算好的结论 | 照着做 |
+
+- **方法写进【游戏】规则段**：它和"平票算否决"同一类，是规则常识，不是本局情报。
+  反向那句（"任务成功不代表车上没坏人"）必须一起给，否则模型会把成功记录当免罪符。
+- **决策段只说去哪儿看**，措辞里不含任何结论。提议讨论那条是题眼：
+  **"你从任务结果里看出了什么，得自己说出来——别人不会自动知道你的推理"**。
+- `prompt.test.ts` 有一条**反向断言**：整份 prompt 里查不到"至少有 2 个坏人""必然都是好人"这类字样。
+  它钉住的是这个设计决定本身，防止后人又顺手把答案塞回去。
+
+##### `deduction.ts` 转成复盘指标，并迁到 `src/lib/ai/`
+
+推导逻辑一行没改（它本来就是对的），只换了用途和位置：
+
+- 位置从 `game/` 挪到 `ai/`，并从 `game/index.ts` 的导出里摘掉——**引擎不做推理，也不对外提供推理**。
+- 入口从 `deduceFromHistory(view)` 改成 `deduceFromMissions({ missions, evilCount, seats })`：
+  "只看公开信息"这条保证原本是给 prompt 链路用的，现在由输入类型本身表达；
+  而复盘要按时序反复切片推，吃 view 反倒得手搓假视角。
+- 新增 `findDeductionMisses(final)`：整局里有多少次提议踩了**当时**已知的雷。
+  **只喂 `missionIndex` 更小的任务记录**——拿终局全量记录去判过去，等于用未来责备过去，
+  数字会虚高，这是本函数最容易写错的一点，有专门用例钉时序。
+  队长真实阵营一并标注：坏人踩雷很可能是故意的，和好人的失误混在一个数字里就读不出意思了。
+- 对局记录多一段 `=== 推理踩雷 ===`（照搬 `rescuedActions` 的做法：render 写出、parse 原样读回、
+  页面 `<pre>` 打印），附两个数字：提名踩雷 x/y 次（其中好人队长 z 次）、
+  发言提到失败记录 m/n 条（粗略字符串统计，只当风向标）。
+  **旧记录里没有这一段，parse 必须容得下它缺席**——那三份不可再生。
+
+拿 84804 的局面回放，指标精确命中当初人工发现的那一次：
+`第 3 轮：2 号[好] 提名 0、1 → 踩中 0、1`，且第 4 轮的 `1、2、3` 没有误报
+（只碰到一个人不构成"必然含坏人"）。
+
+**变异测试自查**（五条各改一次，确认都被抓住后还原）：
+
+| 变异 | 被抓 |
+| --- | --- |
+| 判据改成 `!succeeded` | 1 条炸（7 人局第 4 轮那条） |
+| `pickSize` 少算 1 | 2 条炸（含 soundness） |
+| `CLEARED` 改成"队伍里的人全是好人" | 3 条炸（含 soundness） |
+| 踩雷判定不做时序切分，用终局全量记录 | 1 条炸（时序那条） |
+| 把算好的结论塞回 `buildPrompt` | 4 条炸（反向断言 + 3 份快照） |
+
+**已验证**（2026-08-25）：`pnpm typecheck` / `pnpm lint` 无输出，
+`pnpm test` 21 个文件 / 474 个用例全绿 + 1 个跳过，`pnpm transcripts` 三份旧记录照旧解析。
+
+**下一步要看的不是 prompt，是模型**：真实对局跑一局，看 `=== 推理踩雷 ===` 里好人队长的次数
+（319 与 84804 各 2 次）与发言提及数（此前 0/35）。这两个数字现在是**指标**而不是输入——
+它们变好才说明模型真的在推理。若换了更强的模型仍然不推，再考虑往 L1/L2 之间加东西。
+
+**读记录用 `pnpm transcripts`**：它把 `transcripts/*.txt` 解析成结构、渲染成
+`transcripts/index.html`——三局可切换、按轮次分组、自曝的句子逐字高亮。
+格式的真源是 `renderTranscript`，`parseTranscript` 与它靠 `transcript.test.ts` 的往返用例锁死：
+改了分隔符而解析没跟上，当场就炸。落盘目录**不带点**是刻意的：`.transcripts/` 在
+资源管理器里默认隐藏，又因为 gitignore 在源代码管理里也不显示，等于双重隐身（真的没被找到过）。
+
+`real-game.test.ts` 现在会把这两件事直接算出来：`=== 被拦下的非法动作 ===` 打印模型原本
+想做什么 vs 实际提交了什么；自曝检测分两档——命中"作为/我是/身为{自己的角色名}"才算
+**自曝**，其余只算"提到"（梅林在发言里谈论"梅林"是正常推理，甚至是好牌，不能一律算泄漏）。
+
+**仍未解决、但不阻塞**：发言明显超出【发言长度】要求的 2-5 句，且几乎每个人都在说
+"里程碑/时间线/分工"这类空话。这更像 gpt-5-nano + `reasoning_effort: minimal` 太弱，
+换模型再看，不必先为它调 prompt。
+
+`mock.test.ts` 另外还钉住了这些：
+
+- 100 局（6 种人数轮着来）全部到达 `GAME_OVER`，六种 `AiDecisionKind` 都被用到过
+- 好人从没投出过失败票——把坏人名单独立算一遍再和任务记录对
+- 每一次决策的 payload 在驱动里**再独立过一遍 schema**（不复用 mock 内部那次自检）
+- `fallback` 恒为 false、`debug` 恒有值、`attempts` 恒为 1
+- 决策种类与当时的 phase 自洽；提议的队伍人数正确、无重复、座位合法、升序
+- 分布断言：同意/否决都出现过、任务票成败都出现过、刺杀目标不总是同一个座位、
+  同一个 view 连续组队会挑出不同队伍——**只靠结构断言抓不住"永远返回第一个候选项"**，
+  它照样能跑完 100 局（与阶段 1「梅林不会每局都在 0 号位」是同一类防线）
+- 同 seed 跑两次，`finalState` 与整串决策记录都完全一致
+- 六种 `kind` 各构造一次"候选动作对不上"的调用，逐一断言抛 `INTERNAL`
+
+> 那份临时驱动**已经删掉**：`mock.test.ts` 现在直接用 `runGame`，
+> 决策种类用 orchestrator 导出的 `decisionKindOf`。它由 `legalActions[0].type` 反推
+> 而不是由 phase 推——刺杀阶段的两个子步骤因此自动分开，调用方不必复制引擎的次序规则。
+
+**已验证**（2026-08-25）：`pnpm typecheck` / `pnpm lint` 无输出，
+`pnpm test` 12 个文件 / 304 个用例全绿，整套 3.6 秒。`schema.ts` 与 `mock.ts` 覆盖率均为满格
+（`ai` 目录未覆盖的只有仍是 TODO 的 `prompt.ts` 与 `client.ts`）。
+
+**变异测试自查**（五条各改一次，确认都被抓住后还原）：
+
+| 变异 | 被抓 |
+| --- | --- |
+| 任务票不看 `legalActions`，直接 `rng() < 0.5` | 引擎的 `GOOD_CANNOT_FAIL` 在第 1 局就抛，整个文件跑不起来 |
+| 组队不 shuffle，取座位号最小的 `teamSize` 个 | 1 条炸（分布断言） |
+| `decide` 跳过 `AI_SCHEMAS.parse` 且发言返回空串 | 2 条炸 |
+| `AI_SCHEMAS` 少一个 kind | `pnpm typecheck` 炸（映射表的类型标注） |
+| 投票永远取第一个候选项 | 1 条炸（分布断言） |
+
+`prompt.test.ts` 钉住的（26 个用例）：
+
+- **四个"干净段"里不出现任何角色名**，在手工局面和 20 局真实对局的每一步、每个待行动玩家上各验一遍
+  （借 `sim/random.ts` 的 `onStep` 驱动，这组断言因此不依赖 AI 层的任何东西）
+- 【你知道的】与 `view.knowledge` 逐条对得上，条数也要相等——多一条就是凭空多知道了一个人
+- **派西维尔那两个座位号按升序渲染**（专门另建一局把梅林/莫甘娜的座位号倒过来才测得出）
+- 【全场发言】原样转录 `view.speeches`，不加工也不添油加醋
+- 六个 kind 的输出示例都能通过 `AI_SCHEMAS[kind]`
+- 好人的任务票决策段里没有"失败"选项、坏人的两个都在；刺杀候选目标与 `legalActions` 逐一相等
+- 整个 prompt 里不出现任何字数区间；三个产出自由文本的 kind 都写了句子数要求
+- 纯函数：同 `req` 同结果、不改动传入的 `req`
+- 快照：梅林组队 / 忠臣发言 / 刺客刺杀三份完整 prompt。**这三份的价值不在拦住改动，
+  在于逼改的人读一遍 diff**——"读起来像在教模型作弊"是自动化测不出来的
+
+**已验证**（2026-08-25）：`pnpm typecheck` / `pnpm lint` 无输出，
+`pnpm test` 13 个文件 / 335 个用例全绿，`prompt.ts` 覆盖率满格（`ai` 目录未覆盖的只剩仍是 TODO 的 `client.ts`）。
+
+**变异测试自查**（五条各改一次，确认都被抓住后还原）：
+
+| 变异 | 被抓 |
+| --- | --- |
+| 【历史】里把任务失败票的投票人渲染出来 | 3 条炸（含整局那条与快照） |
+| 派西维尔那条按 `[梅林, 莫甘娜]` 顺序渲染 | 2 条炸 |
+| 好人的任务票 prompt 也列出"失败"选项 | 1 条炸 |
+| `VOTE` 的输出示例少一个字段 | 1 条炸（示例过 schema 那条） |
+| `ROLE_HINTS` 对所有角色返回同一句 | 3 条炸 |
+
+### 配套的引擎改动：`PlayerView.roleComposition`
+
+`buildPrompt` 只能拿到 `PlayerView`，而本局角色构成原本不在里面——AI 会因此明显变笨：
+7 人局梅林只看到 2 个坏人、本局坏人却有 3 个时，他本该立刻推出"有莫德雷德"。
+角色构成是**开局公开信息**（[rules.md §3.2](./rules.md)），所以加进视角，
+形状限定为 `RoleCounts`：**只有数量，没有座位**。
+
+`view.leak.test.ts` 会因此炸 5 条，这正是那个白名单存在的意义。处理方式（不要抄错方向）：
+
+- 给"不出现自己以外的角色名"和"字段名全在白名单内"两条**各套一层 `withoutComposition`**，
+  **不要**反过来把 8 个角色名塞进 `ALLOWED_KEYS`——那会让将来某个 `Record<Role, X>` 字段
+  漏进视角时再也测不出来。这两条断言的价值就在于它们钝
+- 排除的正当性由新增的「角色构成是公开信息」那一组单独证明，其中
+  **"每个座位拿到的 `roleComposition` 完全相同"是关键的一条**：它一旦不成立，上面的排除立刻失效
+- `sim/random.test.ts` 的整局泄漏扫描里有同一个 grep，同样处理
+- 三个快照更新后逐行看 diff，**只应多出一个 `roleComposition` 块**
+
+`client.test.ts` / `route.test.ts` / `remote.test.ts` 钉住的（29 + 14 + 7 个用例，**全程不发一次网络**）：
+
+- `fetchFn` 与 `rng` 两个注入点是整个可测性的来源。少一个，重试或兜底就只能靠真跑
+- 清洗：markdown 围栏、`<think>` 推理块、**带花括号的推理块**、未闭合标签、
+  JSON 前后的废话、尾随逗号，各一条
+- 重试请求里带着上一次的原文与错误文本（对捕获到的 request body 断言）——
+  证明是"带反馈重问"而不是原样重发；网络类失败则 messages 不变
+- 401 / 404 只调一次；429 / 5xx / fetch 抛会重试到用尽后**抛而不是兜底**
+- 好人的 `MISSION_CARD` 兜底永远是成功票；坏人两种都出现过，且都来自 `legalActions`
+- 抛出的错误里**不含 apiKey，也不含上游的原始响应体**；route 的 502 响应体同样两样都没有
+- route：400（body 非 JSON / kind 不认识 / `legalActions` 为空 / view 不是对象 /
+  view 字段残缺）、503（`LLM_PROVIDER=mock`、缺 key、provider 不认识）、
+  502（上游 401）、`maxRetries` 被 `LLM_MAX_RETRIES` 夹住
+- **浅 schema 不会把 view 的字段剥光**（用 `z.object({})` 就会，这条专门拦它）
+- `remote.ts` 的源码里查不到 `./client`、`apiKey`、`process.env` —— 浏览器侧的边界用断言钉死
+
+**已验证**（2026-08-25）：`pnpm typecheck` / `pnpm lint` 无输出，
+`pnpm test` 16 个文件 / 385 个用例全绿，`pnpm build` 通过且 `/api/ai` 正确注册为动态路由
+（**route handler 的写法错了只有 `pnpm build` 能发现，单测覆盖不到这一层**）。
+
+**变异测试自查**（五条各改一次，确认都被抓住后还原）：
+
+| 变异 | 被抓 |
+| --- | --- |
+| 401 也当可重试 | 2 条炸 |
+| 重试时不带反馈，原样重发 | 2 条炸 |
+| 兜底不走 mock，直接 `rng() < 0.5` | 1 条炸（好人兜底那条） |
+| `extractJson` 不剥推理标签 | **最初没抓住**，见下 |
+| route 不夹 `maxRetries` | 1 条炸 |
+
+> 第 4 条最初是**抓不住**的：`<think>` 块里没有花括号时，"取第一个 `{` 到最后一个 `}`"
+> 顺手就把它跳过去了，剥不剥都一样。补上「推理块里含 `{"approve": false}`」这条用例才炸——
+> 而那恰恰是真实场景，模型常在推理块里把 JSON 先草拟一遍。
+> **变异测试的价值就在这里：它证伪的不是实现，是测试。**
+
+`orchestrator.test.ts` 钉住的（22 个用例）：
+
+- **同时行动的阶段：每个请求都基于同一个状态快照**（投票请求里 `progress.submitted` 恒为 0）。
+  有人先落地的话后面的人就会看到 1——这条是"看不到别人投了什么"在驱动层的体现
+- **逐人发言的阶段确实串行**：后发言的人的 `view.speeches` 更长
+- 人类回调只为人类座位而来、给的动作真的被应用、人类不进 `DecisionRecord`；
+  有人类座位却不给回调 → 抛
+- `onDecision` / `onState` 返回的 promise **确实被 await**（用记录时序的假钩子验），
+  这是阶段 5 打字机效果的前提
+- **rescue**：一个永远返回 `team: [0, 0, 0]` 的假 client → 整局不崩、`rescued` 为 true、
+  **换出来的动作对当时的状态逐条过 `assertLegal`**、`result.payload` 里仍是模型原本的答案
+- abort 之后立刻停下，不再调用 client
+- `resolveAiClient`：未设置或写 `mock` 时**一次网络都不发**，写 `remote` 时请求 `/api/ai`
+- 源码不含 `./client`，也不含 `process.env.LLM_`
+
+**已验证**（2026-08-25）：`pnpm typecheck` / `pnpm lint` 无输出，
+`pnpm test` 20 个文件 / 446 个用例全绿 + 1 个跳过（真实模型那条），`pnpm build` 通过。
+
+**变异测试自查**（五条各改一次，确认都被抓住后还原）：
+
+| 变异 | 被抓 |
+| --- | --- |
+| 并发阶段改成逐个决策 + 立即落地 | 1 条炸（同一快照） |
+| 去掉 `assertLegal` 复检 | 2 条炸 |
+| `resolveAiClient` 默认走 remote | 2 条炸 |
+| 人类座位也交给 AI 决策 | 2 条炸 |
+| `onDecision` 不 await | 1 条炸（时序） |
 
 > **泄漏自查**：如果某局 AI 的推理准得离谱，先查泄漏再夸模型。最快的验证方法——把 `toPlayerView` 的返回值直接 dump 成 JSON 人工读一遍。
 

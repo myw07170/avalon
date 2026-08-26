@@ -63,10 +63,14 @@ export function speakingOrderFrom(
  * 发言顺序在【进入讨论阶段时】才算，不提前到 ROLE_REVEAL。
  * legal.ts 只在讨论阶段读 pending.speakingOrder，提前算会让一份过期的顺序
  * 在 TEAM_BUILDING / TEAM_VOTE 期间躺在 pending 里，与规矩 1 直接冲突。
+ *
+ * startIndex 是游标起点，不是排序方式：两个讨论阶段的 speakingOrder 完全一样
+ * （都是从队长起的整圈），差别只在队长那一格算不算已经用掉。
  */
 function enterDiscussion(
   state: GameState,
   phase: "PROPOSAL_DISCUSSION" | "REVIEW_DISCUSSION",
+  startIndex: number,
 ): GameState {
   return {
     ...state,
@@ -74,17 +78,28 @@ function enterDiscussion(
     pending: {
       ...createPending(),
       speakingOrder: speakingOrderFrom(state.currentLeaderId, state.players.length),
-      speakerIndex: 0,
+      speakerIndex: startIndex,
     },
   };
 }
 
+/**
+ * 游标从 1 起步：speakingOrder[0] 是队长，而他的那一次发言已经由
+ * PROPOSE_TEAM 的选人说明占掉了（phases/teamBuilding.ts）。
+ *
+ * **不要把队长从 speakingOrder 里删掉**，也不要把起点改回 0：
+ * - 改回 0 → 队长连说两段，第二段还是在没有新信息的情况下重复自己；
+ * - 删掉他 → view.ts 的 progress 会变成 (n-1) 分母、队长的 selfSubmitted 变 false，
+ *   得再去改一处本来完全正确的代码。
+ * 保留整圈 + 游标起点为 1，"队长已发言 1/n"这件事在视角层自然就是对的。
+ */
 export function enterProposalDiscussion(state: GameState): GameState {
-  return enterDiscussion(state, "PROPOSAL_DISCUSSION");
+  return enterDiscussion(state, "PROPOSAL_DISCUSSION", 1);
 }
 
+/** 复盘讨论没有前置发言，队长自己也要说，游标从 0 起步 */
 export function enterReviewDiscussion(state: GameState): GameState {
-  return enterDiscussion(state, "REVIEW_DISCUSSION");
+  return enterDiscussion(state, "REVIEW_DISCUSSION", 0);
 }
 
 // ---------------------------------------------------------------------------

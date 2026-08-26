@@ -7,8 +7,8 @@
 ```
 SETUP                 分配角色，确定首任队长
 ROLE_REVEAL           各玩家查看自己的身份与已知信息
-TEAM_BUILDING         队长选人
-PROPOSAL_DISCUSSION   队长解释 + 全员发言
+TEAM_BUILDING         队长选人，同时给出公开的选人说明（记为他的那一次发言）
+PROPOSAL_DISCUSSION   其余 n-1 人逐个发言
 TEAM_VOTE             全员公开投票同意/反对
 MISSION_EXECUTION     队员匿名投成功/失败
 MISSION_RESULT        公布结果（仅失败票数）
@@ -23,8 +23,8 @@ GAME_OVER             公开所有身份
 | --- | --- | --- | --- |
 | SETUP | `START_GAME` | 配置校验通过 | ROLE_REVEAL |
 | ROLE_REVEAL | `ACKNOWLEDGE` | 全员确认 | TEAM_BUILDING |
-| TEAM_BUILDING | `PROPOSE_TEAM` | 人数正确且无重复 | PROPOSAL_DISCUSSION |
-| PROPOSAL_DISCUSSION | `SPEAK` | 全员发言完毕 | TEAM_VOTE |
+| TEAM_BUILDING | `PROPOSE_TEAM` | 人数正确且无重复 | PROPOSAL_DISCUSSION（顺带把 `statement` 记成队长的发言） |
+| PROPOSAL_DISCUSSION | `SPEAK` | 队长以外的人发言完毕 | TEAM_VOTE |
 | TEAM_VOTE | `CAST_VOTE` | 全员投票完毕，同意 > 半数 | MISSION_EXECUTION |
 | TEAM_VOTE | `CAST_VOTE` | 同意 ≤ 半数，`rejectCount + 1 < 5` | TEAM_BUILDING（队长顺延） |
 | TEAM_VOTE | `CAST_VOTE` | 同意 ≤ 半数，`rejectCount + 1 >= 5` | GAME_OVER（坏人胜） |
@@ -37,6 +37,8 @@ GAME_OVER             公开所有身份
 | ASSASSINATION | `ASSASSINATE` | 坏人推测完毕且目标合法 | GAME_OVER |
 
 `TEAM_VOTE` 若开启变体 `forcePassOnLastAttempt`，进入该阶段时若 `rejectCount === maxRejects - 1`，则不接受 `CAST_VOTE`，直接以 `forced: true` 记一条通过的提议并转入 `MISSION_EXECUTION`。
+
+两个讨论阶段的 `speakingOrder` 完全一样（都是从当前队长起的整圈），差别只在游标起点：提议讨论从 **1** 起步，因为 `speakingOrder[0]` 是队长，而他那一次已经被选人说明占掉了；复盘讨论从 0 起步。刻意不把队长从 `speakingOrder` 里删掉——保留整圈，`PlayerView` 的 `progress` 自然就是"已发言 1/n"、队长的 `selfSubmitted` 自然为 true，`view.ts` 一行都不用改。
 
 进入 TEAM_BUILDING 有两条路径，含义不同，务必区分：从 TEAM_VOTE 来是"同一轮换队长重提"，`missionIndex` 不变、`rejectCount` 递增；从 REVIEW_DISCUSSION 来是"新一轮开始"，`missionIndex + 1`、`rejectCount` 归零。这两条路混淆是本项目最典型的 bug。
 

@@ -6,7 +6,7 @@
  * 断言写得比别处啰嗦：宁可重复，也不能让某条泄漏没人守。
  */
 import { describe, expect, it } from "vitest";
-import { ROLE_ORDER, createConfig } from "./config";
+import { ROLE_ORDER, createConfig, rolesToCounts } from "./config";
 import { createRng } from "./rng";
 import { createGame, makePlaceholderPersonas } from "./setup";
 import { toPlayerView } from "./view";
@@ -117,7 +117,22 @@ function build(
   };
 }
 
-const dump = (view: PlayerView): string => JSON.stringify(view);
+const dump = (view: unknown): string => JSON.stringify(view);
+
+/**
+ * 剥掉 roleComposition 再做整体 grep。
+ *
+ * 它是开局公开的角色构成（rules.md §3.2），键就是角色名，会命中下面两条
+ * 按角色名 / 按字段名做的钝断言。剥掉的正当性由「角色构成是公开信息」那一组
+ * 断言单独证明：那里钉住了它对每个座位完全相同，形状上根本带不了座位号。
+ *
+ * **不要反过来改那两条断言的判据来迁就它**——它们的价值就在于钝。
+ * 键名本身则由那一组里"键集合恰好是 ROLE_ORDER"覆盖。
+ */
+function withoutComposition(view: PlayerView): Omit<PlayerView, "roleComposition"> {
+  const { roleComposition: _roleComposition, ...rest } = view;
+  return rest;
+}
 
 const countOf = (haystack: string, needle: string): number =>
   haystack.split(needle).length - 1;
@@ -180,7 +195,7 @@ describe("身份", () => {
         { speakingOrder: ALL_SEATS, speakerIndex: 2 },
       );
       for (const player of state.players) {
-        const json = dump(toPlayerView(state, player.id));
+        const json = dump(withoutComposition(toPlayerView(state, player.id)));
         for (const role of OTHER_ROLES(player.role)) {
           // 连引号一起找，比对的是完整的 JSON 字符串值。
           // 裸着找 ASSASSIN 会被阶段名 ASSASSINATION 命中，
@@ -221,6 +236,59 @@ describe("身份", () => {
     expect(toPlayerView(state, 3).knowledge).toEqual([
       { kind: "MERLIN_OR_MORGANA", playerIds: [0, 1] },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 角色构成
+// ---------------------------------------------------------------------------
+
+/**
+ * roleComposition 是本文件里唯一被 withoutComposition 排除在整体 grep 之外的字段。
+ * 这一组就是那个排除的正当性来源，所以断言写得比别处更死。
+ */
+describe("角色构成是公开信息", () => {
+  it("每个座位拿到的 roleComposition 完全相同", () => {
+    const state = build();
+    const first = JSON.stringify(toPlayerView(state, 0).roleComposition);
+    for (const id of ALL_SEATS) {
+      // 结构上就带不了 per-viewer 信息——这条一旦不成立，上面的排除立刻失效
+      expect(JSON.stringify(toPlayerView(state, id).roleComposition), `座位 ${id}`).toBe(
+        first,
+      );
+    }
+  });
+
+  it("等于 config.roles 的数量表", () => {
+    const state = build();
+    expect(toPlayerView(state, 0).roleComposition).toEqual(rolesToCounts(state.config.roles));
+  });
+
+  it("键集合恰好是 ROLE_ORDER，值全为数字，求和等于人数", () => {
+    const composition = toPlayerView(build(), 0).roleComposition;
+    expect(Object.keys(composition)).toEqual([...ROLE_ORDER]);
+    const values = Object.values(composition);
+    expect(values.every((v) => Number.isInteger(v))).toBe(true);
+    expect(values.reduce((a, b) => a + b, 0)).toBe(ALL_SEATS.length);
+  });
+
+  it("序列化后不含任何座位号绑定", () => {
+    const json = dump(toPlayerView(build(), 0).roleComposition);
+    // {"MERLIN":1,...} 这种形状带不了座位；这里钉住的是"将来别改成带座位的形状"
+    expect(json).not.toContain("playerId");
+    expect(json).not.toContain("id");
+    for (const id of ALL_SEATS) {
+      expect(json).not.toContain(`"${id}"`);
+    }
+  });
+
+  it("自定义配置也如实反映（没有莫德雷德就是 0）", () => {
+    const state = build();
+    const composition = toPlayerView(state, 0).roleComposition;
+    // 本局排布里莫德雷德和奥伯伦都在场，各 1 个
+    expect(composition.MORDRED).toBe(1);
+    expect(composition.OBERON).toBe(1);
+    expect(composition.MINION).toBe(0);
   });
 });
 
@@ -331,7 +399,7 @@ describe("pending", () => {
         { phase, proposedTeam: [0, 1, 2] },
         { speakingOrder: ALL_SEATS, speakerIndex: 1, votes: { 5: true } },
       );
-      for (const key of keysOf(toPlayerView(state, 8))) {
+      for (const key of keysOf(withoutComposition(toPlayerView(state, 8)))) {
         expect(ALLOWED_KEYS, `${phase} 阶段冒出了字段 ${key}`).toContain(key);
       }
     }

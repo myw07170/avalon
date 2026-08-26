@@ -423,7 +423,7 @@ describe("assertLegal：阶段", () => {
   it("阶段对不上抛 ILLEGAL_PHASE", () => {
     const vote = ten({ phase: "TEAM_VOTE", proposedTeam: [1, 2, 3] });
     expectCode(
-      () => assertLegal(vote, { type: "PROPOSE_TEAM", playerId: 0, team: [0, 1, 2] }),
+      () => assertLegal(vote, { type: "PROPOSE_TEAM", playerId: 0, team: [0, 1, 2], statement: "带这几个" }),
       "ILLEGAL_PHASE",
     );
     expectCode(() => assertLegal(vote, { type: "NEXT" }), "ILLEGAL_PHASE");
@@ -450,11 +450,11 @@ describe("assertLegal：轮到谁", () => {
   it("非队长提议抛 NOT_YOUR_TURN", () => {
     const state = ten({ phase: "TEAM_BUILDING", currentLeaderId: 4 });
     expectCode(
-      () => assertLegal(state, { type: "PROPOSE_TEAM", playerId: 5, team: [0, 1, 2] }),
+      () => assertLegal(state, { type: "PROPOSE_TEAM", playerId: 5, team: [0, 1, 2], statement: "带这几个" }),
       "NOT_YOUR_TURN",
     );
     expect(() =>
-      assertLegal(state, { type: "PROPOSE_TEAM", playerId: 4, team: [0, 1, 2] }),
+      assertLegal(state, { type: "PROPOSE_TEAM", playerId: 4, team: [0, 1, 2], statement: "带这几个" }),
     ).not.toThrow();
   });
 
@@ -566,22 +566,22 @@ describe("assertLegal：载荷", () => {
   it("队伍人数不符抛 INVALID_TEAM", () => {
     const state = ten({ phase: "TEAM_BUILDING", currentLeaderId: 0, missionIndex: 3 });
     expectCode(
-      () => assertLegal(state, { type: "PROPOSE_TEAM", playerId: 0, team: [0, 1, 2, 3] }),
+      () => assertLegal(state, { type: "PROPOSE_TEAM", playerId: 0, team: [0, 1, 2, 3], statement: "带这几个" }),
       "INVALID_TEAM",
     );
     expect(() =>
-      assertLegal(state, { type: "PROPOSE_TEAM", playerId: 0, team: [0, 1, 2, 3, 4] }),
+      assertLegal(state, { type: "PROPOSE_TEAM", playerId: 0, team: [0, 1, 2, 3, 4], statement: "带这几个" }),
     ).not.toThrow();
   });
 
   it("队伍里有重复或不存在的座位抛 INVALID_TEAM", () => {
     const state = ten({ phase: "TEAM_BUILDING", currentLeaderId: 0 });
     expectCode(
-      () => assertLegal(state, { type: "PROPOSE_TEAM", playerId: 0, team: [1, 1, 2] }),
+      () => assertLegal(state, { type: "PROPOSE_TEAM", playerId: 0, team: [1, 1, 2], statement: "带这几个" }),
       "INVALID_TEAM",
     );
     expectCode(
-      () => assertLegal(state, { type: "PROPOSE_TEAM", playerId: 0, team: [1, 2, 10] }),
+      () => assertLegal(state, { type: "PROPOSE_TEAM", playerId: 0, team: [1, 2, 10], statement: "带这几个" }),
       "INVALID_TEAM",
     );
   });
@@ -589,7 +589,7 @@ describe("assertLegal：载荷", () => {
   it("队长可以把自己排除在队伍外（rules.md §5.1）", () => {
     const state = ten({ phase: "TEAM_BUILDING", currentLeaderId: 0 });
     expect(() =>
-      assertLegal(state, { type: "PROPOSE_TEAM", playerId: 0, team: [1, 2, 3] }),
+      assertLegal(state, { type: "PROPOSE_TEAM", playerId: 0, team: [1, 2, 3], statement: "带这几个" }),
     ).not.toThrow();
   });
 

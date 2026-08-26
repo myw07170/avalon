@@ -283,13 +283,13 @@ describe("reduce：分派与纯函数", () => {
   it("不改动传入的 state", () => {
     const state = started(SIX);
     const before = JSON.stringify(state);
-    step(state, { type: "PROPOSE_TEAM", playerId: 0, team: [0, 1] });
+    step(state, { type: "PROPOSE_TEAM", playerId: 0, team: [0, 1], statement: "带这几个" });
     expect(JSON.stringify(state)).toBe(before);
   });
 
   it("同一 state + 同一 action 两次调用结果完全一致", () => {
     const state = started(SIX);
-    const action: GameAction = { type: "PROPOSE_TEAM", playerId: 0, team: [0, 1] };
+    const action: GameAction = { type: "PROPOSE_TEAM", playerId: 0, team: [0, 1], statement: "带这几个" };
     expect(JSON.stringify(step(state, action))).toBe(
       JSON.stringify(step(state, action)),
     );
@@ -298,11 +298,11 @@ describe("reduce：分派与纯函数", () => {
   it("非法动作沿用 assertLegal 的错误码，不静默忽略", () => {
     expectCode(() => step(newGame(SIX), { type: "NEXT" }), "ILLEGAL_PHASE");
     expectCode(
-      () => step(started(SIX), { type: "PROPOSE_TEAM", playerId: 3, team: [0, 1] }),
+      () => step(started(SIX), { type: "PROPOSE_TEAM", playerId: 3, team: [0, 1], statement: "带这几个" }),
       "NOT_YOUR_TURN",
     );
     expectCode(
-      () => step(started(SIX), { type: "PROPOSE_TEAM", playerId: 0, team: [0, 1, 2] }),
+      () => step(started(SIX), { type: "PROPOSE_TEAM", playerId: 0, team: [0, 1, 2], statement: "带这几个" }),
       "INVALID_TEAM",
     );
   });
@@ -358,23 +358,84 @@ describe("TEAM_BUILDING 与讨论", () => {
       type: "PROPOSE_TEAM",
       playerId: 4,
       team: [5, 1],
+      statement: "带 1 和 5，理由如下",
     });
     expect(state.proposedTeam).toEqual([1, 5]);
     expect(state.phase).toBe("PROPOSAL_DISCUSSION");
     // 座位序，从当前队长开始绕一圈
     expect(state.pending.speakingOrder).toEqual([4, 5, 0, 1, 2, 3]);
-    expect(state.pending.speakerIndex).toBe(0);
-    expect(state.log.at(-1)).toEqual({
+    // 游标从 1 起步：队长那一格已经被选人说明占掉了
+    expect(state.pending.speakerIndex).toBe(1);
+    expect(state.log.at(-2)).toEqual({
       kind: "TEAM_PROPOSED",
       leaderId: 4,
       team: [1, 5],
       attempt: 0,
     });
+    expect(state.log.at(-1)).toEqual({ kind: "SPEECH", seq: 0, playerId: 4 });
+  });
+
+  it("队长的选人说明落成第一条发言，公开可见", () => {
+    const state = step(started(SIX, { leaderId: 4 }), {
+      type: "PROPOSE_TEAM",
+      playerId: 4,
+      team: [5, 1],
+      statement: "带 1 和 5，理由如下",
+    });
+
+    expect(state.speeches).toHaveLength(1);
+    expect(state.speeches[0]).toEqual({
+      seq: 0,
+      playerId: 4,
+      // 记成"队长组队"而不是"提议讨论"：这句话是跟名单一起报出来的
+      phase: "TEAM_BUILDING",
+      missionIndex: 0,
+      attempt: 0,
+      content: "带 1 和 5，理由如下",
+    });
+  });
+
+  it("队长说过一次就不再轮到他，抢着发言抛 NOT_YOUR_TURN", () => {
+    const state = step(started(SIX, { leaderId: 4 }), {
+      type: "PROPOSE_TEAM",
+      playerId: 4,
+      team: [5, 1],
+      statement: "带 1 和 5",
+    });
+
+    expectCode(
+      () => step(state, { type: "SPEAK", playerId: 4, content: "我再补两句" }),
+      "NOT_YOUR_TURN",
+    );
+    // 轮到的是队长的下一位
+    expect(getAwaitingPlayerIds(state)).toEqual([5]);
+  });
+
+  it("一次提议讨论恰好产生 6 条发言：1 条选人说明 + 5 条讨论", () => {
+    const proposed = step(started(SIX, { leaderId: 4 }), {
+      type: "PROPOSE_TEAM",
+      playerId: 4,
+      team: [5, 1],
+      statement: "带 1 和 5",
+    });
+    const voting = runUntil(proposed, (s) => s.phase === "TEAM_VOTE");
+
+    expect(voting.speeches).toHaveLength(6);
+    // 每个座位恰好说了一次，队长也不例外
+    expect([...voting.speeches].map((sp) => sp.playerId).sort((a, b) => a - b)).toEqual([
+      0, 1, 2, 3, 4, 5,
+    ]);
   });
 
   it("按发言顺序逐人推进，全员说完转 TEAM_VOTE 且清空发言顺序", () => {
-    let state = step(started(SIX), { type: "PROPOSE_TEAM", playerId: 0, team: [0, 1] });
-    for (const id of [0, 1, 2, 3, 4]) {
+    let state = step(started(SIX), {
+      type: "PROPOSE_TEAM",
+      playerId: 0,
+      team: [0, 1],
+      statement: "带这几个",
+    });
+    // 0 号是队长，他的那一次已经由选人说明用掉了，从 1 号开始
+    for (const id of [1, 2, 3, 4]) {
       state = step(state, { type: "SPEAK", playerId: id, content: `我是 ${id}` });
       expect(state.phase).toBe("PROPOSAL_DISCUSSION");
     }
@@ -393,16 +454,26 @@ describe("TEAM_BUILDING 与讨论", () => {
       type: "PROPOSE_TEAM",
       playerId: rejected.currentLeaderId,
       team: [0, 1],
+      statement: "第二次提议的选人说明",
     });
+    // 队长已经说过了，接下来轮到他的下一位
+    const [next] = getAwaitingPlayerIds(speaking);
     const spoken = step(speaking, {
       type: "SPEAK",
-      playerId: speaking.currentLeaderId,
+      playerId: next as PlayerId,
       content: "第二次提议",
     });
 
     expect(spoken.speeches.map((s) => s.seq)).toEqual(
       spoken.speeches.map((_, i) => i),
     );
+    // 选人说明与讨论发言归属同一次提议
+    expect(spoken.speeches.at(-2)).toMatchObject({
+      phase: "TEAM_BUILDING",
+      missionIndex: 0,
+      attempt: 1,
+      content: "第二次提议的选人说明",
+    });
     expect(spoken.speeches.at(-1)).toMatchObject({
       phase: "PROPOSAL_DISCUSSION",
       missionIndex: 0,

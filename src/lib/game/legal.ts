@@ -211,6 +211,9 @@ export function getTeamConstraint(state: GameState): TeamConstraint {
  * 刻意给一支**合法**的队伍而不是空数组：本文件第 1 条不变量要求
  * `getLegalActions` 的每一项都能通过 `assertLegal`。调用方几乎总会用
  * `getTeamConstraint` 自己选人，这只是个不会炸的兜底默认值。
+ *
+ * `statement` 与 `SPEAK` 的 `content` 一样给空串模板：文本由 AI 或人类填，
+ * 引擎不校验内容，只校验"轮没轮到你"。
  */
 function proposalTemplate(state: GameState, leaderId: PlayerId): GameAction {
   const { teamSize, candidateIds } = getTeamConstraint(state);
@@ -225,7 +228,7 @@ function proposalTemplate(state: GameState, leaderId: PlayerId): GameAction {
       { teamSize, playerCount: candidateIds.length },
     );
   }
-  return { type: "PROPOSE_TEAM", playerId: leaderId, team };
+  return { type: "PROPOSE_TEAM", playerId: leaderId, team, statement: "" };
 }
 
 /**
@@ -413,6 +416,8 @@ function assertPayload(
 ): void {
   switch (action.type) {
     case "PROPOSE_TEAM":
+      // 只校验队伍，**不校验 statement**：那段选人说明是自由文本，
+      // 与 SPEAK 的 content 同类——空话、废话、假话都是策略问题，不是合法性问题
       assertTeam(state, action.team);
       break;
 

@@ -427,6 +427,16 @@ export interface PlayerView {
   maxRejects: number;
 
   players: Array<{ id: PlayerId; name: string; isHuman: boolean }>;
+  /**
+   * 本局角色构成。开局公开信息（rules.md §3.2），**只有数量、没有座位**。
+   *
+   * 少了它 AI 会明显变笨：7 人局梅林只看到 2 个坏人、而本局坏人有 3 个时，
+   * 他本该立刻推出"有莫德雷德"。这个推理需要知道构成才做得出来。
+   *
+   * 形状上就带不了座位，所以它不构成泄漏——view.leak.test.ts 里有一条
+   * "每个座位拿到的 roleComposition 完全相同"专门钉住这一点。
+   */
+  roleComposition: RoleCounts;
   missionConfigs: MissionConfig[];
   /** 等于 missionConfigs[missionIndex]，冗余出来方便写 prompt */
   currentMission: MissionConfig;
@@ -471,7 +481,14 @@ export interface PlayerView {
 export type GameAction =
   | { type: "START_GAME" }
   | { type: "ACKNOWLEDGE"; playerId: PlayerId }
-  | { type: "PROPOSE_TEAM"; playerId: PlayerId; team: PlayerId[] }
+  /**
+   * 组队提议。`statement` 是队长的公开选人说明——它**就是**队长在本次提议讨论里
+   * 的那一次发言（rules.md §4.4「队长先发言解释选人理由」），由 reduce 记进 speeches，
+   * 队长因此不会在 PROPOSAL_DISCUSSION 里再轮到一次。
+   *
+   * 与 `SPEAK.content` 同类：引擎不校验文本内容，那是策略问题不是合法性问题。
+   */
+  | { type: "PROPOSE_TEAM"; playerId: PlayerId; team: PlayerId[]; statement: string }
   | { type: "SPEAK"; playerId: PlayerId; content: string }
   | { type: "CAST_VOTE"; playerId: PlayerId; approve: boolean }
   | { type: "CAST_MISSION_CARD"; playerId: PlayerId; success: boolean }
