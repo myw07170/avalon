@@ -302,6 +302,59 @@ describe("信息隔离", () => {
   });
 
   /**
+   * 【自己那几条要标出来】几十行清一色"座位 N："，而"你是座位几"只在【你的身份】里
+   * 说过一次，隔着整份 prompt。真跑出来的症状是模型跟着满场一起怀疑自己：
+   * seed 52848 那局的莫甘娜（座位 0）到刺杀阶段直接说"我现在最怀疑的是座0"，
+   * 全场的刀最后就递到了她自己头上。
+   */
+  it("【全场发言】里自己那条标了（你），别人那条不标", () => {
+    const speeches = [
+      { seq: 0, playerId: 3, phase: "PROPOSAL_DISCUSSION", missionIndex: 0, attempt: 0, content: "甲" },
+      { seq: 1, playerId: 7, phase: "REVIEW_DISCUSSION", missionIndex: 0, attempt: 0, content: "乙" },
+    ] as const;
+    const state = build(TEN, { phase: "TEAM_BUILDING", speeches: [...speeches] });
+
+    const asThree = sectionsOf(promptFor(state, 3, "TEAM_PROPOSAL")).get("全场发言") ?? "";
+    expect(asThree).toContain("座位 3（你）：甲");
+    expect(asThree).toContain("座位 7：乙");
+
+    // 换个人看，标记必须跟着换——写死成某个座位是最容易犯的错
+    const asSeven = sectionsOf(promptFor(state, 7, "TEAM_PROPOSAL")).get("全场发言") ?? "";
+    expect(asSeven).toContain("座位 7（你）：乙");
+    expect(asSeven).toContain("座位 3：甲");
+  });
+
+  /**
+   * 刺杀前的推测现在是正经的公开 Speech（phases/assassination.ts）。
+   * 刺客动手时必须读得到它们——**包括他自己刚说的那条**，
+   * 那正是 seed 94938 那局"推对了又改口"的直接原因。
+   */
+  it("刺杀阶段的推测进【全场发言】，且不渲染轮次", () => {
+    const state = build(
+      TEN,
+      {
+        phase: "ASSASSINATION",
+        goodScore: 3,
+        speeches: [
+          {
+            seq: 0,
+            playerId: 7,
+            phase: "ASSASSINATION",
+            missionIndex: 2,
+            attempt: 0,
+            content: "我怀疑座位 0",
+          },
+        ],
+      },
+      { assassinOpinions: state0Opinions() },
+    );
+    const body = sectionsOf(promptFor(state, 7, "ASSASSINATION")).get("全场发言") ?? "";
+    expect(body).toContain("刺杀 座位 7（你）：我怀疑座位 0");
+    // 任务已经打完了，"第 3 轮 刺杀"只会让模型分神
+    expect(body).not.toContain("第 3 轮");
+  });
+
+  /**
    * 一轮里被否决两次，就有三批发言堆在【全场发言】里。
    * 不标"第几次提议"，模型分不清哪句话是冲着哪个队伍说的。
    */
@@ -393,12 +446,74 @@ describe("合法选项只从 legalActions 渲染", () => {
     });
     const body = sectionsOf(promptFor(state, 7, "ASSASSINATION")).get("本次决策") ?? "";
     // 候选目标必须与 legalActions 逐一对上：少一个是漏掉合法动作，
-    // 多一个是凭空造了一个引擎会拒绝的选项
+    // 多一个是凭空造了一个引擎会拒绝的选项。
+    // 【标注可以加，删减不行】已知队友要标出来，但仍然逐个列全——
+    // legalActions 是合法性的唯一权威，规则允许刺客指任何人（rules.md §4.5）
     const targets = getLegalActions(state, 7).map((action) =>
       action.type === "ASSASSINATE" ? action.targetId : -1,
     );
     expect(targets).toEqual(state.players.map((p) => p.id));
-    expect(body).toContain(`座位 ${targets.join("、")}`);
+
+    const listed = [...body.matchAll(/^- 座位 (\d+)/gm)].map((m) => Number(m[1]));
+    expect(listed).toEqual(targets);
+  });
+
+  /**
+   * 两局真实对局走到刺杀，两局的刺客都刺了自己的队友（seed 94938 与 52848），
+   * 白送掉已经到手的胜局。引擎侧的主因在 phases/assassination.ts 修掉了，
+   * 这几条钉的是 prompt 侧的排除标注。
+   */
+  it("刺杀候选里，已知的队友和自己都被标注出来", () => {
+    const state = build(TEN, { phase: "ASSASSINATION", goodScore: 3 }, {
+      assassinOpinions: state0Opinions(),
+    });
+    const body = sectionsOf(promptFor(state, 7, "ASSASSINATION")).get("本次决策") ?? "";
+
+    // 刺客（座位 7）看得见莫甘娜(1) 与莫德雷德(4)
+    expect(body).toContain("- 座位 1（你已知的坏人，不可能是梅林）");
+    expect(body).toContain("- 座位 4（你已知的坏人，不可能是梅林）");
+    expect(body).toContain("- 座位 7（你自己，不可能是梅林）");
+    expect(body).toContain("梅林是**好人阵营**的角色");
+  });
+
+  /**
+   * 【最要紧的一条】排除名单只能来自 view.knowledge，不能来自"本局坏人是谁"。
+   *
+   * 奥伯伦（座位 6）是坏人，但刺客不认识他（rules.md §3.3 的双向盲区），
+   * 所以他必须**照常出现在可考虑的目标里、不带任何标注**。
+   * 拿全局坏人名单去算排除项，等于让刺客凭空认出奥伯伦——那是一次货真价实的信息泄漏。
+   */
+  it("刺客不认识的奥伯伦不会被标成队友", () => {
+    const state = build(TEN, { phase: "ASSASSINATION", goodScore: 3 }, {
+      assassinOpinions: state0Opinions(),
+    });
+    const sections = sectionsOf(promptFor(state, 7, "ASSASSINATION"));
+    const body = sections.get("本次决策") ?? "";
+
+    // 先确认前提：奥伯伦确实不在刺客的 knowledge 里
+    expect(sections.get("你知道的") ?? "").not.toContain("座位 6");
+    // 于是候选里他就是干干净净的一行
+    expect(body).toContain("- 座位 6\n");
+    expect(body).not.toContain("座位 6（");
+  });
+
+  it("推测阶段也要求排除自己与已知队友", () => {
+    const state = build(TEN, { phase: "ASSASSINATION", goodScore: 3 });
+    const body = sectionsOf(promptFor(state, 1, "ASSASSIN_OPINION")).get("本次决策") ?? "";
+    // 莫甘娜（座位 1）认识莫德雷德(4) 与刺客(7)，不认识奥伯伦(6)
+    expect(body).toContain("座位 4、7");
+    expect(body).toContain("座位 1（你自己）");
+    expect(body).not.toContain("座位 6");
+  });
+
+  it("刺杀的输出格式里再钉一次排除项，且不出现角色名", () => {
+    const state = build(TEN, { phase: "ASSASSINATION", goodScore: 3 }, {
+      assassinOpinions: state0Opinions(),
+    });
+    const body = sectionsOf(promptFor(state, 7, "ASSASSINATION")).get("输出格式") ?? "";
+    expect(body).toContain("targetId 不要填 座位 1、4、7");
+    // 【输出格式】属于"干净段"，一个角色名都不许有——整局那条断言钝得有道理
+    expect(body).not.toContain("梅林");
   });
 
   it("强制通过的提议在历史里注明未投票", () => {

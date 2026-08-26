@@ -272,6 +272,43 @@ describe("往返", () => {
     expect(parsed.speeches).toHaveLength(2);
   });
 
+  /**
+   * 【这条是变异测试逼出来的】刺杀推测现在同时是一条公开 Speech
+   * （phases/assassination.ts：不进 speeches 就谁都读不到，包括刺客自己）。
+   * 于是它在对局记录里有两个可能的落点，**必须只印一次**——
+   * 【刺杀】段已经连同目标和结果一起呈现了它。
+   *
+   * 上面那些往返用例都抓不住重复：它们的 fixture 只填了 assassination.opinions，
+   * 没有对应的 ASSASSINATION 发言，而真实对局里两者一定同时存在。
+   * 把过滤去掉后整个文件照样全绿——**变异测试证伪的不是实现，是测试**。
+   */
+  it("刺杀推测只在【刺杀】段出现一次，不重复进【全场发言】", () => {
+    const state = finished({
+      speeches: [
+        speech(0, 0, "我先说两句"),
+        {
+          seq: 1,
+          playerId: 1,
+          phase: "ASSASSINATION",
+          missionIndex: 2,
+          attempt: 0,
+          content: "我怀疑 3 号",
+        },
+      ],
+    });
+    const text = renderTranscript(state, [record()], META);
+
+    expect(text.split("我怀疑 3 号").length - 1).toBe(1);
+
+    const spoken = text.slice(text.indexOf("=== 全场发言 ==="), text.indexOf("=== 任务与提议 ==="));
+    expect(spoken).not.toContain("我怀疑 3 号");
+    // 统计口径也只算讨论发言，四份记录之间的数字才可比
+    expect(text).toContain("共 1 条发言");
+
+    // 格式没变，照样读得回来
+    expect(parseTranscript(text).speeches).toHaveLength(1);
+  });
+
   it("没有刺杀阶段（坏人靠任务失败赢）时 assassination 是 null", () => {
     const parsed = roundTrip(
       finished({ assassination: null, winner: "EVIL", winReason: "THREE_MISSIONS" }),

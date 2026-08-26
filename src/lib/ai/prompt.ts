@@ -176,8 +176,13 @@ function setupSection(view: PlayerView): string {
   const composition = present
     .map((role) => `${ROLE_META[role].label}×${view.roleComposition[role]}`)
     .join("、");
+  // 【每行都标阵营】原先只有能力描述，通篇没有一句话说"梅林是好人"。
+  // 刺客因此缺一个硬锚点：刺杀是在**好人**里找梅林，而他连"梅林属于哪一边"都没被明确告知过。
+  // team 字段 ROLE_META 里现成的，不另建映射表
   const abilities = present.map(
-    (role) => `- ${ROLE_META[role].label}：${ROLE_META[role].ability}`,
+    (role) =>
+      `- ${ROLE_META[role].label}（${ROLE_META[role].team === "GOOD" ? "好人" : "坏人"}）：` +
+      ROLE_META[role].ability,
   );
   const missions = view.missionConfigs.map(
     (mission, index) =>
@@ -339,11 +344,23 @@ function attemptLabel(speech: Speech): string {
   return numbered ? `第 ${speech.attempt + 1} 次提议 ` : "";
 }
 
-/** 发言原样输出，不加工也不改写——加工过的转述会让模型对不上号 */
-function speechLine(speech: Speech): string {
+/**
+ * 发言原样输出，不加工也不改写——加工过的转述会让模型对不上号。
+ *
+ * 【自己那几条要标出来】几十行清一色 `座位 N：`，而"你是座位几"只在【你的身份】里
+ * 说过一次，隔着整份 prompt。真跑出来的症状是**模型跟着满场一起怀疑自己**：
+ * seed 52848 那局的莫甘娜（座位 0）从第 2 轮起就在用第三人称追问"座0，你刚才说……"，
+ * 到刺杀阶段直接说"我现在最怀疑的是座0"，全场的刀最后就递到了她自己头上。
+ *
+ * 【刺杀阶段不渲染轮次】任务已经打完了，"第 3 轮 刺杀"只会让模型分神——
+ * 与 situationSection 里"刺杀阶段不报队长和队伍规模"是同一条口径。
+ */
+function speechLine(speech: Speech, selfId: PlayerId): string {
+  const round = speech.phase === "ASSASSINATION" ? "" : nth(speech.missionIndex);
+  const who = speech.playerId === selfId ? `${seat(speech.playerId)}（你）` : seat(speech.playerId);
   return (
-    `- ${nth(speech.missionIndex)}${attemptLabel(speech)}${PHASE_LABEL[speech.phase]} ` +
-    `${seat(speech.playerId)}：${speech.content}`
+    `- ${round}${attemptLabel(speech)}${PHASE_LABEL[speech.phase]} ` +
+    `${who}：${speech.content}`
   );
 }
 
@@ -351,7 +368,10 @@ function speechSection(view: PlayerView): string {
   if (view.speeches.length === 0) {
     return section("全场发言", "暂无发言。");
   }
-  return section("全场发言", view.speeches.map(speechLine).join("\n"));
+  return section(
+    "全场发言",
+    view.speeches.map((speech) => speechLine(speech, view.selfId)).join("\n"),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -405,6 +425,58 @@ function speakOrderLines(view: PlayerView): string[] {
     );
   }
   return lines;
+}
+
+// ---------------------------------------------------------------------------
+// 刺杀环节
+//
+// 两局真实对局走到刺杀，两局的刺客都刺了**自己的队友**，白送掉已经到手的胜局。
+// 引擎侧的主因（推测发言进不了视角）在 phases/assassination.ts 修掉了；
+// 下面这几段补的是 prompt 侧：模型知道"座位 X 是坏人"，却没人告诉它
+// "所以 X 不可能是梅林"。知识在【你知道的】段，决策在几百字之外，中间隔着几十条发言——
+// 与当初"好人试图打失败票"完全同型，解法也照搬：**在模型最后读到的地方再钉一次**。
+// ---------------------------------------------------------------------------
+
+const MERLIN_IS_GOOD =
+  "梅林是**好人阵营**的角色。你已经确认是坏人的那些人，还有你自己，都不可能是梅林。";
+
+/** 刺杀要找的是什么人。用户的原话：不是找坏人，是在好人里找那个"有视角"的 */
+const WHAT_MERLIN_LOOKS_LIKE =
+  "回顾全场，在**好人**里找那个像是「什么都看得见」的人：" +
+  "判断准得反常、在不该有把握的时候有把握、" +
+  "一直悄悄把队伍从某些人身边引开却说不出过硬的理由。";
+
+/**
+ * 已知坏人 + 自己，从 **view.knowledge** 推出来。
+ *
+ * 【只能用 view.knowledge，绝不能用 roleComposition 或任何"本局坏人是谁"的全局信息】
+ * 刺客的 knowledge 里没有奥伯伦（rules.md §3.3 的双向盲区），所以奥伯伦**照样会出现在
+ * 可考虑的目标里**——那是正确的游戏后果，不是要修的 bug。拿全局坏人名单去算，
+ * 等于让刺客凭空认出奥伯伦，那是一次货真价实的信息泄漏。
+ */
+function knownEvilSeats(view: PlayerView): PlayerId[] {
+  return view.knowledge.flatMap((item) => (item.kind === "IS_EVIL" ? [item.playerId] : []));
+}
+
+/** 推测阶段用：一句话说清哪些人不用再猜了 */
+function excludedLine(view: PlayerView): string {
+  const evil = knownEvilSeats(view);
+  const own = `${seat(view.selfId)}（你自己）`;
+  return evil.length === 0
+    ? `所以别把票投给自己：${own} 不可能是梅林。`
+    : `所以不用再猜这些人：${seatList(evil)}（你已知的坏人）、${own}。`;
+}
+
+/** 刺杀阶段用：目标逐行列出并就地标注，删减一个都不行 */
+function annotatedTargets(view: PlayerView, targets: readonly PlayerId[]): string {
+  const evil = new Set(knownEvilSeats(view));
+  return targets
+    .map((id) => {
+      if (id === view.selfId) return `- ${seat(id)}（你自己，不可能是梅林）`;
+      if (evil.has(id)) return `- ${seat(id)}（你已知的坏人，不可能是梅林）`;
+      return `- ${seat(id)}`;
+    })
+    .join("\n");
 }
 
 /**
@@ -489,6 +561,9 @@ function decisionSection(req: AnyRequest): string {
         [
           "好人已经集齐 3 分，进入刺杀环节。刺客动手之前，每个坏人各公开发表一次推测。",
           "说出你认为谁是梅林，以及你的依据。",
+          MERLIN_IS_GOOD,
+          excludedLine(view),
+          WHAT_MERLIN_LOOKS_LIKE,
           `发言要求：${SPEECH_LENGTH}`,
         ].join("\n"),
       );
@@ -499,8 +574,12 @@ function decisionSection(req: AnyRequest): string {
         "本次决策",
         [
           "你是刺客，这是最后一击：指认一名玩家为梅林。命中则坏人翻盘，落空则好人获胜。",
-          `可选目标：${seatList(targets)}。`,
-          "回顾全场——谁的判断准得反常，谁在不该有把握的时候有把握。",
+          MERLIN_IS_GOOD,
+          // 目标逐个列全并就地标注，**不做删减**：legalActions 是合法性的唯一权威
+          // （与本文件"合法选项一律从 legalActions 渲染"同源）。规则允许刺任何人，
+          // 刺错是策略失误不是非法操作，引擎不该替刺客把队友摘掉
+          `可选目标：\n${annotatedTargets(view, targets)}`,
+          WHAT_MERLIN_LOOKS_LIKE,
         ].join("\n"),
       );
     }
@@ -548,9 +627,27 @@ function outputSection(req: AnyRequest): string {
   const only = cards.length === 1 ? cards[0] : undefined;
   const forced = only ? `\nsuccess 只能填 ${only.success}，没有第二个选择。` : "";
 
+  /**
+   * 刺杀的排除项在这里再钉一次，理由与上面那条完全相同——
+   * 【本次决策】说过一遍还不够，两局真实对局里刺客都刺了自己的队友。
+   *
+   * 座位号同样取自 view.knowledge，不是写死的名单（见 knownEvilSeats 的注释）。
+   */
+  const banned =
+    req.kind === "ASSASSINATION"
+      ? [...knownEvilSeats(req.view), req.view.selfId].sort((a, b) => a - b)
+      : [];
+  // 【这句话里不能出现角色名】"不在干净段里泄漏身份"那条测试把【输出格式】划进了干净段，
+  // 写"不可能是梅林"会当场炸 8 条。那条断言钝得有道理——**它不该为一句措辞让路**，
+  // 而这里不提角色名一样说得清楚
+  const noSelfHit =
+    banned.length > 0
+      ? `\ntargetId 不要填 ${seatList(banned)}——他们是你已知的坏人，或者就是你自己。`
+      : "";
+
   return section(
     "输出格式",
-    `只输出一个 JSON 对象，不要写任何解释文字，不要用 markdown 代码块。格式：\n${OUTPUT_EXAMPLES[req.kind]}${extra}${forced}`,
+    `只输出一个 JSON 对象，不要写任何解释文字，不要用 markdown 代码块。格式：\n${OUTPUT_EXAMPLES[req.kind]}${extra}${forced}${noSelfHit}`,
   );
 }
 

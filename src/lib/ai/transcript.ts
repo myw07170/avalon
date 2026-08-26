@@ -183,10 +183,25 @@ function missLines(miss: DeductionMiss, nameOf: (id: number) => string): string[
  * 挂了两轮任务，没有一个 AI 提过任何一次结果。做成精细的语义判定既不可靠，
  * 也会让人误以为它是个准确指标。
  */
-function countMentions(final: GameState): number {
-  return final.speeches.filter((s) =>
+function countMentions(speeches: readonly Speech[]): number {
+  return speeches.filter((s) =>
     ["失败票", "失败", "翻车", "挂了"].some((word) => s.content.includes(word)),
   ).length;
+}
+
+/**
+ * 讨论发言——也就是【全场发言】那一段该有的内容。
+ *
+ * 刺杀前的推测现在也是正经的 Speech（phases/assassination.ts 修的那条：
+ * 不进 speeches 就谁都读不到，包括刺客自己）。但对局记录里它们已经由【刺杀】段
+ * 连同目标和结果一起呈现了，再进【全场发言】就是印两遍。
+ *
+ * 统计口径（提及数的分母、"共 N 条发言"、自曝扫描）一律用这一份，
+ * 四份记录之间的数字才仍然可比——落盘格式因此一个字节都没变，
+ * transcripts/ 里那几份不可再生的旧记录照旧解析得动。
+ */
+function discussionSpeeches(final: GameState): Speech[] {
+  return final.speeches.filter((s) => s.phase !== "ASSASSINATION");
 }
 
 export function renderTranscript(
@@ -205,8 +220,10 @@ export function renderTranscript(
   lines.push("\n=== 座位与身份 ===");
   for (const player of final.players) lines.push(`  ${nameOf(player.id)}`);
 
+  const spoken = discussionSpeeches(final);
+
   lines.push("\n=== 全场发言 ===");
-  for (const speech of final.speeches) {
+  for (const speech of spoken) {
     lines.push(
       `  [第 ${speech.missionIndex + 1} 轮${attemptTag(speech)}${phaseTag(speech)}] ` +
         `${nameOf(speech.playerId)}：${flatten(speech.content)}`,
@@ -252,12 +269,12 @@ export function renderTranscript(
       `（其中好人队长 ${misses.filter((m) => !m.leaderIsEvil).length} 次）`,
   );
   lines.push(
-    `  发言提到失败记录 ${countMentions(final)}/${final.speeches.length} 条` +
+    `  发言提到失败记录 ${countMentions(spoken)}/${spoken.length} 条` +
       "（粗略字符串统计，仅供参考）",
   );
 
   const roleOf = (id: number): Role | undefined => final.players.find((p) => p.id === id)?.role;
-  const flagged = final.speeches.flatMap((speech) => {
+  const flagged = spoken.flatMap((speech) => {
     const role = roleOf(speech.playerId);
     if (role === undefined) return [];
     const hit = selfExposure({ roleLabel: ROLE_META[role].label, content: speech.content });
@@ -288,7 +305,7 @@ export function renderTranscript(
   lines.push(`  合法性兜底 ${rescued} 次（${pct(rescued)}）`);
   lines.push(
     `  自曝身份 ${blatantCount} 条（另有 ${flagged.length - blatantCount} 条只是提到自己的角色名），` +
-      `共 ${final.speeches.length} 条发言`,
+      `共 ${spoken.length} 条发言`,
   );
 
   const totalAttempts = records.reduce((sum, r) => sum + (r.result.debug?.attempts ?? 0), 0);
