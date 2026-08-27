@@ -99,6 +99,41 @@ const TRANSCRIPT_DIR = "transcripts";
  */
 const say = (text: string): void => void process.stdout.write(`${text}\n`);
 
+/**
+ * 按决策种类列一张耗时表。
+ *
+ * 【这是调 LLM_EXTRA_BODY / LLM_MAX_TOKENS 时唯一的依据】"感觉快了"不是依据；
+ * 关掉思考模式该看到的是 p50 掉一个量级，而不是总时长少了几秒。
+ * p90 与最慢一次要分开看：一次 120s 的超时重试会把平均值拉花，却藏在 p50 里。
+ *
+ * 未调用模型的那些（好人的任务票）单列一行，混进 p50 会把它算得虚低。
+ */
+function renderLatency(records: readonly DecisionRecord[]): string {
+  const asked = records.filter((r) => !r.auto);
+  const pct = (sorted: number[], p: number): number =>
+    sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p))] ?? 0;
+
+  const kinds = [...new Set(asked.map((r) => r.kind))].sort();
+  const rows = kinds.map((kind) => {
+    const ms = asked
+      .filter((r) => r.kind === kind)
+      .map((r) => r.latencyMs)
+      .sort((a, b) => a - b);
+    const s = (v: number) => `${(v / 1000).toFixed(1)}s`;
+    return `  ${kind.padEnd(18)} ${String(ms.length).padStart(3)} 次` +
+      `  p50 ${s(pct(ms, 0.5)).padStart(6)}  p90 ${s(pct(ms, 0.9)).padStart(6)}` +
+      `  最慢 ${s(pct(ms, 1)).padStart(6)}`;
+  });
+
+  const total = asked.reduce((sum, r) => sum + r.latencyMs, 0);
+  return [
+    "=== 单次调用耗时 ===",
+    ...rows,
+    `  ${"合计".padEnd(18)} ${String(asked.length).padStart(3)} 次  ${(total / 1000).toFixed(0)}s`,
+    `  未调用模型（唯一合法动作）：${records.length - asked.length} 次`,
+  ].join("\n");
+}
+
 describe.skipIf(!configured)("真实模型试跑", () => {
   it(
     `${PLAYER_COUNT} 人全 AI 局能跑完，并打印全部发言供人工检查`,
@@ -151,10 +186,14 @@ describe.skipIf(!configured)("真实模型试跑", () => {
                 : "";
             const flags =
               (record.result.fallback ? " [schema 兜底]" : "") +
-              (record.rescued ? " [合法性兜底]" : "");
+              (record.rescued ? " [合法性兜底]" : "") +
+              (record.auto ? " [未调用模型]" : "");
+            // 两个时间都要：累计秒数说明整局跑到哪儿了，单次耗时才是调 LLM_EXTRA_BODY /
+            // LLM_MAX_TOKENS 时唯一看得懂的反馈
             say(
               `  #${records.length} ${record.playerId} 号 ${record.kind}` +
-                ` ${((Date.now() - startedAt) / 1000).toFixed(0)}s${flags}${speech}`,
+                ` ${((Date.now() - startedAt) / 1000).toFixed(0)}s` +
+                ` (本次 ${(record.latencyMs / 1000).toFixed(1)}s)${flags}${speech}`,
             );
           },
         },
@@ -165,6 +204,7 @@ describe.skipIf(!configured)("真实模型试跑", () => {
         seed,
       });
       say(`\n${report}`);
+      say(`\n${renderLatency(records)}`);
 
       // 也落一份盘：几十条发言在终端里翻着读很难受，而"人工读一遍"正是这个测试的全部意义
       mkdirSync(TRANSCRIPT_DIR, { recursive: true });

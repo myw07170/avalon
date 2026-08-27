@@ -13,7 +13,7 @@ import {
   type Role,
 } from "../game/types";
 import { AiError } from "./errors";
-import { createRemoteAiClient, type FetchFn } from "./remote";
+import { createRemoteAiClient, fetchPersonas, type FetchFn } from "./remote";
 
 const SIX: Role[] = [
   "MERLIN",
@@ -135,6 +135,82 @@ describe("失败就抛，不兜底", () => {
 
     // 兜底只服务于"模型说了胡话"。把网络故障也算进 fallback 率，那个指标就废了
     await expect(call).rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE" });
+  });
+});
+
+describe("中止", () => {
+  it("配了 signal 就挂到 fetch 上——「重开」要真的掐断在途请求", async () => {
+    // 不挂的话，玩家点了重开，这次请求仍在跑，服务端也仍在向 provider 要结果
+    const seen: RequestInit[] = [];
+    const fetchFn: FetchFn = (_url, init) => {
+      seen.push(init);
+      return Promise.resolve(Response.json(RESULT));
+    };
+    const controller = new AbortController();
+
+    await createRemoteAiClient({ fetchFn, signal: controller.signal }).decide(makeReq());
+
+    expect(seen[0]?.signal).toBe(controller.signal);
+  });
+
+  it("没配 signal 时请求里根本没有这个字段", async () => {
+    const seen: RequestInit[] = [];
+    const fetchFn: FetchFn = (_url, init) => {
+      seen.push(init);
+      return Promise.resolve(Response.json(RESULT));
+    };
+
+    await createRemoteAiClient({ fetchFn }).decide(makeReq());
+
+    expect(seen[0]).not.toHaveProperty("signal");
+  });
+});
+
+describe("fetchPersonas", () => {
+  const OK = { personas: [{ name: "陈川", traits: ["谨慎"], speechStyle: "短句" }], notes: ["已生成 1 份人设：陈川"] };
+
+  it("POST 到 /api/personas，原样带回人设与打点", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchFn: FetchFn = (url, init) => {
+      calls.push({ url, init });
+      return Promise.resolve(Response.json(OK));
+    };
+
+    const result = await fetchPersonas(4, { fetchFn });
+
+    expect(result).toEqual(OK);
+    expect(calls[0]?.url).toBe("/api/personas");
+    expect(JSON.parse(String(calls[0]?.init.body))).toEqual({ count: 4 });
+  });
+
+  it("【这个函数不抛】网络不通只返回 personas: null，原因写进 notes", async () => {
+    // 与 decide 正好相反：人设是锦上添花，为它中断开局是本末倒置。
+    // 但绝不静默——悄悄回退会让人对着一桌说话雷同的 AI 找半天 prompt 的毛病
+    const fetchFn: FetchFn = () => Promise.reject(new Error("Failed to fetch"));
+
+    const result = await fetchPersonas(4, { fetchFn });
+
+    expect(result.personas).toBeNull();
+    expect(result.notes.join("")).toContain("Failed to fetch");
+  });
+
+  it("HTTP 错误也不抛，并把服务端那句话带出来", async () => {
+    const fetchFn: FetchFn = () =>
+      Promise.resolve(Response.json({ error: "缺少环境变量 LLM_API_KEY" }, { status: 503 }));
+
+    const result = await fetchPersonas(4, { fetchFn });
+
+    expect(result.personas).toBeNull();
+    expect(result.notes.join("")).toContain("LLM_API_KEY");
+  });
+
+  it("响应体不是 JSON 也不抛", async () => {
+    const fetchFn: FetchFn = () => Promise.resolve(new Response("不是 JSON"));
+
+    const result = await fetchPersonas(4, { fetchFn });
+
+    expect(result.personas).toBeNull();
+    expect(result.notes).toHaveLength(1);
   });
 });
 

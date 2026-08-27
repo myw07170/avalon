@@ -71,6 +71,7 @@ exports[`快照 > 刺客在刺杀阶段的完整 prompt 1`] = `
 【输出格式】
 只输出一个 JSON 对象，不要写任何解释文字，不要用 markdown 代码块。格式：
 {"reasoning":"内心分析，其他玩家看不到","targetId":2}
+reasoning 一句话就够——它只进复盘面板，不公开给任何人。
 targetId 不要填 座位 1、4、7——他们是你已知的坏人，或者就是你自己。"
 `;
 
@@ -148,6 +149,7 @@ exports[`快照 > 忠臣在提议讨论的完整 prompt 1`] = `
 【输出格式】
 只输出一个 JSON 对象，不要写任何解释文字，不要用 markdown 代码块。格式：
 {"reasoning":"内心分析，其他玩家看不到","content":"你要公开说出来的话","suspicions":[{"playerId":1,"score":0.8}]}
+reasoning 一句话就够——它只进复盘面板，不公开给任何人。
 suspicions 可以省略；给的话 score 用 0 到 1 表示怀疑程度。"
 `;
 
@@ -232,5 +234,6 @@ exports[`快照 > 梅林在组队阶段的完整 prompt 1`] = `
 
 【输出格式】
 只输出一个 JSON 对象，不要写任何解释文字，不要用 markdown 代码块。格式：
-{"reasoning":"内心分析，其他玩家看不到","team":[0,2,3],"statement":"公开的选人说明"}"
+{"reasoning":"内心分析，其他玩家看不到","team":[0,2,3],"statement":"公开的选人说明"}
+reasoning 一句话就够——它只进复盘面板，不公开给任何人。"
 `;

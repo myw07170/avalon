@@ -1122,30 +1122,307 @@ pnpm vitest run src/lib/ai/real-game.test.ts
 
 **目标**：人类玩家能完整玩一局。
 
-- [ ] `store/game.ts`：Jotai atoms
+- [x] `store/game.ts`：Jotai atoms + 驱动层
       - `gameStateAtom`（全知，**只在客户端引擎里用**）
-      - `myViewAtom = atom(get => toPlayerView(get(gameStateAtom), get(mySeatAtom)))`
+      - `myViewAtom = atom(get => toPlayerView(get(gameStateAtom), get(mySeatAtom)))`，两个来源任一为空给 `null`
       - **所有组件只读 `myViewAtom`**，读 `gameStateAtom` 的组件一律视为 bug（`GAME_OVER` 复盘面板除外，它读 `view.reveal`）
-- [ ] 组件：
-      - `SetupScreen` 人数、人类座位、角色配置、mock 开关
+      - 组件入口：`humanTurnAtom` / `isMyTurnAtom` / `teamConstraintAtom` / `revealAtom` / `reviewDecisionsAtom` / `runStatusAtom` / `errorAtom`
+      - 写入口：`createGameAtom` / `runGameAtom` / `submitActionAtom` / `resetGameAtom`；设置 `aiModeAtom`（mock 开关）/ `paceMsAtom`
+      - **开局分两步**：`createGameAtom` 停在 `SETUP`（`runStatus === "ready"`），玩家看完身份再 `runGameAtom` 起跑。
+        必须这样，因为 orchestrator 对 `ACKNOWLEDGE` 不走 `onHumanAction`（`decisionKindOf` 返回 `null` 时直接落地），
+        循环一起跑 `ROLE_REVEAL` 就被瞬间跳过，`RoleCard` 的翻牌动效没有停留时间
+      - `decisionsAtom` / `pendingTurnAtom` / `abortAtom` **不导出**：第一个是 AI 心证（对局中读到即开天眼），
+        第二个带着 promise 的 `resolve`（拿到就能绕过校验），第三个是中止句柄
+- [x] 组件：
+      - [x] 视觉基座（第一块 UI 顺带立起来的，后面 7 个组件都站在上面）
+        - `globals.css`：8 个色 token + 3 个字体角色。**只做深色**，`color-scheme: dark` 固定，
+          不做 `prefers-color-scheme` 切换——对局界面就是夜里的一张圆桌，浅色版本没有意义
+        - 强调色天生有两个（`loyal` 冷钢蓝 / `mordred` 干血红），因为游戏本身是二元的；
+          `brass` 只承担交互态（选中 / 焦点 / 主按钮）
+        - `--font-display` 是 CJK 衬线栈：Geist 一个汉字都没有，不定 CJK 栈就会各挑各的
+        - `.tabular` 等宽 + `tabular-nums`，所有数字走它——整屏本质是配置表，数字要对齐
+        - `src/lib/utils.ts` 的 `cn()`（clsx + tailwind-merge）
+      - [x] `GameShell` 按 `runStatusAtom` 分四支的骨架，后面每一步往里填
+      - [x] `SetupScreen` 人数、人类座位、角色配置、mock 开关
+        - 推导全在 `setup-model.ts`（纯函数，`.ts` 测试覆盖，不引入 jsdom），组件只负责画
+        - 选座器就是圆桌：`seat-ring.ts` 给圆周百分比坐标，`SeatTable` 下一步直接复用；
+          改人数时座位沿圆周滑动（CSS `transition-[left,top]`，Framer Motion 留给 `RoleCard`）
         - 角色配置区按 `getFreeEvilSlots(n)` 决定形态：为 0（5、6 人局）时显示
           "该人数配置固定"并列出角色，**不要渲染一个点了没反应的编辑器**
         - 有自由位时用 `getEvilOptions(n)` 渲染选项，选中后走 `composeRoles` 得到完整 roles
+        - **10 人局选的是一个"组合"不是三个独立开关**：`getEvilOptions(10)` 给 4 组成对选项，
+          做成三个 checkbox 会让玩家配出 `TEAM_SPLIT_MISMATCH`
         - 用 `checkConfig` 的返回实时提示：有 error 时禁用开始按钮，warning 只显示不拦
           （莫德雷德用在 7/8 人局就是这种情况）
-      - `RoleCard` 翻牌动效展示身份与 knowledge（Framer Motion）
-      - `SeatTable` 圆桌座位，标记队长、队员、已投票/已发言状态
-      - `MissionTrack` 5 个任务节点 + 否决计数器
-      - `SpeechFeed` 发言流，AI 逐字打字机效果
-      - `ActionPanel` 按 `getLegalActions` 渲染当前可做的操作
-      - `AssassinationModal` 刺杀选择（Radix Dialog）
-      - `GameOverPanel` 全身份公开 + 每轮任务票来源 + AI reasoning 回放
-- [ ] 阶段推进的节奏控制：AI 发言之间加 800ms 左右延迟，否则一屏刷完没有体感
+        - **种子在点击「入座」时才取** `Date.now() >>> 0`：`createConfig` 缺省 seed 是 `0` 而 `0` 是个真种子，
+          不传的话每局发一样的牌；放进 `useState` 初值又会让 SSR 与 hydration 对不上
+        - 换人数必须重置座位与自由位下标（旧值在新人数下可能非法），由 `withPlayerCount` 负责
+      - [x] `RoleCard` 翻牌动效展示身份与 knowledge（Framer Motion）
+        - 演在 `runStatus === "ready"` 这一档，点确认后调 `runGameAtom`
+        - **翻牌要玩家自己点**，再点一次能盖回去——旁边有人时身份得收得回来
+        - 推导在 `role-card-model.ts`（`describeRole(view)`），文案对齐 `ai/prompt.ts` 的口径，
+          区别只是 UI 版把座位号配上名字
+        - 「你知道的」用 `SeatRing` 画：已知坏人标红，派西维尔那一对标黄铜虚线。
+          忠臣和奥伯伦 `hasKnownSeats` 为 false，不画环，只给「只能靠推理」那句
+        - **派西维尔那两个座位必须完全同等对待**：同一个 tone、同一条描述、不按下标区分。
+          `playerIds` 升序是引擎刻意抹平信息的结果，UI 上任何不对称都会把答案泄回去
+        - 梅林多给一行：`countEvil(roleComposition)` 是公开信息，与 `knowledge.length`
+          之差恒等于莫德雷德数量，所以「本局有 4 个坏人，你只看到 3 个——莫德雷德在场」是确定结论
+        - **framer-motion 13 的坑**：CSS `perspective` 必须放在外层普通 `<div>` 上。
+          在 `motion.*` 的 `style` 里它被当成 transform 值（`MotionCSS` 把它从 `CSSProperties` 删了），
+          写在那儿卡片会翻得是平的。`import { motion } from "framer-motion"` 在 v13 仍有效，
+          README 建议的 `motion/react` 解析不了——`motion` 这个包没装
+        - `useReducedMotion()` 是必须的：globals.css 那条 `prefers-reduced-motion` 只管 CSS 过渡，
+          管不到 JS 驱动的动画
+      - [x] `SeatRing` 共用圆桌：`SetupScreen` 的选座器、`RoleCard` 的已知座位、
+        以及下一步的 `SeatTable` 用同一份。给了 `onSelect` 才渲染成按钮，
+        tone → 配色的映射集中在这一处
+      - [x] `SeatTable` 圆桌座位，标记队长、队员、已投票/已发言状态
+        - 推导在 `seat-table-model.ts`（`describeTable(view)`），测试用 `runGame` 跑真实一局，
+          把沿途每一步每个座位的视角都过一遍
+        - **一个座位同时压着四层信息**，各占一条视觉通道（见 `SeatRing` 文件头）：
+          节点配色 = 身份认知（一整局不变）· 外圈光环 = 在队伍里 · 上方徽标 = 队长 · 右下角 ✓ = 已提交
+        - **同时行动和依次行动要分开算 done**：投票／任务票／确认身份是同时的，
+          "没在等他"就等于"他交了"；讨论是依次的，发言序里排在游标后面的人既没说过也不在等——
+          用"参与者减去 awaiting"会把整队人都标成已发言
+        - **刺杀阶段不标参与者**：那个阶段只有坏人行动，标出来等于把坏人名单画出来
+        - 身份认知在对局中一直显示：梅林不该每轮重新回忆一遍座位号。
+          画出来的只有 `view.knowledge` 明确给他的那些座位，不构成泄漏
+        - 状态行只等一个人时点名，等一批人时只报数——"谁还没交"是公开的，"谁先交的"不是
+      - [x] `MissionTrack` 5 个任务节点 + 否决计数器
+        - 推导在 `mission-track-model.ts`（`describeTrack(view)`），测试跑 7 局真实对局，
+          凑齐「成功」「失败」「进行中」「否决撞线」这些不是每局都出现的状态
+        - **已结算优先于「是当前轮」**：`MISSION_RESULT` 阶段记录已经进了 `missionHistory`，
+          而 `missionIndex` 要等 `NEXT` 才递增，两者会同时指向同一轮
+        - **复盘讨论时没有任何一轮是「进行中」**：`enterNextMission` 在 `REVIEW_DISCUSSION`
+          结束后才递增 `missionIndex`，所以那段时间 `missionIndex` 指的是刚打完的那一轮。
+          不标当前轮是如实反映，别为了好看去猜下一轮
+        - **否决计数器是每轮独立的**：提议通过或进入下一轮都会归零，显示的是
+          「本轮连续否决了几次」，不是整局流水。撞满 = 坏人直接获胜（`REJECT_LIMIT`），
+          所以它是危险指示条，不是计数器
+        - 警告只在最后一次机会时出现。每轮都喊狼来了，真该紧张时就没人看了
+        - ⚠️ `forcePassOnLastAttempt` 变体下那句警告会不准，但**该开关不在 `PlayerView` 里**，
+          UI 看不到它，`SetupScreen` 也从不开启。真要支持得先把它投影进 `PlayerView`
+      - [x] `SpeechFeed` 发言流，AI 逐字打字机效果
+        - 推导在 `speech-feed-model.ts`（`describeFeed(view)`），测试跑 7 局真实对局
+        - **四个阶段都会往 `speeches` 里写**：队长的选人说明（`TEAM_BUILDING`）、组队讨论、
+          复盘讨论、**以及刺杀阶段的逐个推测**。最后一个容易漏——`assassination.ts` 明确
+          把它当"说出口的话"记进 `speeches`，不是暗票
+        - 选人说明与紧随其后的组队讨论归同一组，拆开的话"他怎么解释这份名单"和
+          "大家怎么回应"会隔着一条分隔线
+        - **只给最新一条打字**，更早的都是完整文本。所以"上一条没打完下一条就到了"
+          不用额外处理——那条不再是最后一条，自然整条显示
+        - **打字总时长必须短于发言间隔**：`paceMsAtom` 默认 800ms 且停顿在发言出现【之前】，
+          打字比这慢就会一直被打断。所以按长度反推每字耗时（目标 700ms，每字夹在 12–45ms）
+        - **空发言是合法状态**：`legal.ts` 只校验"轮没轮到你"，不管文本本身。
+          渲染成空气泡会让玩家以为界面坏了，如实显示「（没有开口）」
+        - 打字机的归零放在**渲染期**而不是 effect 里：放 effect 会先用上一条的文本渲染一帧，
+          看起来像闪了一下别人的话（也正好绕开 `react-hooks/set-state-in-effect`）
+        - 自己敲的那条、以及 `prefers-reduced-motion` 下，直接给全文不演动画
+      - [x] `ActionPanel` 按 `humanTurnAtom.legalActions` 渲染当前可做的操作，提交走 `submitActionAtom`
+        - 推导在 `action-panel-model.ts`（`describeTurn(turn)`）。测试跑 7 局全 AI 对局，
+          把沿途每一步、每个待行动的人都收成一手棋，再用真正的 `assertLegal` 验面板拼出来的动作——
+          这比断言表单长什么样有力得多。另有一局由"只会点面板的玩家"完整跑通
+        - **不要直接调 `getLegalActions`**，它要 `GameState`
+        - **能选的东西一律来自 `legalActions`，面板不自己拼**：投票、任务票、刺杀目标都是
+          原样取用引擎给的那几个动作对象。按 phase 或 `view.selfTeam` 自己判断该给几个按钮，
+          等于把引擎规则在 UI 里再实现一遍，而不一致的那一次就是一张本不该存在的失败票
+        - 两个例外是模板动作（`PROPOSE_TEAM` / `SPEAK` / `ASSASSIN_OPINION`）：要填内容，
+          但 `type` 和 `playerId` 仍然 `{ ...template, ... }` 沿用模板，不在 UI 里手写。
+          `SPEAK` 与 `ASSASSIN_OPINION` 因此走同一条代码路径
+        - **组队按座位号升序提交，不保留点击顺序**：`proposedTeam` 原样进每个人的 `PlayerView`，
+          `prompt.ts` 里 `seatList(view.proposedTeam)` 直接念给所有 AI 听——
+          保留点击顺序等于把"你先想到谁"一起广播出去
+        - **好人只有一个任务票选项时必须解释**（`note`）。一颗孤零零的按钮看起来像界面把
+          另一个选项藏了，得说清楚它压根不存在
+        - 空发言是合法的，所以给一个明写的「不说了」出口，而不是让玩家交空文本框去试
+        - **草稿按 `turnKey` 分家**：提交时 store 先清 `pendingTurn` 再 resolve，理论上组件会卸载一次；
+          但把"上一轮打了一半的发言不会漏进下一轮"寄托在 React 的调度顺序上不划算。
+          `turnKey` 只看公开形状（不含种子），**只在一局之内唯一**——面板一次只活在一局里，够用
+        - 选中用光环（`ring-brass`），跟圆桌上"在队伍里"是同一条视觉通道；节点配色仍归身份认知。
+          两处共用 `SeatRing` 导出的 `SEAT_TONE_CLASS`，圆桌上的红圈和面板里的红块永远是同一个红
+        - 刺杀要点两次：选目标只是"指着"，开刀是第二次点击。这一刀不可撤销且决定整局胜负
+        - `describeTurn` **不抛**，认不出的形状返回 `null` 由面板兜一句话——渲染期抛就是白屏
+      - [x] `AssassinationModal` 刺杀选择（Radix Dialog）
+        - 推导在 `assassination-model.ts`（`describeStrike(form, view)`），复用 `ActionPanel`
+          已经算好的 `AssassinationForm`——目标仍然原样取自 `legalActions`
+        - **为什么单独抢屏**：整局唯一不可撤销、且当场决定胜负的动作。与别的操作并排放在
+          页面底部，误触的代价是整局作废。但**必须能关掉**——刺客决定前十有八九要回去重读发言流，
+          关掉后面板留一个重开入口，选中的目标也留着
+        - **奥伯伦标不出来，这是对的不是漏了**：`risk` 只认自己和 `view.knowledge` 里的队友。
+          界面替刺客认出奥伯伦就是开天眼。所以 `risk === null` 的含义是"你不知道"，不是"安全"
+        - 与其假装名单干净，不如直说「本局有 4 个坏人：你、你认得的 2 个队友，还有 1 个你也
+          认不出来的」——`countEvil(roleComposition)` 是公开信息，差额恒等于奥伯伦数量。
+          这是 `role-card-model` 里梅林那条提示的镜像，同一道算术
+        - 队友的推测搬进面板（`describeFeed(view).filter(kind === "opinion")`），省得回去翻发言流。
+          它们本来就是公开发言，不构成泄漏
+        - **全员空推测时改说一句话**，不列四条「（没有开口）」。mock 客户端是会说话的，
+          这个分支只能手工造 view 来测
+        - **Tailwind v4 的 `translate-*` 走独立的 `translate` 属性**，不再合进 `transform`。
+          所以入场关键帧里只写位移增量，照 v3 老经验把 `-50%` 再写一遍会把卡片多推半屏
+        - ⚠️ Radix 的 `aria-labelledby` / `aria-describedby` 由 `Title` / `Description` 的
+          **effect** 打开（`titlePresent`），SSR 的 HTML 里没有，水合后才出现。
+          `Portal` 同理在服务端返回 `null`——所以 curl 验不到这个面板，只能靠水合后的浏览器
+      - [x] `GameOverPanel` 全身份公开 + 每轮任务票来源 + AI reasoning 回放
+        - 身份与任务票读 `revealAtom`，AI 心证读 `reviewDecisionsAtom`（终局前恒为空数组）
+        - 推导在 `game-over-model.ts`（`describeGameOver(view, decisions)`），
+          测试跑 40 局真实对局凑齐四种 `winReason`——`ASSASSINATION_HIT` 很稀少，
+          **写死一个 seed 会在任何一次引擎改动后失效**，所以扫种子
+        - **刺杀那一块是这个面板的第一理由**：在它做出来之前，刺客点完那一刀直接进占位屏，
+          连自己刺中没刺中都看不到。落空时"被刺的其实是谁"和命中时一样显眼——
+          那正是玩家在找的一行
+        - **终局按阵营染色，不再标 `self`**：`SeatTone` 新增一档 `good`（冷钢蓝），
+          `self` 那一档是黄铜，会把你自己的阵营盖掉，而复盘要看的恰恰是谁跟谁一伙。
+          是不是你，由标签里的「你」说明。`good` **只准在终局用**——对局中没有任何
+          一个座位配得上"确定是好人"，用在别处就是开天眼
+        - **任务票来源是全项目唯一显示得出这件事的地方**：`PublicMissionRecord` 刻意
+          丢掉了 `cards`，所以对局中任何人都只知道"几张失败票"，不知道是谁投的
+        - 顺带把每类决策的耗时也印在这里（`DecisionRecord.latencyMs`），
+          它是调 `LLM_EXTRA_BODY` / `LLM_MAX_TOKENS` 时唯一的依据
+        - `describeGameOver` **不抛**：还没到终局、以及观战局（没有视角）都返回 null，
+          由面板兜一句话。渲染期抛就是白屏，与 `describeTurn` 同一条约定
+        - `reveal.assassination` 为 null（`THREE_MISSIONS` / `REJECT_LIMIT`）是正常的
+          终局形态，不是缺数据，整块不渲染
+      - [x] `ThinkingIndicator` 「3 号在想…（12 秒）」
+        - 读新增的 `thinkingAtom`（只有座位号与决策种类，**没有任何 payload**——
+          把"他在想什么"显示出来就是开天眼）
+        - AI 等模型时界面本来一动不动，于是"15 秒"和"3 分钟"长得一模一样。
+          这是对局中唯一能当场发现某次调用卡住的手段
+        - 秒数等满 3 秒才出现：mock 模式下每次都是 0 秒，闪一下反而像坏了
+        - 换人时的归零放在**渲染期**，与 `SpeechFeed` 打字机同一个做法
+          （放 effect 会先用上一位的秒数渲染一帧，也过不了 `react-hooks/set-state-in-effect`）
+- [x] 阶段推进的节奏控制：`paceMsAtom` 基准 800ms，挂在 `hooks.onDecision` 上
+      - 按决策种类缩放（`PACE_WEIGHT`）：发言/组队/刺杀停满，投票与任务票只停 0.15 倍——
+        那两个是并发阶段，orchestrator 逐个 await，10 人局一律 800ms 就是 8 秒空白
+      - 停顿发生在这条发言出现**之前**（顺序是 `onDecision` → `reduce` → `onState`），观感是"AI 在想"
+      - 设 0 全速跑，测试与将来的「快进」都靠它
+      - **要减掉模型真正花掉的时间**（`record.latencyMs`）：那段停顿的用意是"AI 在想"
+        的观感，模型已经真想了 15 秒，再停 800ms 就是纯浪费。mock 下 latency 近似为 0，
+        停顿照旧，所以观感和以前完全一样——变的只有真实模型那条路
+
+### 削减 AI 思考时间
+
+真人跑完一局后报的问题：AI 决策十几秒到几分钟，慢得不可预期。四层原因叠加，
+分别对应下面四条。**它们的效果只能靠真实对局证明**，判据是 `real-game.test.ts`
+新印的那张 `=== 单次调用耗时 ===`（p50 / p90 / 最慢一次，按 kind 分）。
+
+| 改动 | 为什么 |
+| --- | --- |
+| **只有一个合法动作时不问模型**（`orchestrator.ts` 的 `autoRecord`） | 好人在车上时 `legal.ts` 根本不给 `success: false`，prompt 的【输出格式】还要专门钉一句"没有第二个选择"。拿一个只有一个答案的问题去问模型，是纯粹的等待 |
+| **`LLM_MAX_TOKENS`**（新增，留空则整个字段不发） | prompt 要求发言 2-5 句，实测普遍 6-10 句。切太狠的症状是 JSON 被截断 → 重试，**fallback 率会立刻反映** |
+| **`reasoning` 加长度要求**（`prompt.ts` 的 `REASONING_LENGTH`） | 它是每个 kind 都要的字段却一直没有任何约束，一局 60-116 次调用全都在为一段没人读的长篇内心分析付时间。**用句子数不用字数**，与【发言长度】同源 |
+| **`LLM_EXTRA_BODY` 的 provider 差异写进 `.env.local.example`** | 关思考模式的键每家都不一样：openai 是 `reasoning_effort`，qwen（DashScope）是 `enable_thinking`，deepseek 关不掉。**填错等于没填，而且不会有任何报错**——本项目自己就踩了这一条，`.env.local` 里给 qwen 配着 `reasoning_effort` |
+
+`ENUMERATED_KINDS` 那张表是自动决策的安全前提，**不要往里加东西**：另外三种是模板动作
+（`legal.ts` 不穷举 C(10,5)、也不猜你要说什么），它们的 `legalActions` 长度**恒为 1**，
+加进去等于整局不再问模型任何问题。`orchestrator.test.ts` 有四条钉着这件事，
+其中一条专门验模板动作照样每次都问。
+
+**人类玩家不走这条捷径**：面板要把"为什么只有一个按钮"解释给他看
+（`components/README.md`），静默替他交票是另一回事。
+
+`DecisionRecord` 因此多了两个字段：`auto`（没问过模型）与 `latencyMs`
+（`client.decide` 那一段的墙钟耗时）。三个消费者：自适应节奏、复盘面板的耗时表、
+`real-game.test.ts` 的打点。
+
+- [x] **「重开」要真的掐断在途请求**：`createRemoteAiClient({ signal })`
+      - 原来 `remote.ts` 的 fetch 没有 signal，而 orchestrator 只在每步开头检查它。
+        所以点了重开之后，在途的那次请求仍在跑，服务端也仍在向 provider 要结果——
+        玩家以为停了，钱还在烧
+      - **不动 `AiClient.decide` 的签名**：那是 mock 与真实实现的共同契约，
+        不该为一方的实现细节变形。挂在 client 的构造参数上
+
+### 开局的真人设：`/api/personas`
+
+`personas.ts` 的文件头、`store/game.ts` 的 `CreateGameInput`、以及上面阶段 4 那句
+「浏览器要用的 `/api/personas` 留到阶段 5」三处都指着这件事，但一直没做。
+后果是**浏览器里跑的永远是占位人设**（AI-1…AI-5）——`generatePersonas` 至今只被
+`real-game.test.ts` 调用过，而 [rules.md §6](./rules.md) 说这正是「五个 AI 说话千人一面」的主因。
+
+- [x] `src/app/api/personas/route.ts`：逐条照抄 `api/ai/route.ts` 的写法
+      - `maxDuration = 30` 而不是 60：那边留 60 是因为一次请求内可能跑 3 次模型调用
+        （校验失败要带反馈重问），人设只有一次。**这个差别写在注释里**，
+        否则下一个人会顺手抄成 60
+      - **必须自己先调 `readProviderConfig()`**：`generatePersonas` 把配置错误也吞成了
+        占位回退（那是它相对 `client.ts` 的刻意差别——人设是锦上添花，不是前置条件），
+        503 那一支只能在 route 里判，否则「没配 key」会伪装成「模型不听话」
+      - **没有 502 分支**：上游挂了照样 200，回退占位人设，原因写在 `notes` 里。
+        对调用方来说「拿到了一桌能用的人设」永远成立
+      - `notes` 就是 [rules.md §6](./rules.md)「回退必须打点说明」的落点，
+        一路传到 `RoleCard` 上显示给玩家
+- [x] `personaRequestSchema`（`ai/schema.ts`）：`count` 的上下界从 `config.ts` 的常量派生。
+      下界是 `MIN_PLAYERS - 1`——count 是**AI 座位数**，有人类玩家时比总人数少 1。
+      夹这一下的理由与 `maxRetries` 同源：请求来自浏览器，`count: 9999` 会让模型编一万份人设
+- [x] `ai/personas.ts`：这一次调用**不发 `max_tokens`**，全项目唯一的例外
+      - 上一轮加的 `LLM_MAX_TOKENS` 是按对局中的单次决策定的（一个布尔值加一句 reasoning）。
+        人设一次出齐全桌，10 份 × 每份 4 个 `mind` 字段，700 token 必然截断 →
+        JSON 解析失败 → **回退占位人设**，而那恰恰是这个模块要修的症状。
+        **让一个提速开关把它悄悄退回去，是最难查的一类坑**，有一条用例专门钉着
+- [x] `ai/remote.ts` 的 `fetchPersonas`：放这个文件是刻意的，
+      `remote.test.ts` 那条源码断言（查不到 `./client` / `apiKey` / `process.env`）
+      会连它一起罩住。**这个函数不抛**，与 `decide` 正好相反
+- [x] `SetupScreen` 的「入座」变异步：`busy` 状态 + 按钮文案，只在 remote 模式下发这一趟
+      （mock 模式根本不碰 LLM，发了就是白等）
+      - 种子仍在**点击时**取，而且要在 `await` 之前取好——await 之后 `draft` 可能已经变了
+      - **绝不因为人设失败而不开局**
+- [x] `personaNotesAtom` + `RoleCard` 上的那一行：落在身份卡而不是设置页，
+      因为设置页点完就卸载了，而这句话必须让玩家看见
+
+### 移动端：圆桌在窄屏降级为列表
+
+- [x] 新增 `SeatList`，吃的是**和圆桌完全一样的 `SeatRingMark[]`**，
+      `SeatRing` 按断点二选一（`sm:hidden` / `hidden sm:block`）
+      - 降级放在 `SeatRing` 这一层，**四处调用方一行都不用改**
+        （选座 / 身份卡 / 对局中 / 结算），「圆桌只有一份」这条约定继续成立
+      - **用 CSS 断点而不是 `matchMedia`**：`display:none` 的那一半自动退出可访问性树，
+        任何宽度下都恰好有一份在树里，不必手工维护 `aria-hidden`；
+        而且 SSR 与水合的输出完全一致（服务端读不到视口宽度）。
+        项目至今没有一个 `useMediaQuery`，不为这件事开先例
+      - 为什么必须降级而不只是缩小：容器是 `clamp(15rem,78vw,24rem)` 而节点固定 44px，
+        360px 上跑 10 人局每个圆只离邻居 16px，队长徽标和光环还都往节点外面伸
+      - `SEAT_TONE_LABEL` 从 `RoleCard.tsx` 挪进 `role-card-model.ts`：两处要用同一份，
+        而 vitest 只收 `.ts` 后缀的测试
+- [x] 顺带修掉审计查出的其余移动端缺陷——criterion 那句话是「移动端**可用**」，
+      不只是圆桌那一条
+
+| 位置 | 问题 |
+| --- | --- |
+| `MissionTrack` 的 detail 行 | `h-3` 是硬 12px，而 360px 屏上每格只有约 59px，「失败 · 2 败」折行后**画到下面的兄弟节点上**（没有 `overflow-hidden`）。改 `min-h-3` 并补 `px-1` |
+| `SpeechFeed` | `45vh` 是全 app 仅剩的一个 `vh`，手机上按最大视口算 → 换 `dvh` |
+| 7 个次级按钮 + 1 个 `<summary>` | 40px / 36px，都补到 `min-h-11`（抄 `SeatGrid` 的写法） |
+| `GameOverPanel` 的两处 LLM 自由文本 | 缺 `break-words`，一串长 URL 会撑破 `max-w-md` |
+| `AssassinationModal` 的 sticky 操作条 | 压在 iOS home indicator 下面 → 补 `env(safe-area-inset-bottom)` |
+| `layout.tsx` | 没有 `export const viewport`。补上（含 `viewport-fit: "cover"`，上一条要靠它），并给 body 加 `overflow-x-hidden` 兜底 |
+
+### 两条验收标准怎么变成断言的
+
+**人类以梅林身份完整玩完一局**（`store/game.test.ts`）：
+
+- 先用纯函数扫种子找「0 号是梅林」的局（发牌是纯的，这一步不跑对局，很便宜），
+  跑完再筛 `winReason` 是不是刺杀结局——好人要先集齐 3 分才触发刺杀，不是每局都到得了
+- **出牌一律经由 `describeTurn` 拼出的表单**，不是 `firstLegal`。
+  这才证明「只会点面板的玩家」能以梅林身份打完，而不只是「能给引擎喂合法动作」
+- 这是全项目唯一一条把 store → orchestrator → 引擎 → 操作面板 → 复盘面板串起来跑的链路
+
+**props 不含他人 role**（`components/leak.test.ts`）：
+
+- **换成源码断言，不再靠「打开 DevTools 看一眼」**：后者只能证明「我看的那一刻没漏」，
+  而泄漏是结构问题——只要有一个组件够得着全知状态，它迟早会在某个分支上漏出来。
+  查的是**能不能够得着**
+- 三条：没有组件 import `gameStateAtom`、没有组件认识 `GameState` 这个类型、
+  `store/game.ts` 的三个私有 atom 没被导出
+- **扫源码前先剥注释**：这些文件的注释里到处写着「不读 gameStateAtom」，
+  不剥的话，把规矩写在注释里反而会让断言炸，于是下一个人的修法会是删注释。
+  **断言不该逼人删掉解释**
+- ⚠️ 刻意**不查裸的 `.role`**：`SetupScreen` 渲染的是本局角色构成
+  （开局公开信息，只有数量没有座位），为它开白名单只会把断言变成噪音；
+  而 `GameState` 这一条既精确又堵死同一扇门
+- 变异测试自查：往 `MissionTrack` 里 import 一次 `gameStateAtom` → 当场炸
 
 **完成标准**：
-- [ ] 人类以梅林身份完整玩完一局，含刺杀阶段
-- [ ] 打开 React DevTools 检查，任何组件的 props 里都不含其他玩家的 `role`
-- [ ] 移动端可用（圆桌布局在窄屏下降级为列表）
+- [x] 人类以梅林身份完整玩完一局，含刺杀阶段
+- [x] 任何组件的 props 里都不含其他玩家的 `role`
+- [x] 移动端可用（圆桌布局在窄屏下降级为列表）
 
 ---
 

@@ -68,6 +68,22 @@ const ACTION_KIND: Partial<Record<ActionType, AiDecisionKind>> = {
   ASSASSINATE: "ASSASSINATION",
 };
 
+/**
+ * legal.ts 把候选**穷举完**了的那几种决策。
+ *
+ * 【这张表是 autoDecision 的安全前提，不要往里加东西】另外三种是**模板动作**：
+ * PROPOSE_TEAM 不穷举 C(10,5)、SPEAK / ASSASSIN_OPINION 不猜你要说什么，
+ * 它们的 legalActions 长度**恒为 1**。把它们放进来，等于整局不再问模型任何问题。
+ */
+const ENUMERATED_KINDS: ReadonlySet<AiDecisionKind> = new Set<AiDecisionKind>([
+  "VOTE",
+  "MISSION_CARD",
+  "ASSASSINATION",
+]);
+
+/** 没调用模型时填给复盘面板的 reasoning。面板据 record.auto 标注，不靠认这句话 */
+const AUTO_REASONING = "本阵营在这一步只有一个合法动作，未调用模型";
+
 /** 这个动作该问模型什么。返回 null 表示不需要问（目前只有 ACKNOWLEDGE） */
 export function decisionKindOf(action: GameAction): AiDecisionKind | null {
   return ACTION_KIND[action.type] ?? null;
@@ -144,6 +160,18 @@ export interface DecisionRecord {
   result: AiDecisionResult<AiDecisionKind>;
   /** 模型给的动作过不了 assertLegal，被换成了随机合法动作 */
   rescued: boolean;
+  /**
+   * 这一手没有调用模型：legal.ts 给的候选只有一个，问了也只有一个答案。
+   * 与 fallback / rescued 是三件不同的事，复盘面板要分开标注。
+   */
+  auto: boolean;
+  /**
+   * client.decide 这一段的墙钟耗时（毫秒）。auto 决策恒为 0。
+   *
+   * 三个消费者：store 的自适应节奏（模型已经想了 15 秒就别再停 800ms）、
+   * 复盘面板的耗时统计、real-game.test.ts 的打点。
+   */
+  latencyMs: number;
 }
 
 export interface OrchestratorHooks {
@@ -227,6 +255,16 @@ async function takeTurn(
     return { action: await options.onHumanAction({ kind, view, legalActions }), record: null };
   }
 
+  // 【只有一个答案的问题不必去问】好人在车上时 legal.ts 根本不给 success: false
+  // （prompt.ts 的【输出格式】还要专门钉一句"没有第二个选择"）。这一手在真实模型上
+  // 是十几秒的纯等待，而答案在候选列表里已经写死了。
+  //
+  // 规则判断没有搬家：仍然只由 legal.ts 说了算，这里只是数了一下候选个数。
+  // 人类玩家不走这条——面板要把"为什么只有一个按钮"解释给他看（components/README.md）。
+  if (ENUMERATED_KINDS.has(kind) && legalActions.length === 1) {
+    return { action: first, record: autoRecord(state, playerId, kind, first) };
+  }
+
   const request: AiDecisionRequest<AiDecisionKind> = {
     kind,
     view,
@@ -234,7 +272,9 @@ async function takeTurn(
     legalActions,
     maxRetries: options.maxRetries ?? DEFAULT_MAX_RETRIES,
   };
+  const startedAt = performance.now();
   const result = await options.client.decide(request);
+  const latencyMs = Math.round(performance.now() - startedAt);
 
   const wanted = toGameAction(kind, playerId, result.payload);
   const { action, rescued } = await ensureLegal(state, request, wanted, options.rng);
@@ -249,8 +289,57 @@ async function takeTurn(
       action,
       result,
       rescued,
+      auto: false,
+      latencyMs,
     },
   };
+}
+
+/**
+ * 没问模型的那一手也要进 DecisionRecord —— 复盘面板要的是一条**连续**的事件流，
+ * 中间缺一格会让人以为那个座位没投票。
+ *
+ * payload 由动作反推（而不是反过来），所以它与实际提交的动作天然一致，
+ * 不存在"记录里写的和交上去的不是一回事"这种可能。debug 留空：没有 prompt 也没有原文。
+ */
+function autoRecord(
+  state: GameState,
+  playerId: PlayerId,
+  kind: AiDecisionKind,
+  action: GameAction,
+): DecisionRecord {
+  return {
+    playerId,
+    kind,
+    phase: state.phase,
+    missionIndex: state.missionIndex,
+    action,
+    result: {
+      payload: autoPayload(kind, action),
+      fallback: false,
+    },
+    rescued: false,
+    auto: true,
+    latencyMs: 0,
+  };
+}
+
+/** 把唯一那个合法动作翻回 payload。ENUMERATED_KINDS 之外的 kind 走不到这里 */
+function autoPayload(
+  kind: AiDecisionKind,
+  action: GameAction,
+): AiDecisionPayload[AiDecisionKind] {
+  if (kind === "VOTE" && action.type === "CAST_VOTE") {
+    return { reasoning: AUTO_REASONING, approve: action.approve };
+  }
+  if (kind === "MISSION_CARD" && action.type === "CAST_MISSION_CARD") {
+    return { reasoning: AUTO_REASONING, success: action.success };
+  }
+  if (kind === "ASSASSINATION" && action.type === "ASSASSINATE") {
+    return { reasoning: AUTO_REASONING, targetId: action.targetId };
+  }
+  // ENUMERATED_KINDS 与 ACTION_KIND 分叉了，只可能是本文件自己的 bug
+  throw new EngineError(`${kind} 不该走自动决策`, "INTERNAL", { kind, action: action.type });
 }
 
 /**

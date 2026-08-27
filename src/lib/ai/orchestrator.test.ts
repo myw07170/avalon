@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createConfig } from "../game/config";
+import { ROLE_TEAM } from "../game/types";
 import { assertLegal, getLegalActions } from "../game/legal";
 import { createRng } from "../game/rng";
 import { createGame, makePlaceholderPersonas } from "../game/setup";
@@ -502,5 +503,113 @@ describe("边界", () => {
       },
     });
     expect(records.length).toBeGreaterThan(0);
+  });
+});
+
+describe("只有一个合法动作时不问模型", () => {
+  /** 5 人局跑到底，把每次任务票的座位、阵营、是否问过模型收齐 */
+  async function missionCards(seed: number) {
+    const rng = createRng(seed);
+    const { client, seen } = spyClient(rng);
+    const records: DecisionRecord[] = [];
+    const final = await runGame({
+      state: newGame(5, seed),
+      client,
+      rng,
+      hooks: { onDecision: (r) => void records.push(r) },
+    });
+    const evil = new Set(
+      final.players.filter((p) => ROLE_TEAM[p.role] === "EVIL").map((p) => p.id),
+    );
+    return {
+      evil,
+      asked: seen.filter((r) => r.kind === "MISSION_CARD").map((r) => r.view.selfId),
+      cards: records.filter((r) => r.kind === "MISSION_CARD"),
+    };
+  }
+
+  it("好人的任务票一次都不问模型，坏人的照问", async () => {
+    const { evil, asked, cards } = await missionCards(7);
+
+    // 好人上过车（否则这条什么都没证明）
+    const good = cards.filter((r) => !evil.has(r.playerId));
+    expect(good.length).toBeGreaterThan(0);
+
+    for (const r of good) {
+      expect(r.auto, `好人座位 ${r.playerId}`).toBe(true);
+    }
+    // 问过模型的那些，一个好人都没有
+    for (const id of asked) {
+      expect(evil.has(id), `座位 ${id} 是好人，不该被问`).toBe(true);
+    }
+  });
+
+  it("自动决策交上去的就是唯一那个合法动作，且照样进复盘记录", async () => {
+    const { cards } = await missionCards(7);
+    for (const r of cards.filter((r) => r.auto)) {
+      expect(r.action).toEqual({
+        type: "CAST_MISSION_CARD",
+        playerId: r.playerId,
+        success: true,
+      });
+      // 没问模型 → 没有 prompt 也没有原文，但记录本身不能缺
+      expect(r.result.debug).toBeUndefined();
+      expect(r.result.fallback).toBe(false);
+      expect(r.rescued).toBe(false);
+      expect(r.latencyMs).toBe(0);
+    }
+  });
+
+  it("模板动作绝不走这条捷径——发言与组队的候选长度恒为 1", async () => {
+    const rng = createRng(11);
+    const { client, seen } = spyClient(rng);
+    const records: DecisionRecord[] = [];
+    await runGame({
+      state: newGame(5, 11),
+      client,
+      rng,
+      hooks: { onDecision: (r) => void records.push(r) },
+    });
+
+    const templates: AiDecisionKind[] = ["SPEECH", "TEAM_PROPOSAL", "ASSASSIN_OPINION"];
+    for (const kind of templates) {
+      const mine = records.filter((r) => r.kind === kind);
+      expect(mine.length, kind).toBeGreaterThan(0);
+      for (const r of mine) expect(r.auto, `${kind} 座位 ${r.playerId}`).toBe(false);
+      // 每一条都真的问过模型
+      expect(seen.filter((r) => r.kind === kind)).toHaveLength(mine.length);
+    }
+  });
+
+  it("投票有两个候选，永远要问模型", async () => {
+    const rng = createRng(3);
+    const { client, seen } = spyClient(rng);
+    const records: DecisionRecord[] = [];
+    await runGame({
+      state: newGame(5, 3),
+      client,
+      rng,
+      hooks: { onDecision: (r) => void records.push(r) },
+    });
+    const votes = records.filter((r) => r.kind === "VOTE");
+    expect(votes.length).toBeGreaterThan(0);
+    for (const r of votes) expect(r.auto).toBe(false);
+    expect(seen.filter((r) => r.kind === "VOTE")).toHaveLength(votes.length);
+  });
+
+  it("人类玩家不走这条捷径——面板要把「为什么只有一个按钮」解释给他看", async () => {
+    const rng = createRng(7);
+    const turns: HumanTurn[] = [];
+    await runGame({
+      state: newGame(5, 7, 0),
+      client: createMockAiClient(rng),
+      rng,
+      onHumanAction: async (turn) => {
+        turns.push(turn);
+        return turn.legalActions[0]!;
+      },
+    });
+    // 0 号在 seed 7 里是好人且上过车，那一手仍然经由 onHumanAction
+    expect(turns.some((t) => t.kind === "MISSION_CARD")).toBe(true);
   });
 });

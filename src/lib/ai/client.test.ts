@@ -103,6 +103,7 @@ interface Captured {
     messages: Array<{ role: string; content: string }>;
     // 可选：它到底出不出现在请求里，本身就是要断言的东西
     temperature?: number;
+    max_tokens?: number;
   };
 }
 
@@ -198,6 +199,64 @@ describe("正常路径", () => {
     await createAiClient(config).decide(makeReq(build(), 2, "VOTE"));
 
     expect(provider.calls[0]?.url).toBe("https://api.example.com/v1/chat/completions");
+  });
+});
+
+describe("max_tokens", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("没配就整个字段不出现——留给 provider 的默认", async () => {
+    const provider = fakeProvider([{ content: VOTE_JSON }]);
+    await createAiClient(CONFIG(provider.fetchFn)).decide(makeReq(build(), 2, "VOTE"));
+    expect(provider.calls[0]?.body).not.toHaveProperty("max_tokens");
+  });
+
+  it("配了就照发", async () => {
+    const provider = fakeProvider([{ content: VOTE_JSON }]);
+    const config = { ...CONFIG(provider.fetchFn), maxTokens: 700 };
+
+    await createAiClient(config).decide(makeReq(build(), 2, "VOTE"));
+
+    expect(provider.calls[0]?.body.max_tokens).toBe(700);
+  });
+
+  it("extraBody 仍然排在它后面，能把它覆盖掉", async () => {
+    // 「extraBody 是最后一道覆盖」这条语义不能因为新增字段而破掉
+    const provider = fakeProvider([{ content: VOTE_JSON }]);
+    const config = {
+      ...CONFIG(provider.fetchFn),
+      maxTokens: 700,
+      extraBody: { max_tokens: 120 },
+    };
+
+    await createAiClient(config).decide(makeReq(build(), 2, "VOTE"));
+
+    expect(provider.calls[0]?.body.max_tokens).toBe(120);
+  });
+
+  it("LLM_MAX_TOKENS：留空是 undefined，正整数照用", () => {
+    vi.stubEnv("LLM_PROVIDER", "openai");
+    vi.stubEnv("LLM_API_KEY", "sk-x");
+    vi.stubEnv("LLM_MODEL", "gpt-5-nano");
+
+    vi.stubEnv("LLM_MAX_TOKENS", "");
+    expect(readProviderConfig().maxTokens).toBeUndefined();
+
+    vi.stubEnv("LLM_MAX_TOKENS", "700");
+    expect(readProviderConfig().maxTokens).toBe(700);
+  });
+
+  it("LLM_MAX_TOKENS 填了非法值要报错", () => {
+    vi.stubEnv("LLM_PROVIDER", "openai");
+    vi.stubEnv("LLM_API_KEY", "sk-x");
+    vi.stubEnv("LLM_MODEL", "gpt-5-nano");
+
+    for (const bad of ["0", "-1", "7.5", "很多"]) {
+      vi.stubEnv("LLM_MAX_TOKENS", bad);
+      expect(() => readProviderConfig(), bad).toThrow(AiError);
+    }
   });
 });
 

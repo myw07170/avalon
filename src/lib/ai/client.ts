@@ -41,6 +41,15 @@ export interface LlmProviderConfig {
   /** 单次调用超时。Next 的 BFF 指南明确要求给外部调用设超时 */
   timeoutMs?: number;
   /**
+   * 输出上限。undefined → **请求里根本不发这个字段**（保持 provider 默认）。
+   *
+   * 这是控制单次调用耗时最直接的一根杠杆：本项目的 prompt 要求发言 2-5 句，
+   * 实测模型普遍写 6-10 句，超出的部分既没人读也在真金白银地拖时间。
+   * 切太狠的症状是 JSON 被截断 → schema 校验失败 → 重试，**fallback 率会立刻反映**，
+   * 所以调这个值时盯着那个数字，不要盯感觉。
+   */
+  maxTokens?: number;
+  /**
    * 采样温度。undefined → DEFAULT_TEMPERATURE；**null → 请求里根本不发这个字段**。
    *
    * null 不是"温度为 0"，是"这一项交给模型自己定"。OpenAI 的 gpt-5 系列
@@ -112,6 +121,7 @@ export function readProviderConfig(): LlmProviderConfig {
   const model = requireEnv("LLM_MODEL", "填模型名，如 deepseek-chat");
   const temperature = readTemperature();
   const timeoutMs = readTimeoutMs();
+  const maxTokens = readMaxTokens();
   const extraBody = readExtraBody();
   const baseUrl = process.env.LLM_BASE_URL || PROVIDER_BASE_URLS[provider];
   if (!baseUrl) {
@@ -122,7 +132,7 @@ export function readProviderConfig(): LlmProviderConfig {
     );
   }
 
-  return { provider, apiKey, baseUrl, model, temperature, timeoutMs, extraBody };
+  return { provider, apiKey, baseUrl, model, temperature, timeoutMs, maxTokens, extraBody };
 }
 
 /** 不许被 LLM_EXTRA_BODY 覆盖的字段：改了它们等于换了个问题去问 */
@@ -175,6 +185,26 @@ function readTimeoutMs(): number {
   if (!Number.isInteger(parsed) || parsed <= 0) {
     throw new AiError(
       `LLM_TIMEOUT_MS 必须是正整数毫秒，收到「${raw}」`,
+      "CONFIG_MISSING",
+      { raw },
+    );
+  }
+  return parsed;
+}
+
+/**
+ * LLM_MAX_TOKENS：单次调用的输出上限，**留空则整个字段都不发**。
+ *
+ * 与 LLM_TIMEOUT_MS 同形状（正整数或抛错），但缺省语义相反：超时必须有个值，
+ * 而输出上限没配就该交给 provider 的默认，凭空塞一个数字只会让人莫名其妙地被截断。
+ */
+function readMaxTokens(): number | undefined {
+  const raw = process.env.LLM_MAX_TOKENS?.trim();
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new AiError(
+      `LLM_MAX_TOKENS 必须是正整数，收到「${raw}」`,
       "CONFIG_MISSING",
       { raw },
     );
@@ -311,6 +341,8 @@ export async function callProvider(
         // OpenAI 的 json_object 模式要求 messages 里出现 "JSON" 字样。
         // prompt.ts 的【输出格式】段写的"只输出一个 JSON 对象"正好满足，别改没了
         response_format: { type: "json_object" },
+        // 同 temperature：没配就整个字段不出现，而不是发个 undefined
+        ...(config.maxTokens === undefined ? {} : { max_tokens: config.maxTokens }),
         // 放在最后：不支持 json_object 的模型得能把它换掉。
         // model / messages 在 readExtraBody 里已经拦住了
         ...config.extraBody,

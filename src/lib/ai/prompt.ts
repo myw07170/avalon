@@ -611,6 +611,15 @@ const OUTPUT_EXAMPLES: Record<AiDecisionKind, string> = {
   ASSASSINATION: '{"reasoning":"内心分析，其他玩家看不到","targetId":2}',
 };
 
+/**
+ * reasoning 是每个 kind 都要的字段，却一直没有任何长度约束——
+ * 一局 60-116 次调用，每次都在为一段没人读的长篇内心分析付时间。
+ *
+ * **用句子数不用字数**，与【发言长度】那条同源（rules.md §6：中文模型对字数感知很差，
+ * 卡字数只会推高 fallback 率）。prompt.test.ts 有一条断言钉着"整个 prompt 不出现字数区间"。
+ */
+const REASONING_LENGTH = "reasoning 一句话就够——它只进复盘面板，不公开给任何人。";
+
 function outputSection(req: AnyRequest): string {
   const extra =
     req.kind === "SPEECH" || req.kind === "ASSASSIN_OPINION"
@@ -647,7 +656,7 @@ function outputSection(req: AnyRequest): string {
 
   return section(
     "输出格式",
-    `只输出一个 JSON 对象，不要写任何解释文字，不要用 markdown 代码块。格式：\n${OUTPUT_EXAMPLES[req.kind]}${extra}${forced}${noSelfHit}`,
+    `只输出一个 JSON 对象，不要写任何解释文字，不要用 markdown 代码块。格式：\n${OUTPUT_EXAMPLES[req.kind]}\n${REASONING_LENGTH}${extra}${forced}${noSelfHit}`,
   );
 }
 

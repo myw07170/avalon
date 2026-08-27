@@ -13,8 +13,8 @@
  * 这与 client.ts 的错误边界同源：只有"模型说了胡话"才兜底，配置错误照样往上抛——
  * 但这里连配置错误也只降级不中断，因为它发生在牌局之外。
  *
- * 【本模块只跑在服务端】它读 LlmProviderConfig（带 apiKey）。浏览器要用得等阶段 5
- * 补一个 /api/personas，与 remote.ts 同样的理由。
+ * 【本模块只跑在服务端】它读 LlmProviderConfig（带 apiKey）。浏览器经
+ * src/app/api/personas/route.ts 转发，与 remote.ts / api/ai 同样的理由。
  */
 import { z } from "zod";
 import { makePlaceholderPersonas } from "../game/setup";
@@ -74,6 +74,20 @@ function buildPersonaPrompt(count: number): string {
   ].join("\n");
 }
 
+/**
+ * 这一次调用**不发 max_tokens**，是全项目唯一的例外。
+ *
+ * `LLM_MAX_TOKENS` 是为对局中的单次决策定的（一个布尔值加一句 reasoning，700 绰绰有余）。
+ * 人设是一次出齐全桌：10 份 × 每份 4 个 mind 字段，700 token 必然截断 →
+ * JSON 解析失败 → 回退占位人设。而"一桌占位人设"恰恰是这个模块要修的那个症状，
+ * 让一个提速开关把它悄悄退回去，是最难查的一类坑。
+ *
+ * 超时（timeoutMs）照旧受约束——那道闸防的是卡死，与输出长度无关。
+ */
+function personaConfig(config: LlmProviderConfig): LlmProviderConfig {
+  return { ...config, maxTokens: undefined };
+}
+
 export interface GeneratePersonasOptions {
   config: LlmProviderConfig;
   count: number;
@@ -96,7 +110,7 @@ export async function generatePersonas(
 
   let raw: string;
   try {
-    raw = await callProvider(config, [
+    raw = await callProvider(personaConfig(config), [
       { role: "user", content: buildPersonaPrompt(count) },
     ]);
   } catch (error) {

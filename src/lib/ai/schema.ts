@@ -14,6 +14,7 @@
  * 这层保护不要删，AI 层的类型漂移是没有运行时症状的。
  */
 import { z } from "zod";
+import { MAX_PLAYERS, MIN_PLAYERS } from "../game/config";
 import type {
   AiAssassination,
   AiDecisionKind,
@@ -152,3 +153,17 @@ export const aiDecisionRequestSchema = z.object({
   legalActions: z.array(objectLike<GameAction>("legalActions 的元素")).min(1),
   maxRetries: z.number().int().nonnegative(),
 }) satisfies z.ZodType<AiDecisionRequest<AiDecisionKind>>;
+
+/**
+ * /api/personas 收到的请求体。
+ *
+ * count 是**AI 座位数**，不是总人数：有人类玩家时它比总人数少 1，
+ * 所以下界取 `MIN_PLAYERS - 1` 而不是 `MIN_PLAYERS`。
+ * 上下界从 config.ts 的常量派生，不手抄——手抄的那份迟早和人数表分叉。
+ *
+ * 夹这一下的理由与 aiDecisionRequestSchema 的 maxRetries 同源：请求来自浏览器，
+ * 是不可信输入。`count: 9999` 会让模型去编一万份人设。
+ */
+export const personaRequestSchema = z.object({
+  count: z.number().int().min(MIN_PLAYERS - 1).max(MAX_PLAYERS),
+});

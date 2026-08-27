@@ -84,6 +84,8 @@ function record(patch: Partial<DecisionRecord> = {}): DecisionRecord {
       debug: { prompt: "", raw: "", attempts: 1 },
     },
     rescued: false,
+    auto: false,
+    latencyMs: 0,
     ...patch,
   };
 }

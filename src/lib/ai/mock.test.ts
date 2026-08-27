@@ -39,6 +39,7 @@ interface DecisionLog {
   attempts: number | undefined;
   hasDebug: boolean;
   rescued: boolean;
+  auto: boolean;
 }
 
 interface MockGameResult {
@@ -80,6 +81,7 @@ async function playWithMock(playerCount: number, seed: number): Promise<MockGame
       attempts: record.result.debug?.attempts,
       hasDebug: record.result.debug !== undefined,
       rescued: record.rescued,
+      auto: record.auto,
     };
   };
 
@@ -177,10 +179,26 @@ describe("mock 的输出", () => {
   });
 
   it("fallback 恒为 false，debug 恒有值且 attempts 为 1", () => {
-    for (const d of allDecisions) {
+    // 自动决策没问过模型，自然没有 prompt 也没有原文（orchestrator 的 autoRecord）。
+    // 它们由下面那条单独钉，不能混进来——混进来的话把 hasDebug 断言写松了才能过，
+    // 而那条断言存在的意义就是"mock 也必须交出 debug"
+    for (const d of allDecisions.filter((d) => !d.auto)) {
       expect(d.fallback).toBe(false);
       expect(d.hasDebug).toBe(true);
       expect(d.attempts).toBe(1);
+    }
+  });
+
+  it("自动决策只出现在好人的任务票上，且没有调用过模型", () => {
+    const auto = allDecisions.filter((d) => d.auto);
+    // 100 局里好人上车的次数远不止 100 次，一次都没有说明这条捷径根本没生效
+    expect(auto.length).toBeGreaterThan(GAMES);
+    for (const d of auto) {
+      expect(d.kind, `座位 ${d.playerId}`).toBe("MISSION_CARD");
+      expect(d.payload).toMatchObject({ success: true });
+      expect(d.hasDebug).toBe(false);
+      expect(d.fallback).toBe(false);
+      expect(d.rescued).toBe(false);
     }
   });
 
