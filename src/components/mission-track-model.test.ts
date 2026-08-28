@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { zh } from "@/i18n/messages.zh";
 import { createMockAiClient } from "@/lib/ai/mock";
 import { runGame } from "@/lib/ai/orchestrator";
 import {
@@ -12,7 +13,15 @@ import {
   type PlayerView,
   type Role,
 } from "@/lib/game";
-import { describeTrack } from "./mission-track-model";
+import { describeTrack as describeTrackRaw } from "./mission-track-model";
+
+/*
+ * 【这一行 shim 是刻意的】`describeX` 的第二个参数没有默认值——默认值是静默回退，
+ * 会让某个漏改的调用点在英文模式下安静地渲染中文，而没有任何东西会报错。
+ * 代价就是这里补一行。下面的断言仍然逐字断言中文，那才是真正在验文案。
+ */
+const describeTrack = (view: PlayerView) => describeTrackRaw(view, zh);
+
 
 // ---------------------------------------------------------------------------
 // 夹具：跑真实的整局，收下沿途每一步的视角

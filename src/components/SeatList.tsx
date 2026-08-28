@@ -16,8 +16,8 @@
  * 本文件没有 "use client"：它只被客户端组件渲染，指令由那些文件带。
  */
 import type { PlayerId } from "@/lib/game";
+import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
-import { SEAT_TONE_LABEL } from "./role-card-model";
 import { SEAT_TONE_CLASS, type SeatRingMark } from "./SeatRing";
 
 export interface SeatListProps {
@@ -31,13 +31,14 @@ export interface SeatListProps {
 const DEFAULT_MARK: SeatRingMark = { id: -1, tone: "plain" };
 
 export function SeatList({ count, marks, onSelect, seatLabel }: SeatListProps) {
+  const msg = useMessages();
   const markOf = new Map(marks?.map((m) => [m.id, m]));
 
   return (
     <ul className="flex w-full flex-col gap-1.5">
       {Array.from({ length: count }, (_, id) => {
         const mark = markOf.get(id) ?? { ...DEFAULT_MARK, id };
-        const label = seatLabel?.(id, mark) ?? `${id} 号座位`;
+        const label = seatLabel?.(id, mark) ?? msg.seat.short(id);
 
         // 选中态用光环，与圆桌上"在队伍里"、SeatGrid 里"已选中"是同一条视觉通道
         const row = cn(
@@ -55,16 +56,18 @@ export function SeatList({ count, marks, onSelect, seatLabel }: SeatListProps) {
             </span>
 
             <span aria-hidden className="min-w-0 flex-1 truncate text-xs opacity-80">
-              {SEAT_TONE_LABEL[mark.tone]}
+              {msg.role.toneLabel[mark.tone]}
             </span>
 
             <span aria-hidden className="flex shrink-0 items-center gap-1.5 text-[10px]">
               {mark.isLeader && (
-                <span className="rounded-sm bg-brass px-1 leading-tight text-ink">队长</span>
+                <span className="rounded-sm bg-brass px-1 leading-tight text-ink">
+                  {msg.seat.leader}
+                </span>
               )}
               {mark.onTeam && (
                 <span className="rounded-sm border border-brass px-1 leading-tight text-brass">
-                  在队伍
+                  {msg.table.onTeam}
                 </span>
               )}
               {mark.status === "done" && (
@@ -74,7 +77,7 @@ export function SeatList({ count, marks, onSelect, seatLabel }: SeatListProps) {
               )}
               {mark.status === "acting" && (
                 <span className="animate-pulse rounded-sm border border-muted px-1 leading-tight text-muted">
-                  行动中
+                  {msg.table.acting}
                 </span>
               )}
             </span>

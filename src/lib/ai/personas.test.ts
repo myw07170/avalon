@@ -52,7 +52,7 @@ const notes = (): { onNote: (n: string) => void; lines: string[] } => {
 describe("正常生成", () => {
   it("拿到数量正确、字段齐全的人设", async () => {
     const { fetchFn } = fakeProvider({ content: payload(["林小雨", "老陈", "阿泽"]) });
-    const result = await generatePersonas({ config: CONFIG(fetchFn), count: 3 });
+    const result = await generatePersonas({ config: CONFIG(fetchFn), count: 3, locale: "zh" });
 
     expect(result).toHaveLength(3);
     expect(result[0]?.name).toBe("林小雨");
@@ -61,7 +61,7 @@ describe("正常生成", () => {
 
   it("多给了就截断，不为此重试——多出来的几份只是浪费", async () => {
     const { fetchFn } = fakeProvider({ content: payload(["甲", "乙", "丙", "丁"]) });
-    const result = await generatePersonas({ config: CONFIG(fetchFn), count: 2 });
+    const result = await generatePersonas({ config: CONFIG(fetchFn), count: 2, locale: "zh" });
 
     expect(result.map((p) => p.name)).toEqual(["甲", "乙"]);
   });
@@ -73,7 +73,7 @@ describe("正常生成", () => {
    */
   it("prompt 里写明了不要标签、不要字数区间、不要职场黑话", async () => {
     const { fetchFn, prompts } = fakeProvider({ content: payload(["甲"]) });
-    await generatePersonas({ config: CONFIG(fetchFn), count: 1 });
+    await generatePersonas({ config: CONFIG(fetchFn), count: 1, locale: "zh" });
 
     const prompt = prompts[0] ?? "";
     expect(prompt).toContain("不要写 high/low/aggressive");
@@ -104,7 +104,7 @@ describe("失败一律回退占位人设，并说明原因", () => {
     it(`${label} → 占位人设 + 打点`, async () => {
       const { fetchFn } = fakeProvider(turn);
       const { onNote, lines } = notes();
-      const result = await generatePersonas({ config: CONFIG(fetchFn), count: 2, onNote });
+      const result = await generatePersonas({ config: CONFIG(fetchFn), count: 2, locale: "zh", onNote });
 
       expect(result).toHaveLength(2);
       // 占位人设的标记，makePlaceholderPersonas 给的就是这个

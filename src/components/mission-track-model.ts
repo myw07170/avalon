@@ -6,6 +6,7 @@
  * 撞到 maxRejects 坏人直接获胜（WinReason "REJECT_LIMIT"），所以它是一根危险指示条，
  * 不是流水计数。
  */
+import type { Messages } from "@/i18n/messages";
 import { MISSIONS_TO_WIN, type PlayerView } from "@/lib/game";
 
 export type MissionOutcome = "success" | "fail" | "current" | "upcoming";
@@ -36,13 +37,13 @@ export interface TrackState {
   attemptLabel: string | null;
 }
 
-function detailOf(succeeded: boolean, failCount: number): string {
-  if (!succeeded) return `失败 · ${failCount} 败`;
+function detailOf(succeeded: boolean, failCount: number, msg: Messages): string {
+  if (!succeeded) return msg.track.fail(failCount);
   // 第四轮要两张失败票，所以"成功"也可能带着一张失败票——那张票是有信息的
-  return failCount > 0 ? `成功 · ${failCount} 败` : "成功";
+  return failCount > 0 ? msg.track.successWithFails(failCount) : msg.track.success;
 }
 
-export function describeTrack(view: PlayerView): TrackState {
+export function describeTrack(view: PlayerView, msg: Messages): TrackState {
   const settled = new Map(view.missionHistory.map((m) => [m.missionIndex, m]));
 
   const nodes: MissionNode[] = view.missionConfigs.map((config, index) => {
@@ -53,24 +54,24 @@ export function describeTrack(view: PlayerView): TrackState {
     if (record) {
       return {
         index,
-        label: `第 ${index + 1} 轮`,
+        label: msg.common.round(index + 1),
         teamSize: config.teamSize,
         failsRequired: config.failsRequired,
         outcome: record.succeeded ? "success" : "fail",
         failCount: record.failCount,
-        detail: detailOf(record.succeeded, record.failCount),
+        detail: detailOf(record.succeeded, record.failCount, msg),
       };
     }
 
     const isCurrent = index === view.missionIndex && view.phase !== "GAME_OVER";
     return {
       index,
-      label: `第 ${index + 1} 轮`,
+      label: msg.common.round(index + 1),
       teamSize: config.teamSize,
       failsRequired: config.failsRequired,
       outcome: isCurrent ? "current" : "upcoming",
       failCount: null,
-      detail: isCurrent ? "进行中" : null,
+      detail: isCurrent ? msg.track.inProgress : null,
     };
   });
 
@@ -81,8 +82,8 @@ export function describeTrack(view: PlayerView): TrackState {
     missionsToWin: MISSIONS_TO_WIN,
     rejectCount: view.rejectCount,
     maxRejects: view.maxRejects,
-    rejectWarning: rejectWarningOf(view),
-    attemptLabel: view.rejectCount > 0 ? `第 ${view.rejectCount + 1} 次提议` : null,
+    rejectWarning: rejectWarningOf(view, msg),
+    attemptLabel: view.rejectCount > 0 ? msg.track.attempt(view.rejectCount + 1) : null,
   };
 }
 
@@ -94,8 +95,8 @@ export function describeTrack(view: PlayerView): TrackState {
  * 而 SetupScreen 也从不开启它（createConfig 的缺省是 false）。真要支持这个变体，
  * 得先把它投影进 PlayerView，而不是在这里猜。
  */
-function rejectWarningOf(view: PlayerView): string | null {
+function rejectWarningOf(view: PlayerView, msg: Messages): string | null {
   if (view.phase === "GAME_OVER") return null;
   if (view.rejectCount !== view.maxRejects - 1) return null;
-  return "再被否决一次，坏人直接获胜。";
+  return msg.track.rejectWarning;
 }

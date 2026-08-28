@@ -39,66 +39,31 @@ export const ROLE_TEAM: Record<Role, Team> = {
   MINION: "EVIL",
 };
 
-/** 角色展示元数据。引擎判定不依赖它，仅供 UI 与 prompt 文案使用 */
+/**
+ * 角色的引擎侧元数据。
+ *
+ * 【label 与 ability 不在这里，在 `src/i18n/roles.ts`】那两个字段是纯展示：
+ * 引擎的任何判定都不该读它们，而且它们要分语言 —— 整张表 locale 化会逼着
+ * `optional` 跟着复制两份，还会把语言这一维拖进 config.ts 的构成函数，
+ * 那些函数和语言毫无关系。
+ *
+ * 留在这里的两个字段都有判定用途：`team` 供阵营判定，`optional` 供 getEvilOptions。
+ */
 export interface RoleMeta {
-  /** 中文名，如 "梅林" */
-  label: string;
   team: Team;
-  /** 一句话能力描述，可直接注入 prompt */
-  ability: string;
   /** 是否为可选角色（忠臣/爪牙是填充位，莫德雷德/奥伯伦按人数启用） */
   optional: boolean;
 }
 
 export const ROLE_META: Record<Role, RoleMeta> = {
-  MERLIN: {
-    label: "梅林",
-    team: "GOOD",
-    ability: "看到所有坏人，莫德雷德除外。被刺客命中则好人满盘皆输。",
-    optional: false,
-  },
-  PERCIVAL: {
-    label: "派西维尔",
-    team: "GOOD",
-    ability: "看到梅林和莫甘娜两人，但无法区分谁是谁。",
-    optional: false,
-  },
-  LOYAL_SERVANT: {
-    label: "忠臣",
-    team: "GOOD",
-    ability: "没有任何额外信息，只能靠推理。",
-    optional: true,
-  },
-  MORGANA: {
-    label: "莫甘娜",
-    team: "EVIL",
-    ability: "在派西维尔眼中与梅林混淆。认识除奥伯伦外的所有坏人。",
-    optional: false,
-  },
-  ASSASSIN: {
-    label: "刺客",
-    team: "EVIL",
-    ability: "好人集齐 3 分后由你指定刺杀目标，命中梅林则坏人翻盘。",
-    optional: false,
-  },
-  MORDRED: {
-    label: "莫德雷德",
-    team: "EVIL",
-    ability: "梅林看不到你。认识除奥伯伦外的所有坏人。",
-    optional: true,
-  },
-  OBERON: {
-    label: "奥伯伦",
-    team: "EVIL",
-    ability: "不认识任何队友，队友也不认识你；但梅林看得到你。",
-    optional: true,
-  },
-  MINION: {
-    label: "爪牙",
-    team: "EVIL",
-    ability: "普通坏人，认识除奥伯伦外的所有坏人。",
-    optional: true,
-  },
+  MERLIN: { team: "GOOD", optional: false },
+  PERCIVAL: { team: "GOOD", optional: false },
+  LOYAL_SERVANT: { team: "GOOD", optional: true },
+  MORGANA: { team: "EVIL", optional: false },
+  ASSASSIN: { team: "EVIL", optional: false },
+  MORDRED: { team: "EVIL", optional: true },
+  OBERON: { team: "EVIL", optional: true },
+  MINION: { team: "EVIL", optional: true },
 };
 
 export type Phase =
@@ -184,13 +149,58 @@ export type ConfigIssueCode =
  * 配置的单条问题。
  * severity "error" 阻止开局；"warning" 只提示，不拦。
  */
+/**
+ * 渲染一条 ConfigIssue 要用到的数字与角色。
+ *
+ * 【为什么不是一句拼好的话】这条 issue 会被 SetupScreen 逐字渲染给玩家，
+ * 也就是说它是**玩家文案**，得跟着语言走。而引擎不该产出人类语言：
+ * 它给出 code + 参数，句子在 `src/i18n` 里拼。
+ */
+export interface ConfigIssueParams {
+  playerCount?: number;
+  roleCount?: number;
+  min?: number;
+  max?: number;
+  n?: number;
+  good?: number;
+  evil?: number;
+  expectedGood?: number;
+  expectedEvil?: number;
+  recommended?: number;
+  role?: Role;
+}
+
 export interface ConfigIssue {
   severity: "error" | "warning";
   code: ConfigIssueCode;
-  message: string;
+  params: ConfigIssueParams;
   /** 相关角色，UI 高亮用 */
   roles?: Role[];
 }
+
+/**
+ * 玩家点了一个不合法的东西，被界面拦下来的原因。
+ *
+ * 【为什么和 ConfigIssue、EngineErrorCode 放在一起】三者是同一类东西：
+ * "某件事为什么不允许"的**结构化答案**。引擎与 store 都不产出人类语言，
+ * 句子一律在 `src/i18n` 里拼——那是唯一知道当前语言的地方。
+ *
+ * 【判定逻辑不在这里】`validateHumanAction` 在 store/game.ts：它要读 HumanTurn，
+ * 那是驱动层的概念。这里只有形状。
+ */
+export type ActionProblem =
+  | { code: "WRONG_ACTION"; got: GameAction["type"]; allowed: GameAction["type"][] }
+  | { code: "SYSTEM_ACTION"; got: GameAction["type"] }
+  | { code: "NOT_YOUR_SEAT"; seat: PlayerId }
+  | { code: "TEAM_SIZE"; need: number; got: number }
+  | { code: "TEAM_DUPLICATE" }
+  | { code: "SEAT_MISSING"; seat: PlayerId }
+  | { code: "VOTE_NOT_OFFERED" }
+  | { code: "GOOD_CANNOT_FAIL" }
+  | { code: "BAD_TARGET"; seat: PlayerId }
+  | { code: "NO_GAME" };
+
+export type ActionProblemCode = ActionProblem["code"];
 
 /** 随机源。引擎所有随机行为都必须走它，方便测试注入固定序列 */
 export type RngFn = () => number;
@@ -526,20 +536,29 @@ export type GameAction =
 
 export type ActionType = GameAction["type"];
 
+/**
+ * 引擎错误的分类。
+ *
+ * 【提成具名类型是为了能按它建表】`src/i18n` 里有一张 `Record<EngineErrorCode, string>`：
+ * EngineError 的 message 是拿引擎内部状态拼出来的诊断，玩家读不懂也不该读到，
+ * 所以界面上显示的是按 code 写的一句人话。写成内联联合的话那张表就没法要求完整。
+ */
+export type EngineErrorCode =
+  | "ILLEGAL_PHASE"
+  | "NOT_YOUR_TURN"
+  | "INVALID_TEAM"
+  | "DUPLICATE_SUBMISSION"
+  | "GOOD_CANNOT_FAIL"
+  | "INVALID_TARGET"
+  | "CONFIG_INVALID"
+  /** 引擎内部不变量被打破。正常输入下不该出现，出现即为引擎 bug */
+  | "INTERNAL";
+
 /** 引擎抛出的唯一错误类型。非法动作一律走这里，不返回 null、不静默忽略 */
 export class EngineError extends Error {
   constructor(
     message: string,
-    readonly code:
-      | "ILLEGAL_PHASE"
-      | "NOT_YOUR_TURN"
-      | "INVALID_TEAM"
-      | "DUPLICATE_SUBMISSION"
-      | "GOOD_CANNOT_FAIL"
-      | "INVALID_TARGET"
-      | "CONFIG_INVALID"
-      /** 引擎内部不变量被打破。正常输入下不该出现，出现即为引擎 bug */
-      | "INTERNAL",
+    readonly code: EngineErrorCode,
     readonly context?: Record<string, unknown>,
   ) {
     super(message);
@@ -617,6 +636,18 @@ export interface AiDecisionRequest<K extends AiDecisionKind> {
   persona: Persona;
   legalActions: GameAction[];
   maxRetries: number;
+  /**
+   * 用哪一份 prompt 语料。
+   *
+   * 【必填，不是可选】可选字段配一个 `?? "zh"` 就是静默回退：英文界面配一桌
+   * 说中文的 AI，而没有任何东西会报错。必填的成本是十几个构造点各改一个 token，
+   * 而 `tsc` 会把它们全找出来。
+   *
+   * 【类型是 string 不是 Locale】`@/lib/game` 是引擎，不该认识 `src/i18n`。
+   * 取值由 buildPrompt 那一侧的 `Record<Locale, ...>` 索引来约束——
+   * 传了别的值那里会当场报错。
+   */
+  locale: "zh" | "en";
 }
 
 export interface AiDecisionResult<K extends AiDecisionKind> {

@@ -5,7 +5,15 @@ import { createGame, makePlaceholderPersonas } from "../game/setup";
 import { toPlayerView } from "../game/view";
 import type { GameState, PlayerView, Role, Speech } from "../game/types";
 import { simulateGame } from "../sim/random";
-import { buildPerspective } from "./perspective";
+import { buildPerspective as buildPerspectiveRaw } from "./perspective";
+import { PROMPT_COPY } from "./prompt-copy";
+
+/*
+ * 【这一行 shim 与 view-model 那几份同源】buildPerspective 现在要一份语料表，
+ * 因为"座位 3"这个 token 分语言。第二个参数没有默认值——默认值是静默回退，
+ * 会让英文局里这几条角度永远不触发，而且不报任何错。
+ */
+const buildPerspective = (view: PlayerView) => buildPerspectiveRaw(view, PROMPT_COPY.zh);
 
 const FIVE: Role[] = ["MERLIN", "PERCIVAL", "LOYAL_SERVANT", "MORGANA", "ASSASSIN"];
 

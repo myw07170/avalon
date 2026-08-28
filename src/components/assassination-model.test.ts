@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { zh } from "@/i18n/messages.zh";
 import { createMockAiClient } from "@/lib/ai/mock";
 import { runGame, type HumanTurn } from "@/lib/ai/orchestrator";
 import {
@@ -14,10 +15,26 @@ import {
   toPlayerView,
   type GameState,
   type PlayerId,
+  type PlayerView,
   type Role,
 } from "@/lib/game";
-import { describeTurn, type AssassinationForm } from "./action-panel-model";
-import { describeStrike, strikeLabel, type StrikeTarget } from "./assassination-model";
+import { describeTurn as describeTurnRaw, type AssassinationForm } from "./action-panel-model";
+import {
+  describeStrike as describeStrikeRaw,
+  strikeLabel as strikeLabelRaw,
+  type StrikeTarget,
+} from "./assassination-model";
+
+/*
+ * 【这一行 shim 是刻意的】`describeX` 的第二个参数没有默认值——默认值是静默回退，
+ * 会让某个漏改的调用点在英文模式下安静地渲染中文，而没有任何东西会报错。
+ * 代价就是这里补一行。下面的断言仍然逐字断言中文，那才是真正在验文案。
+ */
+const describeTurn = (turn: HumanTurn) => describeTurnRaw(turn, zh);
+const describeStrike = (form: AssassinationForm, view: PlayerView) =>
+  describeStrikeRaw(form, view, zh);
+const strikeLabel = (target: StrikeTarget | null) => strikeLabelRaw(target, zh);
+
 
 // ---------------------------------------------------------------------------
 // 夹具：跑真实对局，收所有走到"刺客该开刀了"那一刻的局面

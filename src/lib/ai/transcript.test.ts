@@ -375,17 +375,54 @@ describe("解析失败要炸，不能返回半份数据", () => {
 describe("selfExposure", () => {
   it("给自己贴标签算 blatant", () => {
     for (const content of ["作为梅林，我建议", "我是梅林", "身为梅林", "作为 梅林 我说"]) {
-      expect(selfExposure({ roleLabel: "梅林", content })?.kind, content).toBe("blatant");
+      expect(selfExposure({ roleLabel: "梅林", content }, "zh")?.kind, content).toBe(
+        "blatant",
+      );
     }
   });
 
   it("梅林谈论「梅林」只算 mention——那是正常推理，甚至是好牌", () => {
     // 第 3 局 35 条发言里 14 条 mention、0 条 blatant。一刀切会把那 14 条全误报成事故
-    expect(selfExposure({ roleLabel: "梅林", content: "别急于指认梅林" })?.kind).toBe("mention");
+    expect(selfExposure({ roleLabel: "梅林", content: "别急于指认梅林" }, "zh")?.kind).toBe(
+      "mention",
+    );
   });
 
   it("提到别人的角色名不算——判定必须按说话人的身份来", () => {
-    expect(selfExposure({ roleLabel: "忠臣", content: "我怀疑谁是梅林" })).toBeNull();
+    expect(selfExposure({ roleLabel: "忠臣", content: "我怀疑谁是梅林" }, "zh")).toBeNull();
+  });
+
+  /**
+   * 【英文那支必须单独验】它是 docs/todos.md §6.3 那个"新语言的自曝率验一遍"
+   * 指标的**检测器本身**。检测器坏了，英文对局会安静地报出 0 条自曝——
+   * 那个漂亮的假数字比没有数字更糟。
+   */
+  it("en 的自曝前缀认得出 As Merlin / I'm the Assassin 这几种说法", () => {
+    const blatant = [
+      "As Merlin, I would suggest",
+      "I am Merlin",
+      "Speaking as Merlin, the vote is odd",
+      "my role is Merlin",
+      "as the Merlin I have to say",
+    ];
+    for (const content of blatant) {
+      expect(selfExposure({ roleLabel: "Merlin", content }, "en")?.kind, content).toBe(
+        "blatant",
+      );
+    }
+  });
+
+  it("en 里谈论 Merlin 同样只算 mention", () => {
+    expect(
+      selfExposure({ roleLabel: "Merlin", content: "Do not rush to name Merlin" }, "en")
+        ?.kind,
+    ).toBe("mention");
+  });
+
+  it("en 判定同样按说话人的身份来", () => {
+    expect(
+      selfExposure({ roleLabel: "Loyal Servant", content: "I suspect Merlin is seat 3" }, "en"),
+    ).toBeNull();
   });
 });
 
@@ -412,7 +449,9 @@ describe.skipIf(!existsSync(REAL))("解析第 1 局那份真实记录", () => {
 
   it("那两处自曝能被认出来", () => {
     const parsed = parseTranscript(readFileSync(REAL, "utf8"));
-    const blatant = parsed.speeches.filter((s) => selfExposure(s)?.kind === "blatant");
+    const blatant = parsed.speeches.filter(
+      (s) => selfExposure(s, "zh")?.kind === "blatant",
+    );
 
     expect(blatant.map((s) => `${s.playerId}/${s.roleLabel}`)).toEqual(["2/刺客", "3/梅林"]);
   });

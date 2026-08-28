@@ -14,7 +14,8 @@
  * 画出来。view.awaitingPlayerIds 确实会给出当前行动的坏人座位（引擎的既有行为，
  * 且刺杀发生在终局前一步），但我们不主动把整份名单铺开。
  */
-import type { Phase, PlayerId, PlayerView } from "@/lib/game";
+import type { Messages } from "@/i18n/messages";
+import type { PlayerId, PlayerView } from "@/lib/game";
 import { describeRole, type SeatTone } from "./role-card-model";
 
 /** idle = 本阶段不需要他动；acting = 还在等他；done = 已经交了 */
@@ -42,38 +43,14 @@ export interface TableState {
   roundLabel: string;
 }
 
-const PHASE_LABEL: Record<Phase, string> = {
-  SETUP: "准备",
-  ROLE_REVEAL: "查看身份",
-  TEAM_BUILDING: "组队",
-  PROPOSAL_DISCUSSION: "组队讨论",
-  TEAM_VOTE: "组队投票",
-  MISSION_EXECUTION: "执行任务",
-  MISSION_RESULT: "任务结算",
-  REVIEW_DISCUSSION: "复盘讨论",
-  ASSASSINATION: "刺杀",
-  GAME_OVER: "对局结束",
-};
-
-/** 每个阶段在等人做什么。用于拼「等 3 号出名单」这类句子 */
-const PHASE_VERB: Partial<Record<Phase, string>> = {
-  ROLE_REVEAL: "确认身份",
-  TEAM_BUILDING: "出名单",
-  PROPOSAL_DISCUSSION: "发言",
-  REVIEW_DISCUSSION: "发言",
-  TEAM_VOTE: "投票",
-  MISSION_EXECUTION: "出任务票",
-  ASSASSINATION: "决定",
-};
-
-/** 进度条的量词。没有的阶段不显示计数 */
-const PHASE_COUNTER: Partial<Record<Phase, string>> = {
-  ROLE_REVEAL: "已确认",
-  PROPOSAL_DISCUSSION: "已发言",
-  REVIEW_DISCUSSION: "已发言",
-  TEAM_VOTE: "已投",
-  MISSION_EXECUTION: "已出票",
-};
+/*
+ * 三张按阶段索引的表——阶段名、"在等他做什么"的动词、进度条的量词——
+ * 都在 `src/i18n/messages.zh.ts` 的 `table` 命名空间里。
+ *
+ * 【动词那张表在英文里是不定式】中文的「等 3 号出名单」和「轮到你出名单」
+ * 共用同一个词，英文的 "waiting for Seat 3 to propose a team" 也一样，
+ * 所以两种语言里它都只需要一份。
+ */
 
 /**
  * 本阶段已经交了的人。
@@ -110,35 +87,36 @@ function doneIdsOf(view: PlayerView): PlayerId[] {
   }
 }
 
-function nameOf(view: PlayerView, id: PlayerId): string {
+function nameOf(view: PlayerView, id: PlayerId, msg: Messages): string {
   const player = view.players.find((p) => p.id === id);
-  return player ? `${id} 号（${player.name}）` : `${id} 号`;
+  return player ? msg.seat.named(id, player.name) : msg.seat.short(id);
 }
 
-function statusLineOf(view: PlayerView): string {
+function statusLineOf(view: PlayerView, msg: Messages): string {
   const waiting = view.awaitingPlayerIds;
-  const verb = PHASE_VERB[view.phase];
+  const verb = msg.table.verb[view.phase];
 
-  if (view.phase === "GAME_OVER") return "对局已结束。";
-  if (waiting.length === 0 || !verb) return "结算中⋯";
+  if (view.phase === "GAME_OVER") return msg.table.gameOver;
+  if (waiting.length === 0 || !verb) return msg.table.settling;
 
   // 只等一个人时点名，等一批人时只报数——"谁还没交"是公开的，"谁先交的"不是
   if (waiting.length === 1) {
     const only = waiting[0]!;
-    return only === view.selfId ? `轮到你${verb}。` : `等 ${nameOf(view, only)}${verb}。`;
+    return only === view.selfId
+      ? msg.table.yourTurn(verb)
+      : msg.table.waitingOne(nameOf(view, only, msg), verb);
   }
-  const mine = waiting.includes(view.selfId) ? "，其中包括你" : "";
-  return `等 ${waiting.length} 人${verb}${mine}。`;
+  return msg.table.waitingMany(waiting.length, verb, waiting.includes(view.selfId));
 }
 
-function progressLabelOf(view: PlayerView): string | null {
-  const counter = PHASE_COUNTER[view.phase];
+function progressLabelOf(view: PlayerView, msg: Messages): string | null {
+  const counter = msg.table.counter[view.phase];
   if (!counter || view.progress.required === 0) return null;
-  return `${counter} ${view.progress.submitted} / ${view.progress.required}`;
+  return msg.table.progress(counter, view.progress.submitted, view.progress.required);
 }
 
-export function describeTable(view: PlayerView): TableState {
-  const knowledge = new Map(describeRole(view).marks.map((m) => [m.id, m.tone]));
+export function describeTable(view: PlayerView, msg: Messages): TableState {
+  const knowledge = new Map(describeRole(view, msg).marks.map((m) => [m.id, m.tone]));
   const waiting = new Set(view.awaitingPlayerIds);
   const done = new Set(doneIdsOf(view));
   const team = new Set(view.proposedTeam ?? []);
@@ -156,9 +134,13 @@ export function describeTable(view: PlayerView): TableState {
 
   return {
     seats,
-    phaseLabel: PHASE_LABEL[view.phase],
-    progressLabel: progressLabelOf(view),
-    statusLine: statusLineOf(view),
-    roundLabel: `第 ${view.missionIndex + 1} 轮 · 否决 ${view.rejectCount} / ${view.maxRejects}`,
+    phaseLabel: msg.table.phase[view.phase],
+    progressLabel: progressLabelOf(view, msg),
+    statusLine: statusLineOf(view, msg),
+    roundLabel: msg.table.roundLabel(
+      view.missionIndex + 1,
+      view.rejectCount,
+      view.maxRejects,
+    ),
   };
 }

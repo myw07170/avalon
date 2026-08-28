@@ -11,26 +11,22 @@
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "framer-motion";
 import { useAtomValue } from "jotai";
+import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
 import { myViewAtom } from "@/store/game";
 import {
   describeFeed,
   typewriterStepMs,
   type FeedEntry,
-  type SpeechKind,
 } from "./speech-feed-model";
-
-const KIND_LABEL: Partial<Record<SpeechKind, string>> = {
-  proposal: "选人说明",
-  opinion: "刺杀讨论",
-};
 
 export function SpeechFeed() {
   const view = useAtomValue(myViewAtom);
+  const msg = useMessages();
   const reduced = useReducedMotion() === true;
   const boxRef = useRef<HTMLDivElement>(null);
 
-  const entries = view ? describeFeed(view) : [];
+  const entries = view ? describeFeed(view, msg) : [];
   const last = entries.at(-1);
 
   // 自己敲的字不用再演一遍打给自己看
@@ -50,14 +46,16 @@ export function SpeechFeed() {
 
   return (
     <section className="w-full">
-      <h2 className="mb-3 font-display text-xs tracking-[0.3em] text-muted">发言</h2>
+      <h2 className="mb-3 font-display text-xs tracking-[var(--track-3)] text-muted">
+        {msg.feed.title}
+      </h2>
 
       <div
         ref={boxRef}
         className="max-h-[45dvh] overflow-y-auto rounded-lg border border-ink-line bg-ink-raised px-4 py-3"
       >
         {entries.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">还没有人开口。</p>
+          <p className="py-6 text-center text-sm text-muted">{msg.feed.empty}</p>
         ) : (
           <ol className="space-y-4">
             {entries.map((entry) => (
@@ -75,14 +73,16 @@ export function SpeechFeed() {
 }
 
 function Bubble({ entry, content }: { entry: FeedEntry; content: string }) {
-  const tag = KIND_LABEL[entry.kind];
+  const msg = useMessages();
+  // 普通发言不加标：三种发言里只有选人说明和刺杀推测需要区分出来
+  const tag = entry.kind === "speech" ? undefined : msg.feed.kind[entry.kind];
 
   return (
     <li>
       {entry.groupLabel && (
         <div className="mb-3 flex items-center gap-3 pt-1 first:pt-0">
           <span className="h-px flex-1 bg-ink-line" />
-          <span className="font-display text-[10px] tracking-[0.25em] text-muted">
+          <span className="font-display text-[10px] tracking-[var(--track-2)] text-muted">
             {entry.groupLabel}
           </span>
           <span className="h-px flex-1 bg-ink-line" />
@@ -107,7 +107,7 @@ function Bubble({ entry, content }: { entry: FeedEntry; content: string }) {
             <span
               className={cn("text-xs", entry.isSelf ? "text-brass" : "text-muted")}
             >
-              {entry.playerId} 号 · {entry.isSelf ? "你" : entry.name}
+              {msg.feed.speaker(entry.playerId, entry.isSelf ? msg.seat.you : entry.name)}
             </span>
             {tag && (
               <span className="rounded-sm border border-ink-line px-1.5 py-px text-[10px] text-muted">
@@ -117,7 +117,9 @@ function Bubble({ entry, content }: { entry: FeedEntry; content: string }) {
           </p>
           {entry.isSilent ? (
             // 引擎允许空发言，如实说"他没说话"，而不是留一个空气泡
-            <p className="mt-1 text-sm italic leading-relaxed text-muted">（没有开口）</p>
+            <p className="mt-1 text-sm italic leading-relaxed text-muted">
+              {msg.feed.silent}
+            </p>
           ) : (
             // 换行保留：模型偶尔会分段
             <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-vellum">

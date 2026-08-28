@@ -6,6 +6,7 @@
  * 推导在 mission-track-model.ts，这里只负责画。
  */
 import { useAtomValue } from "jotai";
+import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
 import { myViewAtom } from "@/store/game";
 import { describeTrack, type MissionNode, type MissionOutcome } from "./mission-track-model";
@@ -19,19 +20,22 @@ const OUTCOME_CLASS: Record<MissionOutcome, string> = {
 
 export function MissionTrack() {
   const view = useAtomValue(myViewAtom);
+  const msg = useMessages();
   if (!view) return null;
 
-  const track = describeTrack(view);
+  const track = describeTrack(view, msg);
 
   return (
     <section className="w-full">
       <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="font-display text-xs tracking-[0.3em] text-muted">任务</h2>
+        <h2 className="font-display text-xs tracking-[var(--track-3)] text-muted">
+          {msg.track.title}
+        </h2>
         <p className="tabular text-xs">
-          <span className="text-loyal">好人 {track.goodScore}</span>
+          <span className="text-loyal">{msg.track.good(track.goodScore)}</span>
           <span className="text-muted"> · </span>
-          <span className="text-mordred">坏人 {track.evilScore}</span>
-          <span className="text-muted"> · {track.missionsToWin} 胜制</span>
+          <span className="text-mordred">{msg.track.evil(track.evilScore)}</span>
+          <span className="text-muted"> · {msg.track.toWin(track.missionsToWin)}</span>
         </p>
       </div>
 
@@ -52,11 +56,16 @@ export function MissionTrack() {
 }
 
 function MissionNodeCell({ node }: { node: MissionNode }) {
+  const msg = useMessages();
+
   return (
     <li
-      aria-label={`${node.label}，${node.teamSize} 人出任务${
-        node.failsRequired > 1 ? "，需 2 张失败票才算失败" : ""
-      }，${node.detail ?? "未开始"}`}
+      aria-label={msg.track.nodeAria(
+        node.label,
+        node.teamSize,
+        node.failsRequired > 1,
+        node.detail ?? msg.track.notStarted,
+      )}
       className={cn(
         // px-1：360px 屏上每格只有约 59px，不给水平内边距文字会顶到边框上
         "flex-1 rounded-lg border px-1 py-2.5 text-center transition-colors",
@@ -97,13 +106,15 @@ function RejectMeter({
   warning: string | null;
   attemptLabel: string | null;
 }) {
+  const msg = useMessages();
+
   return (
     <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-      <span className="text-xs text-muted">本轮否决</span>
+      <span className="text-xs text-muted">{msg.track.rejects}</span>
 
       <span
         role="img"
-        aria-label={`本轮已连续否决 ${count} 次，上限 ${max} 次`}
+        aria-label={msg.track.rejectsAria(count, max)}
         className="flex items-center gap-1.5"
       >
         {Array.from({ length: max }, (_, i) => (

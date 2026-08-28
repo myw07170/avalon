@@ -8,6 +8,7 @@
  * 三种发言在流里要分得开：选人说明是队长对自己名单的解释，
  * 刺杀讨论是终局前的公开推测，其余才是普通发言。
  */
+import type { Messages } from "@/i18n/messages";
 import type { Phase, PlayerId, PlayerView, Speech } from "@/lib/game";
 
 export type SpeechKind = "proposal" | "speech" | "opinion";
@@ -42,7 +43,7 @@ interface Group {
  * 队长的选人说明和紧跟着的组队讨论属于同一次提议，归一组——
  * 拆开的话"他当时怎么解释这份名单"和"大家怎么回应"会隔着一条分隔线。
  */
-function groupOf(speech: Speech): Group {
+function groupOf(speech: Speech, msg: Messages): Group {
   const round = speech.missionIndex + 1;
 
   switch (speech.phase) {
@@ -50,14 +51,14 @@ function groupOf(speech: Speech): Group {
     case "PROPOSAL_DISCUSSION":
       return {
         key: `propose-${speech.missionIndex}-${speech.attempt}`,
-        label: `第 ${round} 轮 · 第 ${speech.attempt + 1} 次组队`,
+        label: msg.feed.groupProposal(round, speech.attempt + 1),
       };
 
     case "REVIEW_DISCUSSION":
-      return { key: `review-${speech.missionIndex}`, label: `第 ${round} 轮 · 复盘` };
+      return { key: `review-${speech.missionIndex}`, label: msg.feed.groupReview(round) };
 
     case "ASSASSINATION":
-      return { key: "assassination", label: "刺杀" };
+      return { key: "assassination", label: msg.feed.groupAssassination };
 
     default:
       // 其余阶段不产生发言。真出现了也别丢，按阶段名单独成组
@@ -75,20 +76,20 @@ function kindOf(phase: Phase): SpeechKind {
   return "speech";
 }
 
-export function describeFeed(view: PlayerView): FeedEntry[] {
+export function describeFeed(view: PlayerView, msg: Messages): FeedEntry[] {
   const nameOf = new Map(view.players.map((p) => [p.id, p.name]));
   let lastGroup: string | null = null;
 
   // speeches 只被追加，seq 就是下标顺序，不需要再排一次
   return view.speeches.map((speech) => {
-    const group = groupOf(speech);
+    const group = groupOf(speech, msg);
     const isNewGroup = group.key !== lastGroup;
     lastGroup = group.key;
 
     return {
       seq: speech.seq,
       playerId: speech.playerId,
-      name: nameOf.get(speech.playerId) ?? `${speech.playerId} 号`,
+      name: nameOf.get(speech.playerId) ?? msg.seat.short(speech.playerId),
       isSelf: speech.playerId === view.selfId,
       content: speech.content,
       isSilent: speech.content.trim().length === 0,

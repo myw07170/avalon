@@ -4,16 +4,27 @@
  * 【类型层面的防泄漏】本文件的函数签名只接受 AiDecisionRequest，永远不接受 GameState。
  * 谁想加一个 state 参数进来，就是在拆信息隔离，不要同意。
  *
- * 依赖方向上也够不到：本文件只 import types.ts 的类型与 ROLE_META、config.ts 的公开表，
- * 不 import view.ts / legal.ts / reduce.ts。
+ * `AiDecisionRequest.locale` **不是那道防线上的裂缝**：它是一个二值标量，
+ * 不携带任何对局信息。加它是为了让 buildPrompt 知道该查哪一份语料，
+ * 而不是为了让它多看见什么。
  *
- * 【分节结构不是排版】prompt.test.ts 按 `【】` 把结果切成段，断言
- * 【当前局势】【历史】【你的人设】【输出格式】四段里不出现任何角色名——
- * 泄漏一旦发生，几乎必然出现在【历史】里（把任务票的投票人渲染出来是最典型的一种）。
- * 加新段落时想清楚它属于哪一类，别把身份信息塞进本该干净的段。
+ * 依赖方向上也够不到：本文件只 import types.ts 的类型与 ROLE_META、config.ts 的公开表、
+ * i18n/roles.ts 的角色名、以及 prompt-copy 的语料，不 import view.ts / legal.ts / reduce.ts。
+ *
+ * 【这个文件里一条字面量都没有】全部措辞在 `prompt-copy.zh.ts` / `prompt-copy.en.ts`。
+ * 那两份各自带着几百行注释，记着每句话是哪一局跑出来的——**改措辞去那边改，
+ * 别在这里拼字符串**，不然下一个人就找不到那些出处了。
+ *
+ * 【分节结构不是排版】prompt.test.ts 按段头把结果切成段（中文是 `【】`，英文是
+ * markdown 标题），断言【当前局势】【历史】【你的人设】【输出格式】四段里不出现
+ * 任何角色名——泄漏一旦发生，几乎必然出现在【历史】里（把任务票的投票人渲染出来
+ * 是最典型的一种）。加新段落时想清楚它属于哪一类，别把身份信息塞进本该干净的段。
+ * 段名现在是 `SectionKey`，测试从语料表里取，所以改段名不会让某段静默掉出扫描。
  */
+import { ROLE_TEXT, type RoleText } from "@/i18n/roles";
 import { ROLE_ORDER, countEvil } from "../game/config";
 import { buildPerspective } from "./perspective";
+import { PROMPT_COPY, type PromptCopy, type SectionKey } from "./prompt-copy";
 import {
   EngineError,
   ROLE_META,
@@ -22,7 +33,6 @@ import {
   type GameAction,
   type Knowledge,
   type Persona,
-  type Phase,
   type PlayerId,
   type PlayerView,
   type PublicMissionRecord,
@@ -33,105 +43,31 @@ import {
 
 type AnyRequest = AiDecisionRequest<AiDecisionKind>;
 
-// ---------------------------------------------------------------------------
-// 文案表
-// ---------------------------------------------------------------------------
-
-const PHASE_LABEL: Record<Phase, string> = {
-  SETUP: "准备中",
-  ROLE_REVEAL: "查看身份",
-  TEAM_BUILDING: "队长组队",
-  PROPOSAL_DISCUSSION: "提议讨论",
-  TEAM_VOTE: "组队投票",
-  MISSION_EXECUTION: "执行任务",
-  MISSION_RESULT: "任务结算",
-  REVIEW_DISCUSSION: "复盘讨论",
-  ASSASSINATION: "刺杀",
-  GAME_OVER: "终局",
-};
-
 /**
- * 角色专属的策略提醒。
+ * 一次 buildPrompt 里到处要传的两张表。
  *
- * 写成一张表而不是散在各分支，理由与 legal.ts 的 PHASE_ACTIONS 同源。
- * 这些**全是策略约束，不是规则**——引擎不会阻止梅林报出坏人名单，那是策略失误不是非法操作
- * （rules.md §6）。所以它们只能待在 prompt 里。
+ * 【打成一个包而不是两个参数】每个 section 函数都要它俩，分开传等于每处多写一个形参，
+ * 而它们的生命周期完全一致：同一次调用、同一种语言。
  */
-const ROLE_HINTS: Record<Role, string> = {
-  MERLIN:
-    "你知道谁是坏人，但绝不能把名单说得太明——刺客全程在找你，你说得越准，死得越快。用暗示和引导让好人自己得出结论，必要时故意留一点模糊。",
-  PERCIVAL:
-    "你看到的两个人里只有一个是梅林，另一个是莫甘娜在冒充。别急着替其中一个背书，先看这两人的判断准不准。",
-  LOYAL_SERVANT:
-    "你的价值在于抓矛盾：谁的发言和投票对不上，谁在任务失败后急着撇清。别怕站错——沉默的好人对好人方没有任何帮助。",
-  MORGANA: "派西维尔分不清你和梅林。你可以装作自己掌握着信息，去骗取他的信任。",
-  ASSASSIN:
-    "终局若好人集齐 3 分，你要指认梅林。全程留意谁的判断准得反常、谁在不该有把握的时候有把握，那多半就是他。",
-  MORDRED: "梅林看不到你，这是你最大的优势——你可以放心地把自己表现成一个好人。",
-  OBERON:
-    "你不认识任何队友，队友也不认识你。你投失败票时很可能误伤同伴，而梅林看得到你，行事要更谨慎。",
-  MINION: "你没有特殊能力，你的价值在于配合队友把水搅浑、把好人的判断带偏。",
-};
+interface Copy {
+  c: PromptCopy;
+  roles: Record<Role, RoleText>;
+}
 
-/**
- * 发言长度要求。
- *
- * 刻意写**句子数**而不是字数：中文模型对字数的感知很差，卡"80-150 字"实际会给出 60 或 200，
- * 而这类非致命违规会把 fallback 率推高，污染"fallback 超过 5% 说明 prompt 或 schema 有问题"
- * 这条判据。schema.ts 也只卡非空、不卡长度。参考项目 wolfcha 同样不设字数，
- * 它在人设生成里甚至明令"不要写数字字数区间"。
- */
-const SPEECH_LENGTH =
-  "通常 2-5 句；被追问或只想表个态时，一句话也可以。不必覆盖所有人，也不必显得完美，只说你此刻会在桌上说的话。";
-
-/**
- * 公开发言的共同约束。SPEECH 与 TEAM_PROPOSAL 的 statement 共用一份。
- *
- * 【为什么要显式写"不要自曝"】首次真实对局里，刺客在公开发言里说"作为刺客，我会观察……"，
- * 梅林说"作为梅林，我会密切关注……"（gpt-5-nano，seed 94938）。
- * `PlayerView` 给的信息完全正确，是 prompt 没说清楚这段话谁能看见——
- * 模型把【你的身份】当成了可以复述的上下文。这是**策略约束不是规则**，引擎不会拦
- * （rules.md §6），所以只能在这里说。
- *
- * 【但不能写成"不许撒谎"】莫甘娜冒充梅林去骗派西维尔是这个游戏的核心玩法之一。
- * 禁的是"说出自己的真实角色"，不是"编造身份"——这两条差一个字，效果差一整局。
- *
- * 【后三条抄自参考项目 wolfcha 的「底线规则」】各自解决一个我们真跑出来的毛病：
- * - 禁场外话术：首两局里几乎每条发言都是"里程碑/时间线/分工/可验证的进度"这种周会黑话。
- *   模型不知道自己在牌桌上，就会退回它最熟的那套语域。反例词直接用我们踩到的那几个。
- * - 禁编造：模型会顺口引用一句根本没人说过的话、一次没发生过的投票，而别人无从核对。
- * - 立场连贯：同一个人上一轮咬定 3 号、下一轮改口却不给理由，整局推理就没法积累。
- *   注意 wolfcha 的写法是"改变判断必须基于新出现的信息"——**不是禁止改口**，
- *   禁止改口会毁掉真实对局：拿到新信息就该改。
- */
-const PUBLIC_SPEECH_RULES = [
-  "这段话**所有人都看得见**，包括对面阵营的人。",
-  "不要说出自己的真实角色，也不要说明你是怎么拿到这些信息的——说了这局就没得玩了。",
-  // 抽象规则对弱模型不够用：第二局仍然出现了"作为梅林，我更关注……"。
-  // 直接给反例比再讲一遍道理管用。谈论别人的身份是正常推理，禁的只是给自己贴标签
-  "**别用「作为梅林……」「我是刺客……」这种开头给自己贴标签**；谈论别人的身份则完全没问题。",
-  "暗示、试探、含糊其辞、甚至冒充别的身份都可以（这本来就是玩法），但不能自曝。",
-  "只写你自己要说的那段话：不要复述规则，也不要替别的座位编台词。",
-  "**严禁场外话术**：不许用职业类比、行业术语、项目管理黑话。" +
-    "别说「里程碑」「分工」「时间线」「可验证的进度」这种词——这是牌桌，不是周会。",
-  "**严禁编造**：只能引用本局真实发生过的发言、投票和任务结果。没发生过的事一个字都不许编。",
-  "**立场要连贯**：你说的话得和自己之前的发言、投票对得上。" +
-    "改主意可以，但必须是因为出现了新信息，并说清楚是哪一条。",
-].join("\n");
+const copyOf = (req: AnyRequest): Copy => ({
+  c: PROMPT_COPY[req.locale],
+  roles: ROLE_TEXT[req.locale],
+});
 
 // ---------------------------------------------------------------------------
 // 小工具
 // ---------------------------------------------------------------------------
 
-const section = (title: string, body: string): string => `【${title}】\n${body}`;
+const section = ({ c }: Copy, key: SectionKey, body: string): string =>
+  `${c.header(c.titles[key])}\n${body}`;
 
-const seat = (id: PlayerId): string => `座位 ${id}`;
-
-/** "座位 0、1、2"。前缀只写一次——十个座位各带一次"座位"既啰嗦又烧 token */
-const seatList = (ids: readonly PlayerId[]): string =>
-  ids.length === 0 ? "无" : `座位 ${ids.join("、")}`;
-
-const nth = (missionIndex: number): string => `第 ${missionIndex + 1} 轮`;
+/** 正文里回指另一段。段名分语言，所以不能写死 */
+const refTo = ({ c }: Copy, key: SectionKey): string => c.ref(c.titles[key]);
 
 /** 只保留某一类候选动作。写成显式谓词，不依赖 TS 对 filter 的类型推断 */
 function actionsOfType<T extends GameAction["type"]>(
@@ -147,65 +83,52 @@ function actionsOfType<T extends GameAction["type"]>(
 // 各段
 // ---------------------------------------------------------------------------
 
-function rulesSection(view: PlayerView): string {
-  return section(
-    "游戏",
-    [
-      "你正在玩阿瓦隆——一局隐藏身份的推理游戏，好人与坏人各有阵营目标。",
-      "- 好人方获胜：任务成功 3 次，且终局刺客没有刺中梅林。",
-      "- 坏人方获胜：任务失败 3 次，或终局刺客刺中梅林，或同一轮组队被连续否决 " +
-        `${view.maxRejects} 次。`,
-      "- 每轮流程：队长提名一支队伍 → 全体公开投票 → 上队的人各交一张任务票。",
-      "- 投票规则：同意票**严格多于**半数才通过，平票算否决。否决则换下一位队长重新提名。",
-      "- 任务票只公开失败票的**数量**，绝不公开是谁投的。只有坏人能投失败票——" +
-        "所以一支队伍交出了几张失败票，就说明那车上至少有几个坏人。这笔账全场都算得出来。",
-      // 反过来不成立。少了这句，模型会把成功记录当免罪符——
-      // 这同样是规则层面的事实，不是替谁算好的本局结论
-      "- 但反过来不成立：任务成功**不代表**车上没有坏人，坏人可以故意投成功票来洗白自己。",
-      "- 你只知道自己视角内的信息。你不是旁观解说，也不是裁判。",
-    ].join("\n"),
-  );
+function rulesSection(view: PlayerView, copy: Copy): string {
+  return section(copy, "rules", copy.c.rules(view.maxRejects));
 }
 
-function setupSection(view: PlayerView): string {
+function setupSection(view: PlayerView, copy: Copy): string {
+  const { c, roles } = copy;
   const present = ROLE_ORDER.filter((role) => view.roleComposition[role] > 0);
   // 好人/坏人的人数直接从构成表里数，不去查 TEAM_SPLIT——
   // 查表要处理"人数不在表里"的分支，而那种状态根本走不到这里（配置层已经拦了）。
   // countEvil 与 deduction.ts 共用，不在两处各数一遍
   const evilCount = countEvil(view.roleComposition);
-  const composition = present
-    .map((role) => `${ROLE_META[role].label}×${view.roleComposition[role]}`)
-    .join("、");
+  const composition = present.map((role) =>
+    c.setup.compositionItem(roles[role].label, view.roleComposition[role]),
+  );
   // 【每行都标阵营】原先只有能力描述，通篇没有一句话说"梅林是好人"。
   // 刺客因此缺一个硬锚点：刺杀是在**好人**里找梅林，而他连"梅林属于哪一边"都没被明确告知过。
   // team 字段 ROLE_META 里现成的，不另建映射表
-  const abilities = present.map(
-    (role) =>
-      `- ${ROLE_META[role].label}（${ROLE_META[role].team === "GOOD" ? "好人" : "坏人"}）：` +
-      ROLE_META[role].ability,
+  const abilities = present.map((role) =>
+    c.setup.abilityLine(
+      roles[role].label,
+      ROLE_META[role].team === "GOOD" ? c.good : c.evil,
+      roles[role].ability,
+    ),
   );
-  const missions = view.missionConfigs.map(
-    (mission, index) =>
-      `${nth(index)} ${mission.teamSize} 人` +
-      (mission.failsRequired > 1 ? `（需 ${mission.failsRequired} 张失败票才算失败）` : ""),
+  const missions = view.missionConfigs.map((mission, index) =>
+    c.setup.missionItem(c.nth(index), mission.teamSize, mission.failsRequired),
   );
 
   return section(
-    "本局配置",
+    copy,
+    "setup",
     [
-      `${view.players.length} 人局，其中好人 ${view.players.length - evilCount} 人、坏人 ${evilCount} 人。`,
+      c.setup.split(view.players.length, view.players.length - evilCount, evilCount),
       // 角色构成是开局公开信息（rules.md §3.2），所有人拿到的完全一样
-      `角色构成：${composition}。`,
-      "各角色能力：",
+      c.setup.composition(composition),
+      c.setup.abilitiesTitle,
       ...abilities,
-      `任务规模：${missions.join("；")}。`,
-      `同一轮最多否决 ${view.maxRejects} 次，达到即坏人获胜。`,
+      c.setup.missions(missions),
+      c.setup.rejectLimit(view.maxRejects),
     ].join("\n"),
   );
 }
 
-function identitySection(view: PlayerView): string {
-  const meta = ROLE_META[view.selfRole];
+function identitySection(view: PlayerView, copy: Copy): string {
+  const { c, roles } = copy;
+  const meta = roles[view.selfRole];
   const self = view.players.find((p) => p.id === view.selfId);
   if (!self) {
     // toPlayerView 保证 selfId 一定在 players 里，取不到只可能是有人手搓了一个 view
@@ -214,20 +137,21 @@ function identitySection(view: PlayerView): string {
     });
   }
   const lines = [
-    `你是${seat(view.selfId)}「${self.name}」，角色是${meta.label}，属于${
-      view.selfTeam === "GOOD" ? "好人" : "坏人"
-    }阵营。`,
-    `能力：${meta.ability}`,
-    ROLE_HINTS[view.selfRole],
+    c.identity.line(
+      c.seat(view.selfId),
+      self.name,
+      meta.label,
+      view.selfTeam === "GOOD" ? c.good : c.evil,
+    ),
+    c.identity.ability(meta.ability),
+    c.roleHints[view.selfRole],
     // 角色名就印在上面这几行里，模型最容易顺手把它复述进公开发言，所以在源头标一次
-    "以上这几行只有你自己知道，别人看不到，也不要在公开发言里复述。",
+    c.identity.secret,
   ];
   // 好人不能投失败票是引擎级硬约束（legal.ts 不给这个选项，reduce 里还有第二道保险）。
   // 只在决策那一刻说不够——首次真实对局里好人仍然试了 4 次，所以在身份处再钉一次
-  if (view.selfTeam === "GOOD") {
-    lines.push("你是好人：只要你上队，任务票就只能是成功。好人交不出失败票。");
-  }
-  return section("你的身份", lines.join("\n"));
+  if (view.selfTeam === "GOOD") lines.push(c.identity.goodCannotFail);
+  return section(copy, "identity", lines.join("\n"));
 }
 
 /**
@@ -237,96 +161,128 @@ function identitySection(view: PlayerView): string {
  * 若在这里重排或按"梅林在前"渲染，派西维尔每局都能秒选对——
  * 这是全项目最隐蔽的一处泄漏点，阶段 2 已经踩过一次，prompt 层再钉一次。
  */
-function knowledgeLine(item: Knowledge): string {
-  if (item.kind === "IS_EVIL") return `- ${seat(item.playerId)} 是坏人。`;
+function knowledgeLine(item: Knowledge, { c, roles }: Copy): string {
+  if (item.kind === "IS_EVIL") return c.knowledge.isEvil(c.seat(item.playerId));
   const [a, b] = item.playerIds;
-  return `- ${seat(a)} 和 ${seat(b)} 中，一个是${ROLE_META.MERLIN.label}、一个是${ROLE_META.MORGANA.label}，但你分不清谁是谁。`;
+  return c.knowledge.merlinOrMorgana(
+    c.seat(a),
+    c.seat(b),
+    roles.MERLIN.label,
+    roles.MORGANA.label,
+  );
 }
 
-function knowledgeSection(view: PlayerView): string {
+function knowledgeSection(view: PlayerView, copy: Copy): string {
   if (view.knowledge.length === 0) {
-    return section("你知道的", "你没有任何额外的身份信息，只能靠推理。");
+    return section(copy, "knowledge", copy.c.knowledge.none);
   }
-  return section("你知道的", view.knowledge.map(knowledgeLine).join("\n"));
+  return section(
+    copy,
+    "knowledge",
+    view.knowledge.map((item) => knowledgeLine(item, copy)).join("\n"),
+  );
 }
 
-function personaSection(persona: Persona): string {
+function personaSection(persona: Persona, copy: Copy): string {
+  const { c } = copy;
   const lines = [
-    `名字：${persona.name}`,
-    `性格：${persona.traits.join("、")}`,
-    `说话风格：${persona.speechStyle}`,
+    c.persona.name(persona.name),
+    c.persona.traits(persona.traits),
+    c.persona.speechStyle(persona.speechStyle),
   ];
   // 隐藏画像才是让五个人说出不同话的那部分：形容词不改变模型关注什么，
   // "最先看票型"和"最先看语气"会（见 types.ts 的 PersonaMind）
   if (persona.mind) {
     lines.push(
-      `你看局势时最先注意：${persona.mind.reasoningStyle}`,
-      `你的话多话少：${persona.mind.speechLengthHabit}`,
-      `被点名或被怀疑时，你会：${persona.mind.pressureStyle}`,
-      `你容易在这里犯错：${persona.mind.mistakePattern}（不用刻意去犯，但也别假装自己不会）`,
+      c.persona.reasoningStyle(persona.mind.reasoningStyle),
+      c.persona.speechLengthHabit(persona.mind.speechLengthHabit),
+      c.persona.pressureStyle(persona.mind.pressureStyle),
+      c.persona.mistakePattern(persona.mind.mistakePattern),
     );
   }
-  lines.push("始终按这个人设说话，不要跳出来解释自己在扮演谁。");
-  return section("你的人设", lines.join("\n"));
+  lines.push(c.persona.stayInCharacter);
+  return section(copy, "persona", lines.join("\n"));
 }
 
-function situationSection(view: PlayerView): string {
+function situationSection(view: PlayerView, copy: Copy): string {
+  const { c } = copy;
   const lines = [
-    `当前阶段：${PHASE_LABEL[view.phase]}，${nth(view.missionIndex)}任务（共 ${view.missionConfigs.length} 轮）。`,
-    `比分：好人 ${view.goodScore} : 坏人 ${view.evilScore}（先到 3 分）。`,
+    c.situation.phase(
+      c.phase[view.phase],
+      c.nth(view.missionIndex),
+      view.missionConfigs.length,
+    ),
+    c.situation.score(view.goodScore, view.evilScore),
   ];
   // 刺杀阶段任务已经打完了，再报队长和队伍规模只会让模型分神
   if (view.phase !== "ASSASSINATION") {
     lines.push(
-      `当前队长：${seat(view.currentLeaderId)}。本轮已否决 ${view.rejectCount} 次（上限 ${view.maxRejects}）。`,
-      `本轮任务需要 ${view.currentMission.teamSize} 人上队，` +
-        `${view.currentMission.failsRequired} 张失败票即判失败。`,
+      c.situation.leader(c.seat(view.currentLeaderId), view.rejectCount, view.maxRejects),
+      c.situation.missionShape(
+        view.currentMission.teamSize,
+        view.currentMission.failsRequired,
+      ),
     );
   }
   if (view.proposedTeam) {
-    lines.push(`当前待表决的队伍：${seatList(view.proposedTeam)}。`);
+    lines.push(c.situation.proposedTeam(c.seatList(view.proposedTeam)));
   }
   if (view.speakingOrder.length > 0) {
-    lines.push(`本轮发言顺序：${seatList(view.speakingOrder)}。`);
+    lines.push(c.situation.speakingOrder(c.seatList(view.speakingOrder)));
   }
-  return section("当前局势", lines.join("\n"));
+  return section(copy, "situation", lines.join("\n"));
 }
 
 /** 任务记录只有失败票的数量，没有投票者——rules.md §4.3 的最后一条 */
-function missionLine(record: PublicMissionRecord): string {
-  return (
-    `- ${nth(record.missionIndex)}：${seat(record.leaderId)} 带队，队伍 ${seatList(record.team)}，` +
-    `失败票 ${record.failCount} 张 → ${record.succeeded ? "任务成功" : "任务失败"}`
+function missionLine(record: PublicMissionRecord, { c }: Copy): string {
+  return c.history.missionLine(
+    c.nth(record.missionIndex),
+    c.seat(record.leaderId),
+    c.seatList(record.team),
+    record.failCount,
+    record.succeeded,
   );
 }
 
-function proposalLine(record: PublicProposalRecord): string {
-  const head =
-    `- ${nth(record.missionIndex)}第 ${record.attempt + 1} 次提议：${seat(record.leaderId)} 提名 ` +
-    `${seatList(record.team)}`;
-  if (record.forced) return `${head} → 最后一次机会，强制通过（未投票）`;
+function proposalLine(record: PublicProposalRecord, { c }: Copy): string {
+  const head = c.history.proposalHead(
+    c.nth(record.missionIndex),
+    record.attempt + 1,
+    c.seat(record.leaderId),
+    c.seatList(record.team),
+  );
+  if (record.forced) return c.history.proposalForced(head);
   const ids = Object.keys(record.votes).map(Number);
   const approved = ids.filter((id) => record.votes[id]);
   const rejected = ids.filter((id) => !record.votes[id]);
-  return (
-    `${head} → ${record.approved ? "通过" : "否决"}` +
-    `（同意：${seatList(approved)}；反对：${seatList(rejected)}）`
+  return c.history.proposalResult(
+    head,
+    record.approved,
+    c.seatList(approved),
+    c.seatList(rejected),
   );
 }
 
-function historySection(view: PlayerView): string {
+function historySection(view: PlayerView, copy: Copy): string {
+  const { c } = copy;
   const blocks: string[] = [];
   blocks.push(
     view.missionHistory.length === 0
-      ? "任务结果：暂无"
-      : ["任务结果：", ...view.missionHistory.map(missionLine)].join("\n"),
+      ? c.history.missionsEmpty
+      : [
+          c.history.missionsTitle,
+          ...view.missionHistory.map((record) => missionLine(record, copy)),
+        ].join("\n"),
   );
   blocks.push(
     view.proposalHistory.length === 0
-      ? "组队与投票：暂无"
-      : ["组队与投票：", ...view.proposalHistory.map(proposalLine)].join("\n"),
+      ? c.history.proposalsEmpty
+      : [
+          c.history.proposalsTitle,
+          ...view.proposalHistory.map((record) => proposalLine(record, copy)),
+        ].join("\n"),
   );
-  return section("历史", blocks.join("\n"));
+  return section(copy, "history", blocks.join("\n"));
 }
 
 /**
@@ -338,10 +294,10 @@ function historySection(view: PlayerView): string {
  * 不标的话，一轮里被否决两次的三批发言在【全场发言】里糊成一片，
  * 模型分不清哪句是冲着哪个队伍说的。
  */
-function attemptLabel(speech: Speech): string {
+function attemptLabel(speech: Speech, { c }: Copy): string {
   const numbered =
     speech.phase === "TEAM_BUILDING" || speech.phase === "PROPOSAL_DISCUSSION";
-  return numbered ? `第 ${speech.attempt + 1} 次提议 ` : "";
+  return numbered ? c.speeches.attempt(speech.attempt + 1) : "";
 }
 
 /**
@@ -355,22 +311,28 @@ function attemptLabel(speech: Speech): string {
  * 【刺杀阶段不渲染轮次】任务已经打完了，"第 3 轮 刺杀"只会让模型分神——
  * 与 situationSection 里"刺杀阶段不报队长和队伍规模"是同一条口径。
  */
-function speechLine(speech: Speech, selfId: PlayerId): string {
-  const round = speech.phase === "ASSASSINATION" ? "" : nth(speech.missionIndex);
-  const who = speech.playerId === selfId ? `${seat(speech.playerId)}（你）` : seat(speech.playerId);
-  return (
-    `- ${round}${attemptLabel(speech)}${PHASE_LABEL[speech.phase]} ` +
-    `${who}：${speech.content}`
+function speechLine(speech: Speech, selfId: PlayerId, copy: Copy): string {
+  const { c } = copy;
+  const round = speech.phase === "ASSASSINATION" ? "" : c.nth(speech.missionIndex);
+  const seatText = c.seat(speech.playerId);
+  const who = speech.playerId === selfId ? c.selfMark(seatText) : seatText;
+  return c.speeches.line(
+    round,
+    attemptLabel(speech, copy),
+    c.phase[speech.phase],
+    who,
+    speech.content,
   );
 }
 
-function speechSection(view: PlayerView): string {
+function speechSection(view: PlayerView, copy: Copy): string {
   if (view.speeches.length === 0) {
-    return section("全场发言", "暂无发言。");
+    return section(copy, "speeches", copy.c.speeches.empty);
   }
   return section(
-    "全场发言",
-    view.speeches.map((speech) => speechLine(speech, view.selfId)).join("\n"),
+    copy,
+    "speeches",
+    view.speeches.map((speech) => speechLine(speech, view.selfId, copy)).join("\n"),
   );
 }
 
@@ -385,12 +347,14 @@ function speechSection(view: PlayerView): string {
  * （理由见那个文件的头注释：我们和 wolfcha 各自踩过一次同样的坑）。
  * 没有任何角度可给时整段不渲染，不写"暂无"占位——空段落只会稀释注意力。
  */
-function perspectiveSection(view: PlayerView): string | null {
-  const hints = buildPerspective(view);
+function perspectiveSection(view: PlayerView, copy: Copy): string | null {
+  const { c } = copy;
+  const hints = buildPerspective(view, c);
   if (hints.length === 0) return null;
   return section(
-    "你的视角",
-    ["以下都是你身上发生过的事，别人不一定会替你提：", ...hints.map((h) => `- ${h}`)].join("\n"),
+    copy,
+    "perspective",
+    [c.perspective.lead, ...hints.map((hint) => c.perspective.item(hint))].join("\n"),
   );
 }
 
@@ -406,23 +370,23 @@ function perspectiveSection(view: PlayerView): string | null {
  * 【提议讨论里位次天然从 2 起】speakingOrder[0] 是队长，而他那一次已经被选人说明占掉了
  * （phases/transitions.ts）。所以这里照实渲染就对了：已发言列表里本来就该有队长。
  */
-function speakOrderLines(view: PlayerView): string[] {
+function speakOrderLines(view: PlayerView, { c }: Copy): string[] {
   const { speakingOrder, progress } = view;
   if (speakingOrder.length === 0) return [];
 
   const spoken = speakingOrder.slice(0, progress.submitted);
   const pending = speakingOrder.slice(progress.submitted + 1);
-  const lines = [`你是第 ${progress.submitted + 1}/${progress.required} 个发言。`];
+  const lines = [
+    c.decision.speakOrder.position(progress.submitted + 1, progress.required),
+  ];
 
   if (spoken.length === 0) {
-    lines.push("你是第一个开口的人，前面没有任何发言可以引用——别说「前面几位提到」。");
+    lines.push(c.decision.speakOrder.first);
   } else {
-    lines.push(`已发言：${seatList(spoken)}；还没发言：${seatList(pending)}。`);
+    lines.push(c.decision.speakOrder.spoken(c.seatList(spoken), c.seatList(pending)));
   }
   if (pending.length === 0 && spoken.length > 0) {
-    lines.push(
-      "你是最后一个，所有人都已经说完了——别说「等座位 X 发言」或「看座位 X 怎么说」。",
-    );
+    lines.push(c.decision.speakOrder.last);
   }
   return lines;
 }
@@ -432,19 +396,11 @@ function speakOrderLines(view: PlayerView): string[] {
 //
 // 两局真实对局走到刺杀，两局的刺客都刺了**自己的队友**，白送掉已经到手的胜局。
 // 引擎侧的主因（推测发言进不了视角）在 phases/assassination.ts 修掉了；
-// 下面这几段补的是 prompt 侧：模型知道"座位 X 是坏人"，却没人告诉它
-// "所以 X 不可能是梅林"。知识在【你知道的】段，决策在几百字之外，中间隔着几十条发言——
+// 语料侧补的那两句（merlinIsGood / whatMerlinLooksLike）在 prompt-copy 里：
+// 模型知道"座位 X 是坏人"，却没人告诉它"所以 X 不可能是梅林"。
+// 知识在【你知道的】段，决策在几百字之外，中间隔着几十条发言——
 // 与当初"好人试图打失败票"完全同型，解法也照搬：**在模型最后读到的地方再钉一次**。
 // ---------------------------------------------------------------------------
-
-const MERLIN_IS_GOOD =
-  "梅林是**好人阵营**的角色。你已经确认是坏人的那些人，还有你自己，都不可能是梅林。";
-
-/** 刺杀要找的是什么人。用户的原话：不是找坏人，是在好人里找那个"有视角"的 */
-const WHAT_MERLIN_LOOKS_LIKE =
-  "回顾全场，在**好人**里找那个像是「什么都看得见」的人：" +
-  "判断准得反常、在不该有把握的时候有把握、" +
-  "一直悄悄把队伍从某些人身边引开却说不出过硬的理由。";
 
 /**
  * 已知坏人 + 自己，从 **view.knowledge** 推出来。
@@ -459,22 +415,28 @@ function knownEvilSeats(view: PlayerView): PlayerId[] {
 }
 
 /** 推测阶段用：一句话说清哪些人不用再猜了 */
-function excludedLine(view: PlayerView): string {
+function excludedLine(view: PlayerView, { c, roles }: Copy): string {
   const evil = knownEvilSeats(view);
-  const own = `${seat(view.selfId)}（你自己）`;
+  const own = c.decision.opinion.ownSeat(c.seat(view.selfId));
   return evil.length === 0
-    ? `所以别把票投给自己：${own} 不可能是梅林。`
-    : `所以不用再猜这些人：${seatList(evil)}（你已知的坏人）、${own}。`;
+    ? c.decision.opinion.excludedSelfOnly(own, roles.MERLIN.label)
+    : c.decision.opinion.excluded(c.seatList(evil), own);
 }
 
 /** 刺杀阶段用：目标逐行列出并就地标注，删减一个都不行 */
-function annotatedTargets(view: PlayerView, targets: readonly PlayerId[]): string {
+function annotatedTargets(
+  view: PlayerView,
+  targets: readonly PlayerId[],
+  { c, roles }: Copy,
+): string {
   const evil = new Set(knownEvilSeats(view));
+  const merlin = roles.MERLIN.label;
   return targets
     .map((id) => {
-      if (id === view.selfId) return `- ${seat(id)}（你自己，不可能是梅林）`;
-      if (evil.has(id)) return `- ${seat(id)}（你已知的坏人，不可能是梅林）`;
-      return `- ${seat(id)}`;
+      const seatText = c.seat(id);
+      if (id === view.selfId) return c.decision.assassination.targetSelf(seatText, merlin);
+      if (evil.has(id)) return c.decision.assassination.targetKnownEvil(seatText, merlin);
+      return c.decision.assassination.targetPlain(seatText);
     })
     .join("\n");
 }
@@ -485,101 +447,96 @@ function annotatedTargets(view: PlayerView, targets: readonly PlayerId[]): strin
  * 最要紧的是任务票那一条：好人的候选列表里根本没有"失败"，
  * prompt 就不该提它的存在——提了等于教模型去试一个必然被引擎拒绝的动作。
  */
-function decisionSection(req: AnyRequest): string {
+function decisionSection(req: AnyRequest, copy: Copy): string {
+  const { c, roles } = copy;
   const { view, legalActions } = req;
+  const d = c.decision;
 
   switch (req.kind) {
     case "TEAM_PROPOSAL":
       return section(
-        "本次决策",
+        copy,
+        "decision",
         [
-          `轮到你当队长组队。请从全体玩家中选出**恰好 ${view.currentMission.teamSize} 人**执行${nth(view.missionIndex)}任务。`,
-          `可选座位：${seatList(view.players.map((p) => p.id))}（可以选你自己，也可以不选）。`,
-          "队伍里不能有重复座位。",
-          "组队前先回顾【历史】里每一轮的结果，以及每支队伍上过谁——" +
-            "哪些人一起上过出失败票的车，是你现在唯一的硬证据。",
-          `同时给出一段公开的选人说明（statement），${SPEECH_LENGTH}`,
-          "**这段说明就是你在本次提议讨论里的发言**，会立刻公开给所有人；" +
-            "讨论阶段不会再轮到你，所以想说的话现在一次说完。",
-          PUBLIC_SPEECH_RULES,
+          d.team.lead(view.currentMission.teamSize, c.nth(view.missionIndex)),
+          d.team.candidates(c.seatList(view.players.map((p) => p.id))),
+          d.team.noDuplicate,
+          d.team.reviewHistory(refTo(copy, "history")),
+          d.team.statement(c.speechLength),
+          d.team.statementIsSpeech,
+          c.publicSpeechRules,
         ].join("\n"),
       );
 
     case "SPEECH":
       return section(
-        "本次决策",
+        copy,
+        "decision",
         [
-          view.phase === "PROPOSAL_DISCUSSION"
-            ? "现在是提议讨论，轮到你发言。队伍已经报出来了，投票还没开始——你的发言会影响别人怎么投。" +
-              "**你从任务结果里看出了什么，得自己说出来**——别人不会自动知道你的推理。"
-            : "现在是复盘讨论，轮到你发言。任务结果已经公布，指认、辩解、拉票都可以。",
-          ...speakOrderLines(view),
-          `发言要求：${SPEECH_LENGTH}`,
-          "你可以坦诚、含糊、试探、反驳、带节奏、保护别人，或者暂时保留判断。",
-          PUBLIC_SPEECH_RULES,
+          view.phase === "PROPOSAL_DISCUSSION" ? d.speech.proposal : d.speech.review,
+          ...speakOrderLines(view, copy),
+          d.speech.requirement(c.speechLength),
+          d.speech.freedom,
+          c.publicSpeechRules,
         ].join("\n"),
       );
 
     case "VOTE": {
       const options = actionsOfType(legalActions, "CAST_VOTE").map((action) =>
-        action.approve ? "同意（approve = true）" : "反对（approve = false）",
+        action.approve ? d.vote.approve : d.vote.reject,
       );
       return section(
-        "本次决策",
+        copy,
+        "decision",
         [
-          `对当前队伍 ${seatList(view.proposedTeam ?? [])} 投票。全场同时公开，你看不到别人先投了什么。`,
-          "投票前先回顾【历史】：这支队伍里有没有人上过出失败票的车？" +
-            "几张失败票、同车的还有谁，都要自己算一遍。",
-          `可选：${options.join(" / ")}`,
-          "记住：同意票严格多于半数才通过，平票算否决；否决数达到上限坏人直接获胜。",
+          d.vote.lead(c.seatList(view.proposedTeam ?? [])),
+          d.vote.reviewHistory(refTo(copy, "history")),
+          d.vote.options(options),
+          d.vote.rule,
         ].join("\n"),
       );
     }
 
     case "MISSION_CARD": {
       const options = actionsOfType(legalActions, "CAST_MISSION_CARD").map((action) =>
-        action.success ? "成功（success = true）" : "失败（success = false）",
+        action.success ? d.mission.success : d.mission.fail,
       );
-      const lines = [
-        "你在本次任务队伍里，请交一张任务票。只公开失败票的数量，不公开是谁投的。",
-        `可选：${options.join(" / ")}`,
-      ];
+      const lines = [d.mission.lead, d.mission.options(options)];
       // 好人只有一个选项。说明白"这是你唯一的选项"，比让模型自己发现要省一次无效尝试。
       // 首次真实对局里好人仍然试了 4 次失败票，所以这里连"填了会怎样"一起写死
       if (options.length === 1) {
-        lines.push(
-          "这是你唯一的合法选项：**success 必须填 true**。",
-          "填 false 是非法动作，引擎会直接拒绝，你并不能靠它破坏任务。",
-        );
+        lines.push(d.mission.onlyOption, d.mission.cannotFail);
       }
-      return section("本次决策", lines.join("\n"));
+      return section(copy, "decision", lines.join("\n"));
     }
 
     case "ASSASSIN_OPINION":
       return section(
-        "本次决策",
+        copy,
+        "decision",
         [
-          "好人已经集齐 3 分，进入刺杀环节。刺客动手之前，每个坏人各公开发表一次推测。",
-          "说出你认为谁是梅林，以及你的依据。",
-          MERLIN_IS_GOOD,
-          excludedLine(view),
-          WHAT_MERLIN_LOOKS_LIKE,
-          `发言要求：${SPEECH_LENGTH}`,
+          d.opinion.lead,
+          d.opinion.ask(roles.MERLIN.label),
+          c.merlinIsGood(roles.MERLIN.label),
+          excludedLine(view, copy),
+          c.whatMerlinLooksLike,
+          d.speech.requirement(c.speechLength),
         ].join("\n"),
       );
 
     case "ASSASSINATION": {
       const targets = actionsOfType(legalActions, "ASSASSINATE").map((a) => a.targetId);
       return section(
-        "本次决策",
+        copy,
+        "decision",
         [
-          "你是刺客，这是最后一击：指认一名玩家为梅林。命中则坏人翻盘，落空则好人获胜。",
-          MERLIN_IS_GOOD,
+          d.assassination.lead(roles.MERLIN.label),
+          c.merlinIsGood(roles.MERLIN.label),
           // 目标逐个列全并就地标注，**不做删减**：legalActions 是合法性的唯一权威
           // （与本文件"合法选项一律从 legalActions 渲染"同源）。规则允许刺任何人，
           // 刺错是策略失误不是非法操作，引擎不该替刺客把队友摘掉
-          `可选目标：\n${annotatedTargets(view, targets)}`,
-          WHAT_MERLIN_LOOKS_LIKE,
+          d.assassination.targets(annotatedTargets(view, targets, copy)),
+          c.whatMerlinLooksLike,
         ].join("\n"),
       );
     }
@@ -590,41 +547,10 @@ function decisionSection(req: AnyRequest): string {
 // 输出格式
 // ---------------------------------------------------------------------------
 
-/**
- * 每个 kind 一份紧凑示例。
- *
- * 刻意不用 z.toJSONSchema：JSON Schema 又长又费 token，对模型的可读性反而更差。
- * 防止示例与 schema.ts 分叉靠测试——prompt.test.ts 会把这里的示例抠出来，
- * 用 AI_SCHEMAS[kind] parse 一遍，分叉当场炸。
- *
- * reasoning 是给模型自己想的，不会公开给其他玩家；content / statement 会公开。
- */
-const OUTPUT_EXAMPLES: Record<AiDecisionKind, string> = {
-  TEAM_PROPOSAL:
-    '{"reasoning":"内心分析，其他玩家看不到","team":[0,2,3],"statement":"公开的选人说明"}',
-  SPEECH:
-    '{"reasoning":"内心分析，其他玩家看不到","content":"你要公开说出来的话","suspicions":[{"playerId":1,"score":0.8}]}',
-  VOTE: '{"reasoning":"内心分析，其他玩家看不到","approve":true}',
-  MISSION_CARD: '{"reasoning":"内心分析，其他玩家看不到","success":true}',
-  ASSASSIN_OPINION:
-    '{"reasoning":"内心分析，其他玩家看不到","content":"你要公开说出来的话","suspicions":[{"playerId":1,"score":0.8}]}',
-  ASSASSINATION: '{"reasoning":"内心分析，其他玩家看不到","targetId":2}',
-};
-
-/**
- * reasoning 是每个 kind 都要的字段，却一直没有任何长度约束——
- * 一局 60-116 次调用，每次都在为一段没人读的长篇内心分析付时间。
- *
- * **用句子数不用字数**，与【发言长度】那条同源（rules.md §6：中文模型对字数感知很差，
- * 卡字数只会推高 fallback 率）。prompt.test.ts 有一条断言钉着"整个 prompt 不出现字数区间"。
- */
-const REASONING_LENGTH = "reasoning 一句话就够——它只进复盘面板，不公开给任何人。";
-
-function outputSection(req: AnyRequest): string {
+function outputSection(req: AnyRequest, copy: Copy): string {
+  const { c } = copy;
   const extra =
-    req.kind === "SPEECH" || req.kind === "ASSASSIN_OPINION"
-      ? "\nsuspicions 可以省略；给的话 score 用 0 到 1 表示怀疑程度。"
-      : "";
+    req.kind === "SPEECH" || req.kind === "ASSASSIN_OPINION" ? c.output.suspicions : "";
 
   /**
    * 只有一个合法值的字段，在**最后读到的这一段**再钉一次。
@@ -632,9 +558,12 @@ function outputSection(req: AnyRequest): string {
    * 值从 legalActions 里取，不写死 true：这样"好人只能出成功"这条规则仍然只由
    * legal.ts 说了算，prompt 只是把它复述出来（与本文件"合法选项一律从 legalActions 渲染"同源）。
    */
-  const cards = req.kind === "MISSION_CARD" ? actionsOfType(req.legalActions, "CAST_MISSION_CARD") : [];
+  const cards =
+    req.kind === "MISSION_CARD"
+      ? actionsOfType(req.legalActions, "CAST_MISSION_CARD")
+      : [];
   const only = cards.length === 1 ? cards[0] : undefined;
-  const forced = only ? `\nsuccess 只能填 ${only.success}，没有第二个选择。` : "";
+  const forced = only ? c.output.forcedSuccess(only.success) : "";
 
   /**
    * 刺杀的排除项在这里再钉一次，理由与上面那条完全相同——
@@ -649,14 +578,12 @@ function outputSection(req: AnyRequest): string {
   // 【这句话里不能出现角色名】"不在干净段里泄漏身份"那条测试把【输出格式】划进了干净段，
   // 写"不可能是梅林"会当场炸 8 条。那条断言钝得有道理——**它不该为一句措辞让路**，
   // 而这里不提角色名一样说得清楚
-  const noSelfHit =
-    banned.length > 0
-      ? `\ntargetId 不要填 ${seatList(banned)}——他们是你已知的坏人，或者就是你自己。`
-      : "";
+  const noSelfHit = banned.length > 0 ? c.output.bannedTargets(c.seatList(banned)) : "";
 
   return section(
-    "输出格式",
-    `只输出一个 JSON 对象，不要写任何解释文字，不要用 markdown 代码块。格式：\n${OUTPUT_EXAMPLES[req.kind]}\n${REASONING_LENGTH}${extra}${forced}${noSelfHit}`,
+    copy,
+    "output",
+    `${c.output.lead(c.outputExamples[req.kind])}\n${c.reasoningLength}${extra}${forced}${noSelfHit}`,
   );
 }
 
@@ -670,22 +597,27 @@ function outputSection(req: AnyRequest): string {
  *
  * 不做历史截断。5 人局满打满算 50 条发言，撑不爆上下文；真爆了应该看得见，
  * 而不是被一个 .slice(-20) 悄悄藏住（"不写容错"）。prompt.test.ts 有一条长度上界盯着。
+ *
+ * 【语言只在这一行查一次表】下面每个 section 函数都收同一个 copy，
+ * 内部**一个 `if (locale === ...)` 都没有**——两种语言走的是同一条代码路径，
+ * 只是查了不同的表。哪天英文那份出了问题，问题只会在 prompt-copy.en.ts 里。
  */
 export function buildPrompt<K extends AiDecisionKind>(req: AiDecisionRequest<K>): string {
+  const copy = copyOf(req);
   const { view } = req;
   return [
-    rulesSection(view),
-    setupSection(view),
-    identitySection(view),
-    knowledgeSection(view),
-    personaSection(req.persona),
-    situationSection(view),
-    historySection(view),
-    speechSection(view),
+    rulesSection(view, copy),
+    setupSection(view, copy),
+    identitySection(view, copy),
+    knowledgeSection(view, copy),
+    personaSection(req.persona, copy),
+    situationSection(view, copy),
+    historySection(view, copy),
+    speechSection(view, copy),
     // 没有角度可给时整段消失，所以这里要过滤掉 null
-    perspectiveSection(view),
-    decisionSection(req),
-    outputSection(req),
+    perspectiveSection(view, copy),
+    decisionSection(req, copy),
+    outputSection(req, copy),
   ]
     .filter((part): part is string => part !== null)
     .join("\n\n");

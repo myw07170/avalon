@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { zh } from "@/i18n/messages.zh";
+import { ROLE_TEXT } from "@/i18n/roles";
 import { createMockAiClient } from "@/lib/ai/mock";
 import { runGame, type DecisionRecord } from "@/lib/ai/orchestrator";
 import {
-  ROLE_META,
   ROLE_TEAM,
   createConfig,
   createGame,
@@ -13,7 +14,16 @@ import {
   type PlayerView,
   type WinReason,
 } from "@/lib/game";
-import { describeGameOver } from "./game-over-model";
+import { describeGameOver as describeGameOverRaw } from "./game-over-model";
+
+/*
+ * 【这一行 shim 是刻意的】`describeX` 的第二个参数没有默认值——默认值是静默回退，
+ * 会让某个漏改的调用点在英文模式下安静地渲染中文，而没有任何东西会报错。
+ * 代价就是这里补一行。下面的断言仍然逐字断言中文，那才是真正在验文案。
+ */
+const describeGameOver = (view: PlayerView | null, decisions: readonly DecisionRecord[]) =>
+  describeGameOverRaw(view, decisions, zh);
+
 
 // ---------------------------------------------------------------------------
 // 夹具：跑真实的整局，收终局视角与全部 AI 决策
@@ -118,7 +128,7 @@ describe("刺杀结果", () => {
 
     expect(strike?.hit).toBe(false);
     expect(strike?.targetRoleLabel).not.toBe("梅林");
-    expect(strike?.targetRoleLabel).toBe(ROLE_META[trueRole].label);
+    expect(strike?.targetRoleLabel).toBe(ROLE_TEXT.zh[trueRole].label);
     expect(strike?.merlinLabel).toContain(`${merlinId} 号`);
   });
 

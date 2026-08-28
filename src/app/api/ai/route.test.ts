@@ -121,6 +121,66 @@ describe("正常路径", () => {
   });
 });
 
+/**
+ * 【全项目最容易静默失效的一条链路】`aiDecisionRequestSchema` 是 `z.object`，
+ * 会**剥掉**没声明的键。漏在那里加 locale 的话，服务端拿到的永远是默认值，
+ * 英文模式下每一条 prompt 都是中文——而且不报任何错、状态码 200、结果格式完好。
+ *
+ * 所以这一条不查响应格式，查的是**真正发给模型的那份 prompt 是哪种语言**。
+ * `debug.prompt` 就是它，route 已经原样返回了。
+ */
+describe("locale 穿过 HTTP 边界", () => {
+  const promptOf = async (body: unknown): Promise<string> => {
+    const response = await post(body);
+    expect(response.status).toBe(200);
+    const result = (await response.json()) as { debug: { prompt: string } };
+    return result.debug.prompt;
+  };
+
+  it('locale: "en" 时 buildPrompt 拿到的是英文语料', async () => {
+    configureEnv();
+    stubProvider(VOTE_JSON);
+
+    const prompt = await promptOf({ ...validBody(), locale: "en" });
+
+    // 段头换成了 markdown 标题，正文是英文规则
+    expect(prompt.startsWith("## ")).toBe(true);
+    expect(prompt).toContain("You are playing Avalon");
+    // 中文段头一个都不该剩
+    expect(prompt).not.toContain("【游戏】");
+  });
+
+  it('locale: "zh" 时是中文语料', async () => {
+    configureEnv();
+    stubProvider(VOTE_JSON);
+
+    const prompt = await promptOf({ ...validBody(), locale: "zh" });
+
+    expect(prompt.startsWith("【游戏】")).toBe(true);
+    expect(prompt).not.toContain("You are playing Avalon");
+  });
+
+  it("请求里没有 locale 时回退中文，而不是 400", async () => {
+    // 缓存住的旧页面不带这个字段。为它 400 掉一整局不值得——
+    // 这是**协议边界上的兼容默认**，与"内部代码里 locale 必填"不矛盾
+    configureEnv();
+    stubProvider(VOTE_JSON);
+
+    const prompt = await promptOf(validBody());
+
+    expect(prompt.startsWith("【游戏】")).toBe(true);
+  });
+
+  it("locale 不是认识的值时 400", async () => {
+    configureEnv();
+    stubProvider(VOTE_JSON);
+
+    const response = await post({ ...validBody(), locale: "fr" });
+
+    expect(response.status).toBe(400);
+  });
+});
+
 describe("400：请求体的问题", () => {
   it("不是合法 JSON", async () => {
     configureEnv();

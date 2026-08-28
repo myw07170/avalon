@@ -14,18 +14,15 @@ import { useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { PlayerView } from "@/lib/game";
+import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
 import { myViewAtom, personaNotesAtom, resetGameAtom, runGameAtom } from "@/store/game";
 import { SeatRing } from "./SeatRing";
-import {
-  SEAT_TONE_LABEL,
-  describeRole,
-  type RoleBrief,
-  type SeatTone,
-} from "./role-card-model";
+import { describeRole, type RoleBrief, type SeatTone } from "./role-card-model";
 
 export function RoleCard() {
   const view = useAtomValue(myViewAtom);
+  const msg = useMessages();
   const personaNotes = useAtomValue(personaNotesAtom);
   const startRun = useSetAtom(runGameAtom);
   const reset = useSetAtom(resetGameAtom);
@@ -36,18 +33,18 @@ export function RoleCard() {
     // 观战局在 SetupScreen 就被拦住了，走到这里说明状态不该出现，给句话别崩
     return (
       <Screen>
-        <p className="text-sm text-muted">这一局没有你的座位，观战界面要等阶段 6。</p>
-        <SecondaryButton onClick={() => reset()}>重开</SecondaryButton>
+        <p className="text-sm text-muted">{msg.role.noSeat}</p>
+        <SecondaryButton onClick={() => reset()}>{msg.shell.restart}</SecondaryButton>
       </Screen>
     );
   }
 
-  const brief = describeRole(view);
+  const brief = describeRole(view, msg);
 
   return (
     <Screen>
-      <p className="font-display text-xs tracking-[0.3em] text-muted">
-        {view.players.length} 人局 · 你坐 {view.selfId} 号
+      <p className="font-display text-xs tracking-[var(--track-3)] text-muted">
+        {msg.role.seatLine(view.players.length, view.selfId)}
       </p>
 
       {/* 【回退绝不静默】人设生成失败会让一桌 AI 说话雷同，不说清楚的话，
@@ -78,11 +75,11 @@ export function RoleCard() {
               <button
                 type="button"
                 onClick={() => startRun()}
-                className="w-full rounded-lg bg-brass px-6 py-3.5 font-display text-lg tracking-[0.3em] text-ink transition-colors hover:bg-brass/85"
+                className="w-full rounded-lg bg-brass px-6 py-3.5 font-display text-lg tracking-[var(--track-3)] text-ink transition-colors hover:bg-brass/85"
               >
-                <span className="-mr-[0.3em]">记住了，开始</span>
+                <span className="-mr-[var(--track-3)]">{msg.role.start}</span>
               </button>
-              <SecondaryButton onClick={() => reset()}>重开</SecondaryButton>
+              <SecondaryButton onClick={() => reset()}>{msg.shell.restart}</SecondaryButton>
             </div>
           </motion.div>
         )}
@@ -113,6 +110,7 @@ interface FlipCardProps {
  * 只管 CSS 过渡，管不到 framer-motion 这种 JS 驱动的动画。
  */
 function FlipCard({ flipped, reduced, onToggle, brief }: FlipCardProps) {
+  const msg = useMessages();
   const isEvil = brief.team === "EVIL";
 
   return (
@@ -121,7 +119,7 @@ function FlipCard({ flipped, reduced, onToggle, brief }: FlipCardProps) {
         type="button"
         onClick={onToggle}
         aria-pressed={flipped}
-        aria-label={flipped ? "盖回身份牌" : "翻开查看身份"}
+        aria-label={flipped ? msg.role.flipToBack : msg.role.flipToFront}
         className="block w-full rounded-2xl"
       >
         <motion.div
@@ -138,8 +136,8 @@ function FlipCard({ flipped, reduced, onToggle, brief }: FlipCardProps) {
             className="absolute inset-0 grid place-content-center gap-6 rounded-2xl border border-ink-line bg-ink-raised"
           >
             <TableMotif />
-            <p className="font-display text-sm tracking-[0.3em] text-muted">
-              <span className="-mr-[0.3em]">点击查看身份</span>
+            <p className="font-display text-sm tracking-[var(--track-3)] text-muted">
+              <span className="-mr-[var(--track-3)]">{msg.role.tapToReveal}</span>
             </p>
           </div>
 
@@ -153,13 +151,13 @@ function FlipCard({ flipped, reduced, onToggle, brief }: FlipCardProps) {
           >
             <p
               className={cn(
-                "font-display text-xs tracking-[0.3em]",
+                "font-display text-xs tracking-[var(--track-3)]",
                 isEvil ? "text-mordred" : "text-loyal",
               )}
             >
-              <span className="-mr-[0.3em]">{brief.teamLabel}</span>
+              <span className="-mr-[var(--track-3)]">{brief.teamLabel}</span>
             </p>
-            <h2 className="-mr-[0.2em] font-display text-4xl tracking-[0.2em]">
+            <h2 className="-mr-[var(--track-1)] font-display text-4xl tracking-[var(--track-1)]">
               {brief.label}
             </h2>
             <p className="text-sm leading-relaxed text-muted">{brief.ability}</p>
@@ -186,6 +184,7 @@ function TableMotif() {
 // ---------------------------------------------------------------------------
 
 function Knowledge({ view, brief }: { view: PlayerView; brief: RoleBrief }) {
+  const msg = useMessages();
   // 只列这一局真的出现过的 tone：梅林和坏人只会有 evil，派西维尔只会有 unsure，
   // 全列出来会让玩家以为自己漏看了什么
   const present = new Set(brief.marks.map((m) => m.tone));
@@ -193,8 +192,8 @@ function Knowledge({ view, brief }: { view: PlayerView; brief: RoleBrief }) {
 
   return (
     <section className="w-full">
-      <h3 className="mb-4 text-center font-display text-xs tracking-[0.3em] text-muted">
-        你知道的
+      <h3 className="mb-4 text-center font-display text-xs tracking-[var(--track-3)] text-muted">
+        {msg.role.knowledgeTitle}
       </h3>
 
       {brief.hasKnownSeats && (
@@ -202,13 +201,15 @@ function Knowledge({ view, brief }: { view: PlayerView; brief: RoleBrief }) {
           <SeatRing
             count={view.players.length}
             marks={brief.marks}
-            seatLabel={(id, mark) => `${id} 号，${SEAT_TONE_LABEL[mark.tone]}`}
+            seatLabel={(id, mark) =>
+              msg.turn.joinSeatParts([msg.seat.short(id), msg.role.toneLabel[mark.tone]])
+            }
           />
           <ul className="mx-auto mt-4 flex flex-wrap justify-center gap-x-5 gap-y-2">
             {legend.map((item) => (
               <li key={item.tone} className="flex items-center gap-2 text-xs text-muted">
                 <span className={cn("size-3 rounded-full border", item.swatch)} />
-                {item.label}
+                {msg.role.toneLabel[item.tone]}
               </li>
             ))}
           </ul>
@@ -229,12 +230,18 @@ function Knowledge({ view, brief }: { view: PlayerView; brief: RoleBrief }) {
   );
 }
 
-const LEGEND: ReadonlyArray<{ tone: SeatTone; label: string; swatch: string }> = [
-  { tone: "self", label: "你", swatch: "border-brass bg-brass/20" },
-  { tone: "evil", label: "你知道是坏人", swatch: "border-mordred bg-mordred/25" },
+/**
+ * 图例只管"哪一档配哪个色"，文字走 msg.role.toneLabel。
+ *
+ * 【原来这里另有一套短文案】"你知道是坏人" vs 座位上的"你知道他是坏人"——
+ * 同一件事的两份措辞，差一个字，谁也不会记得同步。合成一份。
+ */
+const LEGEND: ReadonlyArray<{ tone: SeatTone; swatch: string }> = [
+  { tone: "self", swatch: "border-brass bg-brass/20" },
+  { tone: "evil", swatch: "border-mordred bg-mordred/25" },
   // 【这一条的两个座位共用同一个样式】派西维尔看到的那一对是引擎刻意抹平过的，
   // 图例上也不能暗示其中一个更像梅林
-  { tone: "unsure", label: "梅林与莫甘娜二者之一", swatch: "border-brass border-dashed" },
+  { tone: "unsure", swatch: "border-brass border-dashed" },
 ];
 
 // ---------------------------------------------------------------------------

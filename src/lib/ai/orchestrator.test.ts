@@ -466,6 +466,7 @@ describe("client 的选择", () => {
       view,
       persona: { name: "P0", traits: [], speechStyle: "" },
       legalActions: [{ type: "CAST_VOTE", playerId: 0, approve: true }],
+      locale: "zh",
       maxRetries: 2,
     });
 

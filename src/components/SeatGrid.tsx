@@ -11,6 +11,7 @@
  * 本文件没有 "use client"：它只被客户端组件渲染，指令由那些文件带。
  */
 import type { PlayerId } from "@/lib/game";
+import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
 import type { SeatChoice } from "./action-panel-model";
 import { SEAT_TONE_CLASS } from "./SeatRing";
@@ -24,6 +25,8 @@ export interface SeatGridProps {
 }
 
 export function SeatGrid({ seats, selected, disabled, onToggle }: SeatGridProps) {
+  const msg = useMessages();
+
   return (
     <ul className="flex flex-wrap gap-2">
       {seats.map((seat) => {
@@ -47,7 +50,7 @@ export function SeatGrid({ seats, selected, disabled, onToggle }: SeatGridProps)
             >
               <span aria-hidden>{seat.id}</span>
               <span aria-hidden className="text-xs opacity-70">
-                {seat.isSelf ? "你" : seat.name}
+                {seat.isSelf ? msg.seat.you : seat.name}
               </span>
             </button>
           </li>

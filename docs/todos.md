@@ -1598,7 +1598,7 @@ wolfcha 的 `components/analysis/` 有 13 个文件，是它投入第二大的�
       已经不快的对局上
       - **`/api/stt` 与 `VoiceRecorder` 不借**：本项目的自由文本输入只有"发言"一处，
         键盘完全够用，语音输入换来的是一整条录音权限 + 上传 + 识别的链路
-- [ ] **i18n**：UI 文案照 wolfcha 的 `src/i18n` 做
+- [x] **i18n**：UI 文案照 wolfcha 的 `src/i18n` 做
       - **但 prompt 不进 i18n，这是一条明确的不照抄。** wolfcha 把 prompt 全放在
         `messages/zh.json` 里，我们不这么做，两个理由：
         1. `prompt.test.ts` 的三份完整快照，价值在于**逼改的人读一遍 diff**（阶段 4 原话）。
@@ -1608,6 +1608,39 @@ wolfcha 的 `components/analysis/` 有 13 个文件，是它投入第二大的�
            每一句背后都有一局真实对局。翻成另一种语言要**重新做实验**，不是找个译者的事
       - 落地口径：UI 文案走 i18n；prompt 若要多语言，走 `prompt.ts` 里独立的一套 +
         独立的快照，且新语言的 fallback 率与自曝率各验一遍
+
+      **已落地（zh / en）：**
+      - `src/i18n/`：手写的类型化目录，不用 next-intl。`en: Messages` 让**漏译是
+        `tsc` 错误**而不是运行期回退成键名；`.ts` 而不是 `.json`，因为
+        `vitest.config.mts` 的 include 只收 `.ts`
+      - **纯客户端切换**：localStorage + 一个 Jotai atom + 右上角按钮。不做 middleware、
+        不做 `/en` 前缀——本项目只有 `/` 一个路由、是单机对局、没有 SEO 需求，
+        wolfcha 那套 `middleware + rewrites + x-pathname header` 在这里买不到任何东西
+      - 默认 zh、不做浏览器探测：SSR 与客户端首帧永远一致。代价是 en 用户刷新后
+        闪一帧中文，这是上面那个决定的直接后果，写在 `locale-atom.ts` 的注释里
+      - `ROLE_META` 拆开：`label` / `ability` 去 `src/i18n/roles.ts`（UI 与 prompt 共用
+        同一份角色名），引擎只留 `{ team, optional }`
+      - **引擎不产出人类语言**：`ConfigIssue` 改成 code + params，`validateHumanAction`
+        改成 `ActionProblem` 判别联合，`errorAtom` 变成派生 atom（项目里没有 Jotai Provider，
+        所以 store 能直接 `get(localeAtom)`，组件层零改动）。`EngineError` / `AiError`
+        的 message 不翻——那是诊断，只进 `console.error`，玩家看到的是按 code 写的一句人话
+      - prompt 语料：`prompt-copy.{zh,en}.ts` 两份平行语料 + `prompt.ts` 零字面量。
+        `locale` 是 `AiDecisionRequest` 的**必填**字段（可选 + `?? "zh"` 就是静默回退），
+        `aiDecisionRequestSchema` 里那个 `z.object` 会静默剥掉未声明的键，
+        `route.test.ts` 有四条专门盯着这条链路
+      - 快照：中文三份**逐字未动**（`git diff` 上是 238 行新增、0 行删除），
+        英文另加三份独立的 `it`——不用 `describe.each`，那会把中文三个快照键全改名，
+        diff 变成删 239 加 480，正好摧毁快照存在的理由
+
+- [ ] **英文语料的验收门槛还没过**（上面那条的最后半句）
+      - `LLM_REAL_GAME_LOCALE=en pnpm vitest run src/lib/ai/real-game.test.ts` 各跑一局，
+        比对两份记录末尾的 **fallback 率（应 < 5%）** 与 **自曝统计（blatant 应≈0）**
+      - 检测器本身已经双语了（`transcript.ts` 的 `SELF_LABEL_PREFIX`，
+        en 支认 `As Merlin` / `I'm the Assassin` / `speaking as Mordred`），
+        `transcript.test.ts` 有三条钉着它——**检测器坏了，英文局会安静地报出 0 条自曝，
+        那个漂亮的假数字比没有数字更糟**
+      - 真跑之前，`prompt-copy.en.ts` 只能算"结构对、约束一条不少"，
+        不能算"在英文里复现了中文那边的每一条实验结论"。直译不保证这一点
 
 ### 6.4 工程与开源卫生
 

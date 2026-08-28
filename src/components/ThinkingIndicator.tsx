@@ -12,26 +12,21 @@
  */
 import { useAtomValue } from "jotai";
 import { useEffect, useState } from "react";
-import { myViewAtom, thinkingAtom, type Thinking } from "@/store/game";
-
-const KIND_LABEL: Record<Thinking["kind"], string> = {
-  TEAM_PROPOSAL: "在挑人",
-  SPEECH: "在想说什么",
-  VOTE: "在决定投票",
-  MISSION_CARD: "在决定这一票",
-  ASSASSIN_OPINION: "在想推测",
-  ASSASSINATION: "在决定刺谁",
-};
+import { useMessages } from "@/i18n/useMessages";
+import { myViewAtom, thinkingAtom } from "@/store/game";
 
 export function ThinkingIndicator() {
   const thinking = useAtomValue(thinkingAtom);
   const view = useAtomValue(myViewAtom);
+  const msg = useMessages();
   const seconds = useElapsedSeconds(thinking?.startedAt ?? null);
 
   if (!thinking) return null;
 
   const player = view?.players.find((p) => p.id === thinking.playerId);
-  const who = player ? `${thinking.playerId} 号（${player.name}）` : `${thinking.playerId} 号`;
+  const who = player
+    ? msg.seat.named(thinking.playerId, player.name)
+    : msg.seat.short(thinking.playerId);
 
   return (
     <p
@@ -40,10 +35,9 @@ export function ThinkingIndicator() {
       className="tabular flex items-center gap-2 text-xs text-muted"
     >
       <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-brass" />
-      {who}
-      {KIND_LABEL[thinking.kind]}…
+      {who} {msg.thinking.kind[thinking.kind]}…
       {/* 秒数只在等了一会儿之后才出现：mock 模式下每次都是 0 秒，闪一下反而像坏了 */}
-      {seconds >= 3 && <span>（{seconds} 秒）</span>}
+      {seconds >= 3 && <span>{msg.thinking.seconds(seconds)}</span>}
     </p>
   );
 }

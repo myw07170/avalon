@@ -9,8 +9,8 @@
  * 玩家会以为自己看到的和 AI 看到的不是一回事。区别只有一处：
  * prompt 给模型看，只写座位号；UI 给人看，配上名字。
  */
+import type { Messages } from "@/i18n/messages";
 import {
-  ROLE_META,
   ROLE_TEAM,
   countEvil,
   type PlayerId,
@@ -31,23 +31,10 @@ export interface SeatMark {
   tone: SeatTone;
 }
 
-/**
- * tone → 一句人话。
- *
- * 【放在 .ts 里而不是组件里】圆桌的图例、窄屏的座位列表两处都要用同一份，
- * 而 vitest 的 include 只收 .ts 后缀的测试——留在 .tsx 里就测不着。
- *
- * 【unsure 那两个座位共用同一句】派西维尔看到的那一对是引擎刻意抹平过的
- * （Knowledge.playerIds 升序存放），文案上给其中一个多一点分量就把答案泄回去了。
+/*
+ * tone → 一句人话的那张表在 `src/i18n/messages.zh.ts` 的 `role.toneLabel`。
+ * 圆桌的图例与窄屏的座位列表两处共用同一份，组件从 useMessages() 取。
  */
-export const SEAT_TONE_LABEL: Record<SeatTone, string> = {
-  plain: "你不知道他的身份",
-  self: "你",
-  evil: "你知道他是坏人",
-  unsure: "梅林与莫甘娜二者之一",
-  // 对局中走不到这一档：good 只在终局复盘里用（见 SeatTone 的注释）
-  good: "好人阵营",
-};
 
 export interface RoleBrief {
   label: string;
@@ -64,12 +51,10 @@ export interface RoleBrief {
   hiddenEvilHint: string | null;
 }
 
-const NO_KNOWLEDGE = "你没有任何额外的身份信息，只能靠推理。";
-
 /** 座位在对局里一律按号称呼，名字只是补充 */
-function seatName(view: PlayerView, id: PlayerId): string {
+function seatName(view: PlayerView, id: PlayerId, msg: Messages): string {
   const player = view.players.find((p) => p.id === id);
-  return player ? `${id} 号（${player.name}）` : `${id} 号`;
+  return player ? msg.seat.named(id, player.name) : msg.seat.short(id);
 }
 
 /**
@@ -81,24 +66,24 @@ function seatName(view: PlayerView, id: PlayerId): string {
  *
  * 新手最容易漏的就是这一步，所以直接写出来。
  */
-function hiddenEvilHintOf(view: PlayerView): string | null {
+function hiddenEvilHintOf(view: PlayerView, msg: Messages): string | null {
   if (view.selfRole !== "MERLIN") return null;
 
   const total = countEvil(view.roleComposition);
   const seen = view.knowledge.length;
   return total > seen
-    ? `本局有 ${total} 个坏人，你只看到 ${seen} 个——莫德雷德在场。`
-    : `本局的 ${total} 个坏人你全看到了，没有莫德雷德。`;
+    ? msg.role.mordredPresent(total, seen)
+    : msg.role.mordredAbsent(total);
 }
 
-export function describeRole(view: PlayerView): RoleBrief {
-  const meta = ROLE_META[view.selfRole];
+export function describeRole(view: PlayerView, msg: Messages): RoleBrief {
+  const meta = msg.roles[view.selfRole];
   const lines: string[] = [];
   const known = new Map<PlayerId, SeatTone>();
 
   for (const item of view.knowledge) {
     if (item.kind === "IS_EVIL") {
-      lines.push(`${seatName(view, item.playerId)}是坏人。`);
+      lines.push(msg.role.isEvilLine(seatName(view, item.playerId, msg)));
       known.set(item.playerId, "evil");
       continue;
     }
@@ -108,9 +93,7 @@ export function describeRole(view: PlayerView): RoleBrief {
     // 所以：同一个 tone，同一条描述，原样输出。
     const [a, b] = item.playerIds;
     lines.push(
-      `${seatName(view, a)}和${seatName(view, b)}中，` +
-        `一个是${ROLE_META.MERLIN.label}、一个是${ROLE_META.MORGANA.label}，` +
-        `但你分不清谁是谁。`,
+      msg.role.merlinOrMorganaLine(seatName(view, a, msg), seatName(view, b, msg)),
     );
     known.set(a, "unsure");
     known.set(b, "unsure");
@@ -126,11 +109,11 @@ export function describeRole(view: PlayerView): RoleBrief {
   return {
     label: meta.label,
     team: ROLE_TEAM[view.selfRole],
-    teamLabel: ROLE_TEAM[view.selfRole] === "GOOD" ? "好人阵营" : "坏人阵营",
+    teamLabel: msg.team.label[ROLE_TEAM[view.selfRole]],
     ability: meta.ability,
-    lines: lines.length > 0 ? lines : [NO_KNOWLEDGE],
+    lines: lines.length > 0 ? lines : [msg.role.noKnowledge],
     marks,
     hasKnownSeats: known.size > 0,
-    hiddenEvilHint: hiddenEvilHintOf(view),
+    hiddenEvilHint: hiddenEvilHintOf(view, msg),
   };
 }

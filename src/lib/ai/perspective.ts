@@ -17,17 +17,21 @@
  * 【最多两条，且确定性选取】给满五条等于没给重点，也会把 prompt 撑长。
  * 用 (selfId + missionIndex) 做下标，保证同一 seed 重放出同一局。
  */
+import type { PromptCopy } from "./prompt-copy";
 import type { PlayerId, PlayerView } from "../game/types";
 
 /** 一次最多给几条。再多就没有重点了 */
 const MAX_HINTS = 2;
 
-const seatList = (ids: readonly PlayerId[]): string =>
-  ids.length === 0 ? "无" : `座位 ${ids.join("、")}`;
-
-/** 本轮（当前 missionIndex）里，谁在发言中点了你的座位号 */
-function mentionedBy(view: PlayerView): PlayerId[] {
-  const token = `座位 ${view.selfId}`;
+/**
+ * 本轮（当前 missionIndex）里，谁在发言中点了你的座位号。
+ *
+ * 【"座位 3" 这个 token 分语言】英文里是 "Seat 3"。从语料表取，
+ * 与 prompt 里渲染座位号用的是同一个函数——两边分叉的话，
+ * 这条角度在英文局里会永远不触发，而且不会有任何报错。
+ */
+function mentionedBy(view: PlayerView, c: PromptCopy): PlayerId[] {
+  const token = c.seat(view.selfId);
   const seats = new Set<PlayerId>();
   for (const speech of view.speeches) {
     if (speech.missionIndex !== view.missionIndex) continue;
@@ -67,33 +71,31 @@ function riskyMissions(view: PlayerView): Array<{ missionIndex: number; failCoun
  *
  * 每一条的形状都是「事实 + 要不要提」，没有一条给出判断。
  */
-function candidates(view: PlayerView): string[] {
+function candidates(view: PlayerView, c: PromptCopy): string[] {
   const hints: string[] = [];
 
-  const mentions = mentionedBy(view);
+  const mentions = mentionedBy(view, c);
   if (mentions.length > 0) {
-    hints.push(`${seatList(mentions)} 在本轮点了你的名，你可以考虑要不要回应。`);
+    hints.push(c.perspective.mentioned(c.seatList(mentions)));
   }
 
   const against = votedAgainstYou(view);
   if (against.length > 0) {
-    hints.push(`上一次组队投票，${seatList(against)} 和你投的相反。`);
+    hints.push(c.perspective.votedAgainst(c.seatList(against)));
   }
 
   if (view.proposedTeam?.includes(view.selfId)) {
-    hints.push("这支待表决的队伍把你带上了——你会被要求解释自己凭什么该上。");
+    hints.push(c.perspective.onProposedTeam);
   }
 
   const risky = riskyMissions(view);
   for (const m of risky) {
-    hints.push(
-      `你上过第 ${m.missionIndex + 1} 轮那趟车，那轮出了 ${m.failCount} 张失败票——别人多半会拿这件事问你。`,
-    );
+    hints.push(c.perspective.wasOnFailedMission(m.missionIndex + 1, m.failCount));
   }
 
   const everOnTeam = view.missionHistory.some((m) => m.team.includes(view.selfId));
   if (!everOnTeam && view.missionHistory.length > 0) {
-    hints.push("到现在为止你一次都没上过车。");
+    hints.push(c.perspective.neverOnMission);
   }
 
   return hints;
@@ -105,8 +107,8 @@ function candidates(view: PlayerView): string[] {
  * 轮换而不是永远取前两条：否则"被点名"一旦触发就会永久占住两个名额，
  * 后面几条角度一辈子不会出现。
  */
-export function buildPerspective(view: PlayerView): string[] {
-  const all = candidates(view);
+export function buildPerspective(view: PlayerView, c: PromptCopy): string[] {
+  const all = candidates(view, c);
   if (all.length <= MAX_HINTS) return all;
 
   const start = (view.selfId + view.missionIndex) % all.length;

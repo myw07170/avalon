@@ -303,6 +303,7 @@ describe("确实在随机", () => {
       view: toPlayerView(state, leaderId),
       persona: requirePersona(state, leaderId),
       legalActions: getLegalActions(state, leaderId),
+      locale: "zh",
       maxRetries: 2,
     };
 
@@ -349,7 +350,14 @@ describe("kind 与 legalActions 对不上就抛错，不兜底", () => {
   for (const [kind, legalActions] of cases) {
     it(`${kind} 拿不到对应候选动作时抛 INTERNAL`, async () => {
       const client = createMockAiClient(createRng(3));
-      const call = client.decide({ kind, view, persona, legalActions, maxRetries: 2 });
+      const call = client.decide({
+        kind,
+        view,
+        persona,
+        legalActions,
+        maxRetries: 2,
+        locale: "zh",
+      });
       await expect(call).rejects.toThrow(EngineError);
       await expect(call).rejects.toMatchObject({ code: "INTERNAL" });
     });

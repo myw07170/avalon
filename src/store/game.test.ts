@@ -6,6 +6,7 @@
  */
 import { createStore } from "jotai";
 import { describe, expect, it } from "vitest";
+import { zh } from "@/i18n/messages.zh";
 import { createConfig } from "@/lib/game/config";
 import { createRng } from "@/lib/game/rng";
 import { createGame, makePlaceholderPersonas } from "@/lib/game/setup";
@@ -201,7 +202,7 @@ describe("跑完整一局", () => {
 describe("以梅林身份完整玩完一局", () => {
   /** 面板拼出来的动作。每一手都走 describeTurn，认不出的形状直接失败 */
   function fromPanel(turn: HumanTurn): GameAction {
-    const form = describeTurn(turn);
+    const form = describeTurn(turn, zh);
     if (!form) throw new Error(`面板认不出这一手：${turn.kind}`);
 
     switch (form.kind) {
@@ -283,7 +284,7 @@ describe("以梅林身份完整玩完一局", () => {
     expect(reveal?.assassination).not.toBeNull();
 
     // 4. 复盘面板画得出这一刀，而且梅林那一行指向人类座位
-    const brief = describeGameOver(view, store.get(reviewDecisionsAtom));
+    const brief = describeGameOver(view, store.get(reviewDecisionsAtom), zh);
     expect(brief?.strike).not.toBeNull();
     expect(brief?.strike?.merlinLabel).toContain(`${SEAT} 号`);
     expect(brief?.strike?.headline).toMatch(/刺中|刺空/);

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import type { Locale } from "@/i18n/locale";
+import { ROLE_TEXT } from "@/i18n/roles";
 import { createConfig } from "../game/config";
 import { getAwaitingPlayerIds, getLegalActions } from "../game/legal";
 import { createRng } from "../game/rng";
@@ -6,7 +8,7 @@ import { createGame, makePlaceholderPersonas } from "../game/setup";
 import { toPlayerView } from "../game/view";
 import {
   EngineError,
-  ROLE_META,
+  type AiDecisionRequest,
   createPending,
   type AiDecisionKind,
   type GameState,
@@ -21,6 +23,7 @@ import {
 import { simulateGame } from "../sim/random";
 import { decisionKindOf } from "./orchestrator";
 import { buildPrompt } from "./prompt";
+import { PROMPT_COPY, type SectionKey } from "./prompt-copy";
 import { AI_SCHEMAS } from "./schema";
 
 // ---------------------------------------------------------------------------
@@ -71,23 +74,36 @@ const PROPOSAL_0: ProposalRecord = {
   forced: false,
 };
 
-const seatsOf = (roles: Role[]): Player[] =>
+/**
+ * 人设里的自由文本。
+ *
+ * 【英文那份不是装饰】"en 的 prompt 里一个汉字都没有"那条断言会把
+ * **数据里的**中文一起抓出来。夹具还用中文人设的话，那条断言会挂在
+ * traits 上而不是挂在漏译上——报出来的位置全是假的。
+ */
+const ZH_PERSONA = { traits: ["谨慎", "话少"], speechStyle: "短句，先摆事实再下判断" };
+const EN_PERSONA = {
+  traits: ["cautious", "quiet"],
+  speechStyle: "short sentences; facts first, verdict second",
+};
+
+const seatsOf = (
+  roles: Role[],
+  persona: { traits: string[]; speechStyle: string } = ZH_PERSONA,
+): Player[] =>
   roles.map((role, id) => ({
     id,
     name: `P${id}`,
     role,
     isHuman: false,
-    persona: {
-      name: `P${id}`,
-      traits: ["谨慎", "话少"],
-      speechStyle: "短句，先摆事实再下判断",
-    },
+    persona: { name: `P${id}`, ...persona },
   }));
 
 function build(
   roles: Role[],
   patch: Partial<GameState> = {},
   pending: Partial<PendingState> = {},
+  persona: { traits: string[]; speechStyle: string } = ZH_PERSONA,
 ): GameState {
   const base = createGame({
     config: createConfig(roles.length, { roles }),
@@ -97,7 +113,7 @@ function build(
   });
   return {
     ...base,
-    players: seatsOf(roles),
+    players: seatsOf(roles, persona),
     phase: "TEAM_BUILDING",
     currentLeaderId: 3,
     ...patch,
@@ -115,13 +131,15 @@ function makeReq<K extends AiDecisionKind>(
   state: GameState,
   playerId: PlayerId,
   kind: K,
-): { kind: K; view: ReturnType<typeof toPlayerView>; persona: Persona; legalActions: ReturnType<typeof getLegalActions>; maxRetries: number } {
+  locale: Locale = "zh",
+): AiDecisionRequest<K> {
   return {
     kind,
     view: toPlayerView(state, playerId),
     persona: requirePersona(state, playerId),
     legalActions: getLegalActions(state, playerId),
     maxRetries: 2,
+    locale,
   };
 }
 
@@ -129,14 +147,20 @@ const promptFor = <K extends AiDecisionKind>(
   state: GameState,
   playerId: PlayerId,
   kind: K,
-): string => buildPrompt(makeReq(state, playerId, kind));
+  locale: Locale = "zh",
+): string => buildPrompt(makeReq(state, playerId, kind, locale));
 
 // ---------------------------------------------------------------------------
 // 分节
 // ---------------------------------------------------------------------------
 
 /** 把 prompt 按【标题】切成段。测试全靠它做精确断言，而不是对整串做模糊 grep */
-function sectionsOf(prompt: string): Map<string, string> {
+const HEADER_RE: Record<Locale, RegExp> = {
+  zh: /^【(.+)】$/,
+  en: /^## (.+)$/,
+};
+
+function sectionsOf(prompt: string, locale: Locale = "zh"): Map<string, string> {
   const result = new Map<string, string>();
   let current: string | null = null;
   const buffer: string[] = [];
@@ -145,7 +169,7 @@ function sectionsOf(prompt: string): Map<string, string> {
     buffer.length = 0;
   };
   for (const line of prompt.split("\n")) {
-    const header = /^【(.+)】$/.exec(line);
+    const header = HEADER_RE[locale].exec(line);
     if (header?.[1]) {
       flush();
       current = header[1];
@@ -157,7 +181,10 @@ function sectionsOf(prompt: string): Map<string, string> {
   return result;
 }
 
-const ALL_ROLE_LABELS = Object.values(ROLE_META).map((meta) => meta.label);
+const roleLabelsOf = (locale: Locale): string[] =>
+  Object.values(ROLE_TEXT[locale]).map((text) => text.label);
+
+const ALL_ROLE_LABELS = roleLabelsOf("zh");
 
 /**
  * 这四段由 view 的结构化数据渲染而来，天然不该出现任何角色名。
@@ -168,7 +195,16 @@ const ALL_ROLE_LABELS = Object.values(ROLE_META).map((meta) => meta.label);
  *
  * 泄漏一旦发生，几乎必然落在【历史】里——把任务票的投票人渲染出来是最典型的一种。
  */
-const CLEAN_SECTIONS = ["当前局势", "历史", "你的人设", "输出格式"];
+const CLEAN_SECTION_KEYS: SectionKey[] = ["situation", "history", "persona", "output"];
+
+/**
+ * 【从语料表里取段名，不手抄】手抄一份英文段名的话，改段名不会让测试变红，
+ * 只会让那一段静默地掉出泄漏扫描——而那正是这条断言唯一要防的事。
+ */
+const cleanSections = (locale: Locale): string[] =>
+  CLEAN_SECTION_KEYS.map((key) => PROMPT_COPY[locale].titles[key]);
+
+const CLEAN_SECTIONS = cleanSections("zh");
 
 /**
  * 同样不该出现角色名，但**允许缺席**的段。
@@ -176,7 +212,7 @@ const CLEAN_SECTIONS = ["当前局势", "历史", "你的人设", "输出格式"
  * 【你的视角】没有角度可给时整段不渲染（空段落只会稀释注意力），
  * 所以它不能进 CLEAN_SECTIONS——那张表里的段一旦缺席就算泄漏事故。
  */
-const OPTIONAL_CLEAN_SECTIONS = ["你的视角"];
+const OPTIONAL_CLEAN_SECTIONS = [PROMPT_COPY.zh.titles.perspective];
 
 const ALL_KINDS: AiDecisionKind[] = [
   "TEAM_PROPOSAL",
@@ -942,6 +978,58 @@ describe("整局", () => {
     // 撞到它说明该考虑截断历史了——但那是届时的决定，不是现在就写进实现的容错
     expect(longest).toBeLessThan(16000);
   });
+
+  /**
+   * 英文那一遍只跑 5 个种子，中文那遍保持 20 个。
+   *
+   * 【不是偷懒，是分工】上面那条要为 120 局里每个待行动者建 prompt，
+   * 翻倍会明显拖慢 `pnpm test`。而这两遍验的是**同一套结构**——
+   * 干净段是哪几段、段头切不切得出来，与语言无关，中文那遍已经穷举过了。
+   * 英文这遍要验的只是"换了语料之后那套结构没塌"，5 个种子足够。
+   */
+  it("en 也不在干净段里泄漏身份", () => {
+    const leaks: string[] = [];
+    const enLabels = roleLabelsOf("en");
+    const enClean = cleanSections("en");
+    const enOptional = [PROMPT_COPY.en.titles.perspective];
+
+    for (let seed = 0; seed < 5; seed += 1) {
+      simulateGame(5 + (seed % 6), seed, {
+        onStep: (state) => {
+          for (const playerId of getAwaitingPlayerIds(state)) {
+            const first = getLegalActions(state, playerId)[0];
+            if (!first) continue;
+            const kind = decisionKindOf(first);
+            if (!kind) continue;
+
+            const sections = sectionsOf(promptFor(state, playerId, kind, "en"), "en");
+            const where = `seed ${seed} ${state.phase} 座位 ${playerId}`;
+
+            for (const name of enOptional) {
+              const body = sections.get(name);
+              if (body === undefined) continue;
+              for (const label of enLabels) {
+                if (body.includes(label)) leaks.push(`${where}：${name} 出现了 ${label}`);
+              }
+            }
+
+            for (const name of enClean) {
+              const body = sections.get(name);
+              if (body === undefined) {
+                leaks.push(`${where}：缺了 ${name} 段`);
+                continue;
+              }
+              for (const label of enLabels) {
+                if (body.includes(label)) leaks.push(`${where}：${name} 里出现了 ${label}`);
+              }
+            }
+          }
+        },
+      });
+    }
+
+    expect(leaks).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -993,5 +1081,143 @@ describe("快照", () => {
       assassinOpinions: state0Opinions(),
     });
     expect(promptFor(state, 7, "ASSASSINATION")).toMatchSnapshot();
+  });
+
+  /*
+   * 英文那三份是**新增的 it**，不是把上面三条包进 describe.each。
+   *
+   * 【为什么这一点很要紧】vitest 按完整测试名给快照做键。用 .each 会把 zh 那三个键
+   * 全部改名、原有条目全部作废，diff 变成删 239 行 + 加 480 行——正好摧毁
+   * 快照存在的那个理由（逼改的人读一遍 diff）。分开写，改英文语料时
+   * 中文那三份的 diff 恒为零，一眼就看得出你动没动到中文那侧。
+   */
+  const richEn = build(
+    TEN,
+    {
+      phase: "TEAM_BUILDING",
+      missionIndex: 1,
+      currentLeaderId: 3,
+      rejectCount: 1,
+      goodScore: 0,
+      evilScore: 1,
+      missionHistory: [MISSION_0],
+      proposalHistory: [PROPOSAL_0],
+      speeches: [
+        {
+          seq: 0,
+          playerId: 3,
+          phase: "REVIEW_DISCUSSION",
+          missionIndex: 0,
+          attempt: 0,
+          content: "Seat 1's vote is hard to explain",
+        },
+      ],
+    },
+    {},
+    EN_PERSONA,
+  );
+
+  it("梅林在组队阶段的完整 prompt（en）", () => {
+    expect(
+      promptFor({ ...richEn, currentLeaderId: 0 }, 0, "TEAM_PROPOSAL", "en"),
+    ).toMatchSnapshot();
+  });
+
+  it("忠臣在提议讨论的完整 prompt（en）", () => {
+    const state = build(
+      TEN,
+      { phase: "PROPOSAL_DISCUSSION", proposedTeam: [0, 1, 2] },
+      { speakingOrder: [3, 4, 5, 6, 7, 8, 9, 0, 1, 2], speakerIndex: 6 },
+      EN_PERSONA,
+    );
+    expect(promptFor(state, 9, "SPEECH", "en")).toMatchSnapshot();
+  });
+
+  it("刺客在刺杀阶段的完整 prompt（en）", () => {
+    const state = build(
+      TEN,
+      { phase: "ASSASSINATION", goodScore: 3 },
+      { assassinOpinions: state0Opinions() },
+      EN_PERSONA,
+    );
+    expect(promptFor(state, 7, "ASSASSINATION", "en")).toMatchSnapshot();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 英文语料
+// ---------------------------------------------------------------------------
+
+describe("英文语料", () => {
+  /**
+   * 【漏译的唯一症状就是这个】比逐条断言英文措辞便宜得多，也难骗得多：
+   * 逐条断言只能证明"我写的那几条没错"，这一条证明的是"哪一条都没漏"。
+   *
+   * 夹具必须也是英文的（EN_PERSONA + 英文发言），否则它会挂在**数据**上，
+   * 报出来的位置是假的。
+   */
+  it("en 的 prompt 里一个汉字都没有", () => {
+    const CJK = /[　-〿一-鿿＀-￯]/;
+    const state = build(
+      TEN,
+      {
+        phase: "TEAM_BUILDING",
+        missionIndex: 1,
+        goodScore: 1,
+        evilScore: 1,
+        missionHistory: [MISSION_0],
+        proposalHistory: [PROPOSAL_0],
+        speeches: [
+          {
+            seq: 0,
+            playerId: 3,
+            phase: "REVIEW_DISCUSSION",
+            missionIndex: 0,
+            attempt: 0,
+            content: "Seat 1 has some explaining to do",
+          },
+        ],
+      },
+      {},
+      EN_PERSONA,
+    );
+
+    const offenders: string[] = [];
+    for (const kind of ALL_KINDS) {
+      for (const playerId of getAwaitingPlayerIds(state)) {
+        const prompt = promptFor(state, playerId, kind, "en");
+        for (const line of prompt.split("\n")) {
+          if (CJK.test(line)) offenders.push(`${kind} / 座位 ${playerId}：${line}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  /**
+   * 【与中文那条同源】speechLength 与 reasoningLength 刻意写句子数不写字数：
+   * 卡字数换来的是模型给出 40 或 300，而这类非致命违规会推高 fallback 率。
+   * 英文语料里同样不许出现字数区间。
+   */
+  it("en 也不出现字数区间", () => {
+    const state = build(TEN, { phase: "TEAM_BUILDING" }, {}, EN_PERSONA);
+    for (const kind of ALL_KINDS) {
+      const prompt = promptFor(state, state.currentLeaderId, kind, "en");
+      expect(prompt).not.toMatch(/\d+\s*[-–~]\s*\d+\s*(words|characters|chars)/i);
+      expect(prompt.toLowerCase()).not.toContain("word count");
+    }
+  });
+
+  it("段头能被切出来，且十一个段名互不相同", () => {
+    // sectionsOf 的 en 正则要是写错了，上面两条会在一个空 Map 上安静地通过
+    const state = build(TEN, { phase: "TEAM_BUILDING" }, {}, EN_PERSONA);
+    const sections = sectionsOf(
+      promptFor(state, state.currentLeaderId, "TEAM_PROPOSAL", "en"),
+      "en",
+    );
+    expect(sections.size).toBeGreaterThan(8);
+    for (const title of cleanSections("en")) {
+      expect([...sections.keys()]).toContain(title);
+    }
   });
 });

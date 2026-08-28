@@ -7,6 +7,9 @@
  * 加的是 RunStatus 的成员，switch 会当场提示这里漏了一支。
  */
 import { useAtomValue, useSetAtom } from "jotai";
+import { LocaleGate } from "@/i18n/LocaleGate";
+import { useMessages } from "@/i18n/useMessages";
+import { LocaleSwitcher } from "@/i18n/LocaleSwitcher";
 import { errorAtom, resetGameAtom, runStatusAtom } from "@/store/game";
 import { ActionPanel } from "./ActionPanel";
 import { GameOverPanel } from "./GameOverPanel";
@@ -17,7 +20,23 @@ import { SpeechFeed } from "./SpeechFeed";
 import { SetupScreen } from "./SetupScreen";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 
+/**
+ * 【语言这两样挂在这里，而不是 layout.tsx】layout.tsx 与 page.tsx 都是
+ * server component（page.tsx 的文件头明写了"保持 server component"），
+ * 而这两个组件都要读 localeAtom。挂在这一层还顺带保证它们活过每一个 runStatus 分支——
+ * 挂进 SetupScreen 的话，开局之后按钮就没了。
+ */
 export function GameShell() {
+  return (
+    <>
+      <LocaleGate />
+      <LocaleSwitcher />
+      <Screen />
+    </>
+  );
+}
+
+function Screen() {
   const status = useAtomValue(runStatusAtom);
 
   switch (status) {
@@ -41,6 +60,7 @@ export function GameShell() {
 function Table() {
   const error = useAtomValue(errorAtom);
   const reset = useSetAtom(resetGameAtom);
+  const msg = useMessages();
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center gap-8 px-5 py-10 sm:py-14">
@@ -59,7 +79,7 @@ function Table() {
         </p>
       )}
 
-      <SecondaryButton onClick={() => reset()}>重开</SecondaryButton>
+      <SecondaryButton onClick={() => reset()}>{msg.shell.restart}</SecondaryButton>
     </main>
   );
 }

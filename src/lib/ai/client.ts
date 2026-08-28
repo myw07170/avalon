@@ -17,6 +17,7 @@
  */
 import { createMockAiClient } from "./mock";
 import { buildPrompt } from "./prompt";
+import { PROMPT_COPY } from "./prompt-copy";
 import { safeParseAiPayload } from "./schema";
 import { AiError } from "./errors";
 import type {
@@ -451,6 +452,7 @@ export function createAiClient(config: LlmProviderConfig): AiClient {
       req: AiDecisionRequest<K>,
     ): Promise<AiDecisionResult<K>> {
       const prompt = buildPrompt(req);
+      const copy = PROMPT_COPY[req.locale];
       const messages: ChatMessage[] = [{ role: "user", content: prompt }];
       const maxAttempts = req.maxRetries + 1;
 
@@ -473,7 +475,7 @@ export function createAiClient(config: LlmProviderConfig): AiClient {
         const parsed = extractJson(raw);
         const result =
           parsed === undefined
-            ? { success: false as const, error: "响应里找不到合法的 JSON 对象" }
+            ? { success: false as const, error: copy.noJsonObject }
             : safeParseAiPayload(req.kind, parsed);
 
         if (result.success) {
@@ -485,7 +487,9 @@ export function createAiClient(config: LlmProviderConfig): AiClient {
         messages.push({ role: "assistant", content: raw });
         messages.push({
           role: "user",
-          content: `上一次的输出不合格：${result.error}。请严格按【输出格式】重新输出一个 JSON 对象，不要任何解释文字。`,
+          // 【这句话是注回模型的，所以它属 prompt 语料不属 UI 文案】
+          // 段名用 ref 回指而不是写死——写死的话英文 prompt 会指向一个不存在的段
+          content: copy.retryFeedback(result.error, copy.ref(copy.titles.output)),
         });
       }
 

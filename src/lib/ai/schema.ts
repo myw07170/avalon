@@ -128,6 +128,16 @@ export const aiDecisionKindSchema = z.enum(
   Object.keys(AI_SCHEMAS) as [AiDecisionKind, ...AiDecisionKind[]],
 );
 
+/**
+ * 语言。取值与 `src/i18n/locale.ts` 的 LOCALES 一致。
+ *
+ * 【这里手写一份而不是 import LOCALES】schema.ts 在服务端跑，
+ * 而 `src/i18n/locale.ts` 虽然是纯常量、import 它并不会出问题，
+ * 但 zod 的 enum 需要的是字面量元组——写在这里，加语言时 `AiDecisionRequest.locale`
+ * 那个联合类型会先在 tsc 上报错，跑不到运行期。
+ */
+const localeSchema = z.enum(["zh", "en"]);
+
 /** 只校验"是个对象"，类型由泛型参数给。见下面 aiDecisionRequestSchema 的说明 */
 const objectLike = <T>(what: string): z.ZodType<T> =>
   z.custom<T>((value) => typeof value === "object" && value !== null, {
@@ -144,6 +154,11 @@ const objectLike = <T>(what: string): z.ZodType<T> =>
  * 用 z.custom 而不是 z.looseObject：后者的输出类型是 `{}`，
  * route 就得写一个 `as unknown as AiDecisionRequest` 的断言才能往下传。
  * 注意也**不能**用 z.object({})——它会把 view 的所有字段剥光，这是个很安静的坑。
+ *
+ * 【新增字段必须写在这里】`z.object` 会**静默剥掉**没声明的键。
+ * `locale` 就是最容易栽在这上面的那一个：漏了它，服务端会拿到
+ * `locale: undefined`，英文模式下每一条 prompt 仍是中文，而且不报任何错。
+ * route.test.ts 里有一条专门盯着它。
  */
 export const aiDecisionRequestSchema = z.object({
   kind: aiDecisionKindSchema,
@@ -152,6 +167,12 @@ export const aiDecisionRequestSchema = z.object({
   // 空数组意味着"这个人根本没有可做的动作"，那是调用方算错了阶段
   legalActions: z.array(objectLike<GameAction>("legalActions 的元素")).min(1),
   maxRetries: z.number().int().nonnegative(),
+  /**
+   * 【这个 default 是协议边界上的兼容，不是内部回退】浏览器里缓存着的旧页面
+   * 不会带 locale，为它 400 掉一整局不值得。内部代码路径上 locale 是必填的，
+   * 缺了是编译错误——两件事不矛盾：默认值只在**不可信输入**这一侧存在。
+   */
+  locale: localeSchema.default("zh"),
 }) satisfies z.ZodType<AiDecisionRequest<AiDecisionKind>>;
 
 /**
@@ -166,4 +187,6 @@ export const aiDecisionRequestSchema = z.object({
  */
 export const personaRequestSchema = z.object({
   count: z.number().int().min(MIN_PLAYERS - 1).max(MAX_PLAYERS),
+  // 与 aiDecisionRequestSchema 同一条约定：边界上给默认值，内部必填
+  locale: localeSchema.default("zh"),
 });

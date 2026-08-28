@@ -9,6 +9,7 @@
  * 与其假装名单干净，不如把"还有一个队友你也认不出来"这件事直说——
  * 那是从公开的 roleComposition 里推得出来的确定结论，不构成泄漏。
  */
+import type { Messages } from "@/i18n/messages";
 import { countEvil, type PlayerView } from "@/lib/game";
 import type { AssassinationForm, TargetChoice } from "./action-panel-model";
 import { describeFeed, type FeedEntry } from "./speech-feed-model";
@@ -49,9 +50,9 @@ export interface StrikeBrief {
  * 只认自己和 view.knowledge 明确给出的队友。奥伯伦不在 knowledge 里，
  * 于是恒返回 null——这是对的，不是漏了。
  */
-function riskOf(target: TargetChoice): string | null {
-  if (target.isSelf) return "你不可能是梅林。刺中自己，好人直接获胜。";
-  if (target.tone === "evil") return "他是你的队友。刺中队友，好人直接获胜。";
+function riskOf(target: TargetChoice, msg: Messages): string | null {
+  if (target.isSelf) return msg.strike.riskSelf;
+  if (target.tone === "evil") return msg.strike.riskAlly;
   return null;
 }
 
@@ -63,33 +64,33 @@ function riskOf(target: TargetChoice): string | null {
  * 所以这是确定结论而非猜测——见 role-card-model 的 hiddenEvilHintOf，
  * 那是梅林方向的同一道算术。
  */
-function hiddenAllyHintOf(view: PlayerView): string {
+function hiddenAllyHintOf(view: PlayerView, msg: Messages): string {
   const total = countEvil(view.roleComposition);
   const known = view.knowledge.filter((k) => k.kind === "IS_EVIL").length;
   const unknown = total - known - 1;
 
-  if (unknown <= 0) {
-    return `本局 ${total} 个坏人你全认得，名单上其余的人都是好人。`;
-  }
-  return (
-    `本局有 ${total} 个坏人：你、你认得的 ${known} 个队友，` +
-    `还有 ${unknown} 个你也认不出来的——奥伯伦在场，他同样不可能是梅林。`
-  );
+  return unknown <= 0
+    ? msg.strike.allKnown(total)
+    : msg.strike.someHidden(total, known, unknown);
 }
 
-export function describeStrike(form: AssassinationForm, view: PlayerView): StrikeBrief {
-  const opinions = describeFeed(view).filter((entry) => entry.kind === "opinion");
+export function describeStrike(
+  form: AssassinationForm,
+  view: PlayerView,
+  msg: Messages,
+): StrikeBrief {
+  const opinions = describeFeed(view, msg).filter((entry) => entry.kind === "opinion");
 
   return {
-    targets: form.targets.map((target) => ({ ...target, risk: riskOf(target) })),
+    targets: form.targets.map((target) => ({ ...target, risk: riskOf(target, msg) })),
     opinions,
     allSilent: opinions.length > 0 && opinions.every((entry) => entry.isSilent),
-    hiddenAllyHint: hiddenAllyHintOf(view),
+    hiddenAllyHint: hiddenAllyHintOf(view, msg),
   };
 }
 
 /** 确认按钮上的字。指名道姓，别让人点完才发现指错了人 */
-export function strikeLabel(target: StrikeTarget | null): string {
-  if (!target) return "先选一个人";
-  return `就是他：${target.id} 号（${target.isSelf ? "你自己" : target.name}）`;
+export function strikeLabel(target: StrikeTarget | null, msg: Messages): string {
+  if (!target) return msg.strike.pickSomeone;
+  return msg.strike.confirm(target.id, target.isSelf ? msg.strike.yourself : target.name);
 }

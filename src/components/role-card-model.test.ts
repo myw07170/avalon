@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { zh } from "@/i18n/messages.zh";
+import { ROLE_TEXT } from "@/i18n/roles";
 import {
-  ROLE_META,
   ROLE_TEAM,
   composeRoles,
   countEvil,
@@ -13,7 +14,15 @@ import {
   type PlayerView,
   type Role,
 } from "@/lib/game";
-import { describeRole } from "./role-card-model";
+import { describeRole as describeRoleRaw } from "./role-card-model";
+
+/*
+ * 【这一行 shim 是刻意的】`describeX` 的第二个参数没有默认值——默认值是静默回退，
+ * 会让某个漏改的调用点在英文模式下安静地渲染中文，而没有任何东西会报错。
+ * 代价就是这里补一行。下面的断言仍然逐字断言中文，那才是真正在验文案。
+ */
+const describeRole = (view: PlayerView) => describeRoleRaw(view, zh);
+
 
 // ---------------------------------------------------------------------------
 // 夹具：不手搓 PlayerView，一律走真实的 createGame + toPlayerView
@@ -93,8 +102,8 @@ describe("八个角色都能画出来", () => {
       const view = findView(role, TEN_COUNT);
       const brief = describeRole(view);
 
-      expect(brief.label).toBe(ROLE_META[role].label);
-      expect(brief.ability).toBe(ROLE_META[role].ability);
+      expect(brief.label).toBe(ROLE_TEXT.zh[role].label);
+      expect(brief.ability).toBe(ROLE_TEXT.zh[role].ability);
       expect(brief.team).toBe(ROLE_TEAM[role]);
       expect(brief.teamLabel).toBe(ROLE_TEAM[role] === "GOOD" ? "好人阵营" : "坏人阵营");
       expect(brief.lines.length).toBeGreaterThan(0);

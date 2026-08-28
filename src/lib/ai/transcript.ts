@@ -9,7 +9,9 @@
  * 往返用例钉住：改了 render 的分隔符而 parse 没跟上，当场就炸，
  * 不会等到页面渲染出乱码才发现。
  */
-import { ROLE_META, type GameState, type Role, type Speech } from "../game/types";
+import type { Locale } from "@/i18n/locale";
+import { ROLE_TEXT } from "@/i18n/roles";
+import { type GameState, type Role, type Speech } from "../game/types";
 import { findDeductionMisses, type Deduction, type DeductionMiss } from "./deduction";
 import type { DecisionRecord } from "./orchestrator";
 
@@ -66,6 +68,17 @@ export interface TranscriptStats {
 export interface Transcript {
   model: string;
   seed: number;
+  /**
+   * 这一局是用哪种语言跑的。
+   *
+   * 【自曝检测靠它】"作为梅林……" 与 "As Merlin, ..." 是同一件事的两种说法，
+   * 而 selfExposure 的前缀表按语言取。缺了它，一份英文记录会被中文正则扫成
+   * "0 条自曝"——**而那正是 docs/todos.md §6.3 要求逐语言验一遍的那个指标**。
+   * 报错都不会报，只会安静地给出一个漂亮的假数字。
+   *
+   * 【可选，因为老记录里没有】parseTranscript 读不到就当 zh。
+   */
+  locale?: Locale;
   seats: TranscriptSeat[];
   speeches: TranscriptSpeech[];
   missions: TranscriptMission[];
@@ -81,6 +94,8 @@ export interface TranscriptMeta {
   /** 形如 "openai / gpt-5-nano" */
   model: string;
   seed: number;
+  /** 这一局跑的语言。缺省中文——老的调用点不带它 */
+  locale?: Locale;
 }
 
 // ---------------------------------------------------------------------------
@@ -97,16 +112,28 @@ export interface TranscriptMeta {
  * （"别急于指认梅林"）是正常推理甚至是好牌，只算 mention。
  * 第 3 局 35 条发言里有 14 条 mention、0 条 blatant，一刀切会把那 14 条全误报。
  */
+const SELF_LABEL_PREFIX: Record<Locale, string> = {
+  zh: "(作为|我是|身为|我的角色是)",
+  // 英文里同一件事的说法：As Merlin, ... / I'm the Assassin / speaking as Mordred。
+  // 冠词可有可无，所以 (the )? 那一段要留着
+  en: "\\b(as|i am|i'm|my role is|playing as|speaking as)\\s+(the\\s+)?",
+};
+
 export function selfExposure(
   speech: Pick<TranscriptSeat, "roleLabel"> & { content: string },
+  locale: Locale,
 ): { kind: "blatant" | "mention" } | null {
   const { roleLabel, content } = speech;
   if (!roleLabel || !content.includes(roleLabel)) return null;
   // 注意这里必须是 \s（正则里的空白类），写成 \s 会被模板字符串吃成字母 s——
   // 那样 "作为 梅林" 就漏判了，而且因为 s* 可以匹配零次，表面上还看不出错
-  const blatant = new RegExp(`(作为|我是|身为|我的角色是)\\s*${escapeRegExp(roleLabel)}`).test(
-    content,
-  );
+  //
+  // 【英文那支要 i 标志】"As Merlin" 与 "as merlin" 是同一件事。
+  // 中文没有大小写，加了也无害，但显式分开更说得清楚
+  const blatant = new RegExp(
+    `${SELF_LABEL_PREFIX[locale]}\\s*${escapeRegExp(roleLabel)}`,
+    locale === "en" ? "i" : "",
+  ).test(content);
   return { kind: blatant ? "blatant" : "mention" };
 }
 
@@ -209,10 +236,13 @@ export function renderTranscript(
   records: DecisionRecord[],
   meta: TranscriptMeta,
 ): string {
+  // 记录本身仍然是中文排版的开发工具输出，只有**角色名与自曝判定**要跟着对局语言走：
+  // 一份英文对局里的角色名是 "Merlin"，拿中文名去 grep 一条都匹配不上
+  const locale = meta.locale ?? "zh";
   const lines: string[] = [];
   const nameOf = (id: number): string => {
     const player = final.players.find((p) => p.id === id);
-    return `${id} 号「${player?.name ?? "?"}」（${player ? ROLE_META[player.role].label : "?"}）`;
+    return `${id} 号「${player?.name ?? "?"}」（${player ? ROLE_TEXT[locale][player.role].label : "?"}）`;
   };
 
   lines.push(`模型：${meta.model}，seed ${meta.seed}`);
@@ -277,7 +307,10 @@ export function renderTranscript(
   const flagged = spoken.flatMap((speech) => {
     const role = roleOf(speech.playerId);
     if (role === undefined) return [];
-    const hit = selfExposure({ roleLabel: ROLE_META[role].label, content: speech.content });
+    const hit = selfExposure(
+      { roleLabel: ROLE_TEXT[locale][role].label, content: speech.content },
+      locale,
+    );
     return hit ? [{ speech, blatant: hit.kind === "blatant" }] : [];
   });
   const blatantCount = flagged.filter((x) => x.blatant).length;

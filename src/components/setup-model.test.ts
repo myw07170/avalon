@@ -92,7 +92,9 @@ describe("previewSetup", () => {
     expect(preview.canStart).toBe(true);
     expect(preview.warnings).toHaveLength(1);
     expect(preview.warnings[0]?.code).toBe("BELOW_RECOMMENDED_COUNT");
-    expect(preview.warnings[0]?.message).toContain("莫德雷德");
+    // 【断言 params 而不是句子】引擎不再产出人类语言，句子在 src/i18n 里拼。
+    // 这里要验的本来就是"这条提示指的是莫德雷德"，params.role 说得比措辞更准
+    expect(preview.warnings[0]?.params.role).toBe("MORDRED");
   });
 
   it("9 人局用莫德雷德没有提示", () => {

@@ -23,14 +23,34 @@
   --color-brass: #c08a3e;
 
   /*
-   * 三个字体角色。这是个中文应用，Geist 一个汉字都没有，
+   * 三个字体角色。中文是默认语言，Geist 一个汉字都没有，
    * 所以真正要定的是 CJK 栈——不定的话浏览器各挑各的，Windows 上会掉进宋体。
+   *
+   * --font-display 在英文模式下会被换掉（见文件末尾的 html[data-locale="en"]）：
+   * Noto Serif CJK 自带的拉丁字形又宽又软，配英文标题不好看。
    */
   --font-display: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", SimSun,
     serif;
   --font-sans: var(--font-geist-sans), "PingFang SC", "Microsoft YaHei",
     "Noto Sans SC", sans-serif;
   --font-mono: var(--font-geist-mono), "PingFang SC", "Microsoft YaHei", monospace;
+}
+
+/*
+ * 字距三档。
+ *
+ * 【为什么是变量而不是写死的 em】0.3em 这种字距对方块字是常见排版，对英文句子
+ * （"Take the seat"）就是灾难：字母之间被拉开到读不成词。所以它必须跟语言走。
+ *
+ * 【尾部补偿必须用同一个变量】letter-spacing 会在最后一个字后面也留一份间距，
+ * 居中的标题因此整体偏左，组件里用 `-mr-[...]` 抵消。原来那一对是两个手写的
+ * 数字靠人对齐，改一个忘一个就偏；现在两边读同一个变量，不可能脱钩。
+ */
+:root {
+  --track-1: 0.2em;
+  --track-2: 0.25em;
+  --track-3: 0.3em;
+  --track-4: 0.35em;
 }
 
 :root {
@@ -102,4 +122,19 @@ body {
 
 .dialog-rise {
   animation: dialog-rise 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/*
+ * 英文模式。由 LocaleGate 写在 <html> 上的 data-locale 驱动，组件一行都不用改。
+ *
+ * 字距压到中文的三分之一左右：短的全大写标签撑得开 0.3em，一个句子撑不开。
+ * 字体换成一套拉丁衬线——与深色圆桌的调性一致，但字形是为拉丁字母画的。
+ */
+html[data-locale="en"] {
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
+    "Times New Roman", serif;
+  --track-1: 0.06em;
+  --track-2: 0.08em;
+  --track-3: 0.1em;
+  --track-4: 0.12em;
 }

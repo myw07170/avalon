@@ -8,7 +8,9 @@
  * 【数据全部内联】发布出去的页面不能发任何外部请求（字体除外）。
  */
 import { ROLE_ORDER } from "../game/config";
-import { ROLE_META, ROLE_TEAM, type Team } from "../game/types";
+import type { Locale } from "@/i18n/locale";
+import { ROLE_TEXT } from "@/i18n/roles";
+import { ROLE_TEAM, type Team } from "../game/types";
 import { selfExposure, type Transcript, type TranscriptSpeech } from "./transcript";
 
 export interface PageGame {
@@ -17,9 +19,19 @@ export interface PageGame {
   transcript: Transcript;
 }
 
-/** 角色名 → 阵营。座位芯片的颜色靠它，不靠猜 */
+/**
+ * 角色名 → 阵营。座位芯片的颜色靠它，不靠猜。
+ *
+ * 【两种语言的角色名合成一张表】记录里存的是角色名字符串，不是 Role 枚举，
+ * 而 "Merlin" 和 "梅林" 指的是同一个人。合成一张表之后，
+ * 一份英文记录的芯片颜色也是对的，而且**不需要知道这份记录是哪种语言**——
+ * 两套名字没有任何一个重合，查不到才是真的出了问题。
+ */
 const LABEL_TEAM: Record<string, Team> = Object.fromEntries(
-  ROLE_ORDER.map((role) => [ROLE_META[role].label, ROLE_TEAM[role]]),
+  ROLE_ORDER.flatMap((role) => [
+    [ROLE_TEXT.zh[role].label, ROLE_TEAM[role]] as const,
+    [ROLE_TEXT.en[role].label, ROLE_TEAM[role]] as const,
+  ]),
 );
 
 function escapeHtml(text: string): string {
@@ -36,9 +48,12 @@ function escapeHtml(text: string): string {
  * 先转义再打标记：角色名和"作为/我是"都是中文，转义不会动它们，
  * 所以在转义后的串上跑正则是安全的，反过来做就会把 &amp; 拆开。
  */
-export function markSelfExposure(speech: Pick<TranscriptSpeech, "roleLabel" | "content">): string {
+export function markSelfExposure(
+  speech: Pick<TranscriptSpeech, "roleLabel" | "content">,
+  locale: Locale = "zh",
+): string {
   const escaped = escapeHtml(speech.content);
-  const hit = selfExposure(speech);
+  const hit = selfExposure(speech, locale);
   if (!hit) return escaped;
   const label = speech.roleLabel;
   const pattern =
@@ -70,8 +85,8 @@ function whenTag(speech: TranscriptSpeech): string {
   return `<span class="when">${escapeHtml(speech.phaseLabel)}${attempt}</span>`;
 }
 
-function speechBlock(speech: TranscriptSpeech): string {
-  const hit = selfExposure(speech);
+function speechBlock(speech: TranscriptSpeech, locale: Locale): string {
+  const hit = selfExposure(speech, locale);
   const team = LABEL_TEAM[speech.roleLabel] === "EVIL" ? "evil" : "good";
   const flag = hit
     ? `<span class="flag ${hit.kind}">${FLAG_LABEL[hit.kind]}</span>`
@@ -85,11 +100,11 @@ function speechBlock(speech: TranscriptSpeech): string {
             ${whenTag(speech)}
             ${flag}
           </div>
-          <p class="said">${markSelfExposure(speech)}</p>
+          <p class="said">${markSelfExposure(speech, locale)}</p>
         </article>`;
 }
 
-function roundsBlock(speeches: TranscriptSpeech[]): string {
+function roundsBlock(speeches: TranscriptSpeech[], locale: Locale): string {
   const rounds = [...new Set(speeches.map((s) => s.round))].sort((a, b) => a - b);
   return rounds
     .map((round) => {
@@ -97,7 +112,7 @@ function roundsBlock(speeches: TranscriptSpeech[]): string {
       return `
       <section class="round">
         <h3 class="roundhead"><span>第 ${round} 轮</span><i></i><em>${inRound.length} 条发言</em></h3>
-        ${inRound.map(speechBlock).join("")}
+        ${inRound.map((speech) => speechBlock(speech, locale)).join("")}
       </section>`;
     })
     .join("");
@@ -186,7 +201,7 @@ function statsOf(transcript: Transcript): { blatant: number; mention: number } {
   let blatant = 0;
   let mention = 0;
   for (const speech of transcript.speeches) {
-    const hit = selfExposure(speech);
+    const hit = selfExposure(speech, transcript.locale ?? "zh");
     if (hit?.kind === "blatant") blatant += 1;
     else if (hit?.kind === "mention") mention += 1;
   }
@@ -227,7 +242,7 @@ function gamePanel(game: PageGame): string {
 
       <div class="seats">${transcript.seats.map(seatChip).join("")}</div>
 
-      ${roundsBlock(transcript.speeches)}
+      ${roundsBlock(transcript.speeches, transcript.locale ?? "zh")}
       ${missionsBlock(transcript)}
       ${assassinationBlock(transcript)}
       ${rescuedBlock(transcript)}

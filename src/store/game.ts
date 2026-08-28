@@ -31,8 +31,13 @@ import {
   type PlayerId,
   type PlayerView,
   type RngFn,
+  type ActionProblem,
+  type EngineErrorCode,
   type TeamConstraint,
 } from "@/lib/game";
+import { localeAtom } from "@/i18n/locale-atom";
+import { MESSAGES, type Messages } from "@/i18n/messages";
+import { AiError, type AiErrorCode } from "@/lib/ai/errors";
 import { createMockAiClient } from "@/lib/ai/mock";
 import {
   runGame,
@@ -88,8 +93,64 @@ export type RunStatus = "idle" | "ready" | "running" | "finished" | "error";
 
 export const runStatusAtom = atom<RunStatus>("idle");
 
-/** 给玩家看的一句话错误。非法提交与循环崩溃都落在这里 */
-export const errorAtom = atom<string | null>(null);
+/**
+ * 按 code 取出对应的文案函数再喂给它。
+ *
+ * 【这个断言是 TS 的已知限制，不是偷懒】`msg.actionProblem[p.code]` 与 `p` 是
+ * 一对**相关联合**：键从 p.code 取，形状必然对得上，但 TS 不会把这两件事
+ * 联系起来，只会把索引出的函数类型求交集，得到 never。
+ * 把断言收在这一个函数里，目录那边每一条仍然是各自收窄过的强类型。
+ */
+function renderActionProblem(msg: Messages, problem: ActionProblem): string {
+  const render = msg.actionProblem[problem.code] as (p: ActionProblem) => string;
+  return render(problem);
+}
+
+/**
+ * 错误的**来源**，不是错误的**文字**。【不导出】——组件只该拿到 errorAtom。
+ *
+ * 【为什么多这一层】错误文案要跟着语言走。存一句拼好的话，切语言时那句话
+ * 就冻在原语言上了；存来源，errorAtom 派生的时候现拼，切语言当场跟着变。
+ *
+ * 三支的分界是"谁该看见它"：
+ * - action：玩家误点。核心玩家文案，必须翻。
+ * - engine：引擎不变量被破坏（"跑了 5000 步还没结束"）。那是 bug 诊断，
+ *   任何语言的玩家都读不懂也不该读到——按 code 给一句人话，原文只进 console。
+ * - ai：模型层出了问题（没配 key、上游 429）。同上，运维细节进 console，
+ *   玩家看到的是"该做什么"那一句。
+ * - raw：其余未知异常。已经是给人看的一句话了，原样透出。
+ */
+type ErrorSource =
+  | { kind: "action"; problem: ActionProblem }
+  | { kind: "engine"; code: EngineErrorCode }
+  | { kind: "ai"; code: AiErrorCode }
+  | { kind: "raw"; text: string };
+
+const errorSourceAtom = atom<ErrorSource | null>(null);
+
+/**
+ * 给玩家看的一句话错误。非法提交与循环崩溃都落在这里。
+ *
+ * 【派生而不是可写】项目里没有 Jotai Provider（用的默认 store），所以这里
+ * 直接 get(localeAtom) 就行，组件那一层一个字都不用改：它仍然是 string | null。
+ */
+export const errorAtom = atom<string | null>((get) => {
+  const src = get(errorSourceAtom);
+  if (!src) return null;
+
+  const msg = MESSAGES[get(localeAtom)];
+  switch (src.kind) {
+    case "action":
+      return renderActionProblem(msg, src.problem);
+    case "engine":
+      // code 仍然拼在后面：出问题时那串大写字母是唯一能拿去搜代码的东西
+      return `${msg.engineError[src.code]}（${src.code}）`;
+    case "ai":
+      return `${msg.aiError[src.code]}（${src.code}）`;
+    case "raw":
+      return src.text;
+  }
+});
 
 /**
  * 人设生成的打点，由 SetupScreen 在建局时写入。
@@ -305,10 +366,24 @@ function withThinking(client: AiClient, set: ThinkingSetter): AiClient {
 /** 只用得上写 thinkingAtom 这一种能力，不把整个 setter 的宽签名拖进来 */
 type ThinkingSetter = (atom: typeof thinkingAtom, value: Thinking | null) => void;
 
-function describeError(error: unknown): string {
-  if (error instanceof EngineError) return `${error.message}（${error.code}）`;
-  if (error instanceof Error) return error.message;
-  return String(error);
+/**
+ * 把一个异常归到某一支来源上。
+ *
+ * 【EngineError 的原文只进 console】它是拿引擎内部状态拼出来的诊断
+ * （"视角里没有自己的座位 99"），翻译它既没意义也没人读得懂。玩家看到的是
+ * 按 code 写的一句人话，而排查问题的人在控制台里拿得到全部上下文。
+ */
+function sourceOfError(error: unknown): ErrorSource {
+  if (error instanceof EngineError) {
+    console.error("[store] 引擎异常：", error.code, error.message, error.context);
+    return { kind: "engine", code: error.code };
+  }
+  if (error instanceof AiError) {
+    // message 是运维信息（哪个环境变量、上游哪个状态码），玩家看不懂也帮不上忙
+    console.error("[store] 模型层异常：", error.code, error.message, error.context);
+    return { kind: "ai", code: error.code };
+  }
+  return { kind: "raw", text: error instanceof Error ? error.message : String(error) };
 }
 
 /**
@@ -321,33 +396,33 @@ function describeError(error: unknown): string {
  * 能穷举的动作（投票、任务票、刺杀）直接跟 legalActions 比对；
  * 模板动作（组队、发言）只能校验载荷形状，因为 legalActions 里那份是占位模板。
  */
-function validateHumanAction(turn: HumanTurn, action: GameAction): string | null {
+function validateHumanAction(turn: HumanTurn, action: GameAction): ActionProblem | null {
   const { view, legalActions } = turn;
   const allowed = legalActions.map((a) => a.type);
 
   if (!allowed.includes(action.type)) {
-    return `现在不能做 ${action.type}，可做的是 ${allowed.join(" / ")}`;
+    return { code: "WRONG_ACTION", got: action.type, allowed };
   }
   if (action.type === "START_GAME" || action.type === "NEXT") {
     // 系统动作不属于任何玩家，只由驱动循环推进
-    return `${action.type} 不该由界面提交`;
+    return { code: "SYSTEM_ACTION", got: action.type };
   }
   if (action.playerId !== view.selfId) {
-    return `不能替座位 ${action.playerId} 行动`;
+    return { code: "NOT_YOUR_SEAT", seat: action.playerId };
   }
 
   switch (action.type) {
     case "PROPOSE_TEAM": {
       const { teamSize } = view.currentMission;
       if (action.team.length !== teamSize) {
-        return `本轮任务需要 ${teamSize} 人，当前选了 ${action.team.length} 人`;
+        return { code: "TEAM_SIZE", need: teamSize, got: action.team.length };
       }
       if (new Set(action.team).size !== action.team.length) {
-        return "队伍里有重复座位";
+        return { code: "TEAM_DUPLICATE" };
       }
       const seats = new Set(view.players.map((p) => p.id));
       const stranger = action.team.find((id) => !seats.has(id));
-      if (stranger !== undefined) return `座位 ${stranger} 不存在`;
+      if (stranger !== undefined) return { code: "SEAT_MISSING", seat: stranger };
       return null;
     }
 
@@ -355,7 +430,7 @@ function validateHumanAction(turn: HumanTurn, action: GameAction): string | null
       const ok = legalActions.some(
         (a) => a.type === "CAST_VOTE" && a.approve === action.approve,
       );
-      return ok ? null : "这张票不在可选项里";
+      return ok ? null : { code: "VOTE_NOT_OFFERED" };
     }
 
     // 好人的 legalActions 里没有 success: false（legal.ts 那条最要紧的分支）。
@@ -364,14 +439,14 @@ function validateHumanAction(turn: HumanTurn, action: GameAction): string | null
       const ok = legalActions.some(
         (a) => a.type === "CAST_MISSION_CARD" && a.success === action.success,
       );
-      return ok ? null : "你的阵营不能打失败票";
+      return ok ? null : { code: "GOOD_CANNOT_FAIL" };
     }
 
     case "ASSASSINATE": {
       const ok = legalActions.some(
         (a) => a.type === "ASSASSINATE" && a.targetId === action.targetId,
       );
-      return ok ? null : `座位 ${action.targetId} 不是合法的刺杀目标`;
+      return ok ? null : { code: "BAD_TARGET", seat: action.targetId };
     }
 
     // 自由文本：引擎不校验内容，只校验轮没轮到你，上面已经查过了
@@ -399,11 +474,11 @@ export const submitActionAtom = atom(null, (get, set, action: GameAction) => {
   const problem = validateHumanAction(pending.turn, action);
   if (problem) {
     // 不 resolve：循环继续挂在这一步，玩家改一改再点
-    set(errorAtom, problem);
+    set(errorSourceAtom, { kind: "action", problem });
     return;
   }
 
-  set(errorAtom, null);
+  set(errorSourceAtom, null);
   // 先清面板再放行。反过来的话，runGame 会在 UI 还显示着上一轮操作面板时继续推进
   set(pendingTurnAtom, null);
   pending.resolve(action);
@@ -446,7 +521,7 @@ export const createGameAtom = atom(null, (_get, set, input: CreateGameInput) => 
     set(runStatusAtom, "ready");
   } catch (error) {
     // 配置非法（CONFIG_INVALID）在这里落地，不让异常穿透到 React 事件处理器
-    set(errorAtom, describeError(error));
+    set(errorSourceAtom, sourceOfError(error));
     set(runStatusAtom, "error");
   }
 });
@@ -464,7 +539,7 @@ export const runGameAtom = atom(null, async (get, set) => {
   const state = get(gameStateAtom);
   const rng = get(rngAtom);
   if (!state || !rng) {
-    set(errorAtom, "没有可运行的对局");
+    set(errorSourceAtom, { kind: "action", problem: { code: "NO_GAME" } });
     set(runStatusAtom, "error");
     return;
   }
@@ -509,6 +584,9 @@ export const runGameAtom = atom(null, async (get, set) => {
       rng,
       onHumanAction,
       signal,
+      // 【开局取一次，之后不跟着界面变】玩家中途切语言，UI 立刻变，
+      // 但 AI 仍然说开局那种语言——一份 transcript 不该说到一半换语言
+      locale: get(localeAtom),
       hooks: {
         onState: (next) => {
           set(gameStateAtom, next);
@@ -527,7 +605,7 @@ export const runGameAtom = atom(null, async (get, set) => {
   } catch (error) {
     // 主动中止不是错误，不该在界面上弹红字。状态已由 resetGameAtom 归位
     if (signal.aborted) return;
-    set(errorAtom, describeError(error));
+    set(errorSourceAtom, sourceOfError(error));
     set(runStatusAtom, "error");
   } finally {
     // 只清理自己那一局。中途 reset 再开新局时，这段跑得比新局晚，
@@ -552,5 +630,5 @@ export const resetGameAtom = atom(null, (get, set) => {
   set(personaNotesAtom, []);
   set(rngAtom, null);
   set(runStatusAtom, "idle");
-  set(errorAtom, null);
+  set(errorSourceAtom, null);
 });

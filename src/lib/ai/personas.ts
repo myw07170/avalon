@@ -20,6 +20,7 @@ import { z } from "zod";
 import { makePlaceholderPersonas } from "../game/setup";
 import type { Persona } from "../game/types";
 import { callProvider, extractJson, type LlmProviderConfig } from "./client";
+import { PROMPT_COPY } from "./prompt-copy";
 
 const personaSchema = z.object({
   name: z.string().trim().min(1),
@@ -34,45 +35,6 @@ const personaSchema = z.object({
 }) satisfies z.ZodType<Persona>;
 
 const responseSchema = z.object({ personas: z.array(personaSchema).min(1) });
-
-/**
- * 生成人设的 prompt。
- *
- * 三条约束直接抄自 wolfcha 的 `characterGenerator.fullPersonasPrompt`，它们都是踩出来的：
- * - 不写 high/low/aggressive 这类标签：标签会让模型演一个标签，而不是演一个人
- * - **不写字数区间**：与 rules.md §6 同源，中文模型对字数的感知很差
- * - 说话风格里不许有职业类比和行业术语：否则人设本身就会把"里程碑/分工"那套话带进牌桌，
- *   而那正是 PUBLIC_SPEECH_RULES 刚刚禁掉的东西
- */
-function buildPersonaPrompt(count: number): string {
-  return [
-    `你在为一局阿瓦隆桌游生成 ${count} 位 AI 玩家的人设。他们是"来玩阿瓦隆的普通人"，不是剧本杀角色。`,
-    "",
-    "【目标】一桌真实玩家：有人大胆有人谨慎，有人记票型有人记语气，",
-    "有人一两句带过、有人被追问就展开。彼此要明显不同，但每个人都得能正常参与讨论。",
-    "",
-    "【每个人要有】",
-    "- name：中文名，2-3 个字，互不相同",
-    "- traits：2-3 个性格词",
-    "- speechStyle：说话的语气、节奏和句式习惯",
-    "- mind.reasoningStyle：看局势时最先注意什么（票型、语气、上过几次车、位置关系……）",
-    "- mind.speechLengthHabit：平时、被追问、被指认时话的长短怎么变",
-    "- mind.pressureStyle：被点名或被怀疑时会怎么反应",
-    "- mind.mistakePattern：他常犯的判断错误——**每个人都要有缺陷**，完美的人不像真人",
-    "",
-    "【硬约束】",
-    "- 全部写成自然语言描述，不要写 high/low/aggressive/新手/高手 这类标签",
-    "- **不要出现任何字数区间**（不要写「30-50 字」这种）",
-    "- speechStyle 与 mind 里不许出现职业类比、行业术语、职场黑话——这是牌桌，不是周会",
-    "- 不要写和阿瓦隆无关的身世剧情",
-    "",
-    "【输出格式】",
-    "只输出一个 JSON 对象，不要解释文字，不要 markdown 代码块：",
-    '{"personas":[{"name":"…","traits":["…"],"speechStyle":"…",' +
-      '"mind":{"reasoningStyle":"…","speechLengthHabit":"…","pressureStyle":"…","mistakePattern":"…"}}]}',
-    `personas 数组必须恰好 ${count} 个元素。`,
-  ].join("\n");
-}
 
 /**
  * 这一次调用**不发 max_tokens**，是全项目唯一的例外。
@@ -91,6 +53,14 @@ function personaConfig(config: LlmProviderConfig): LlmProviderConfig {
 export interface GeneratePersonasOptions {
   config: LlmProviderConfig;
   count: number;
+  /**
+   * 人设用哪种语言写。
+   *
+   * 【英文那份 prompt 里明写了要西方名字】不在这里按 locale 分支——
+   * 人设生成是纯 prompt 工程，加一个 if 只会让"名字为什么是中文的"
+   * 这件事散到两个文件里。照抄 wolfcha 的做法：约束写进 prompt。
+   */
+  locale: "zh" | "en";
   /** 每条决策记一行，与 real-game.test.ts 的打点同源。不传就不打点 */
   onNote?: (note: string) => void;
 }
@@ -102,38 +72,39 @@ export interface GeneratePersonasOptions {
 export async function generatePersonas(
   options: GeneratePersonasOptions,
 ): Promise<Persona[]> {
-  const { config, count, onNote } = options;
+  const { config, count, locale, onNote } = options;
+  const c = PROMPT_COPY[locale].personaGen;
   const fallback = (reason: string): Persona[] => {
-    onNote?.(`人设生成失败（${reason}），回退到占位人设`);
+    onNote?.(c.noteFallback(reason));
     return makePlaceholderPersonas(count);
   };
 
   let raw: string;
   try {
     raw = await callProvider(personaConfig(config), [
-      { role: "user", content: buildPersonaPrompt(count) },
+      { role: "user", content: c.prompt(count) },
     ]);
   } catch (error) {
-    return fallback(error instanceof Error ? error.message : "未知原因");
+    return fallback(error instanceof Error ? error.message : c.unknownReason);
   }
 
   const parsed = responseSchema.safeParse(extractJson(raw));
   if (!parsed.success) {
-    return fallback(`返回的 JSON 不合格式：${parsed.error.issues[0]?.message ?? "未知"}`);
+    return fallback(c.badJson(parsed.error.issues[0]?.message ?? c.unknownDetail));
   }
 
   const { personas } = parsed.data;
   if (personas.length < count) {
-    return fallback(`只给了 ${personas.length} 份，需要 ${count} 份`);
+    return fallback(c.tooFew(personas.length, count));
   }
   // 多给了就截断——多出来的那几份只是浪费，不值得为它重试一次
   const picked = personas.slice(0, count);
 
   const names = new Set(picked.map((p) => p.name));
   if (names.size !== picked.length) {
-    return fallback("有重名的人设");
+    return fallback(c.duplicateNames);
   }
 
-  onNote?.(`已生成 ${count} 份人设：${picked.map((p) => p.name).join("、")}`);
+  onNote?.(c.noteGenerated(count, picked.map((p) => p.name)));
   return picked;
 }

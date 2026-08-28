@@ -88,6 +88,7 @@ function makeReq<K extends AiDecisionKind>(
     persona: requirePersona(state, playerId),
     legalActions: getLegalActions(state, playerId),
     maxRetries,
+    locale: "zh",
   };
 }
 

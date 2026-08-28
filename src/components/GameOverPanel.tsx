@@ -13,6 +13,7 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { useMemo } from "react";
 import { myViewAtom, resetGameAtom, reviewDecisionsAtom } from "@/store/game";
+import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
 import { SeatRing } from "./SeatRing";
 import { MissionTrack } from "./MissionTrack";
@@ -29,8 +30,12 @@ export function GameOverPanel() {
   const view = useAtomValue(myViewAtom);
   const decisions = useAtomValue(reviewDecisionsAtom);
   const reset = useSetAtom(resetGameAtom);
+  const msg = useMessages();
 
-  const brief = useMemo(() => describeGameOver(view, decisions), [view, decisions]);
+  const brief = useMemo(
+    () => describeGameOver(view, decisions, msg),
+    [view, decisions, msg],
+  );
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center gap-8 px-5 py-10 sm:py-14">
@@ -41,7 +46,7 @@ export function GameOverPanel() {
         onClick={() => reset()}
         className="rounded-lg border border-ink-line bg-ink-raised min-h-11 px-6 py-2.5 text-sm text-muted transition-colors hover:border-muted hover:text-vellum"
       >
-        再来一局
+        {msg.gameOver.again}
       </button>
     </main>
   );
@@ -49,11 +54,15 @@ export function GameOverPanel() {
 
 /** 观战局没有视角，也就没有 reveal。给一句话，不要白屏 */
 function NoReveal() {
+  const msg = useMessages();
+
   return (
     <>
-      <p className="font-display text-xs tracking-[0.3em] text-muted">对局结束</p>
+      <p className="font-display text-xs tracking-[var(--track-3)] text-muted">
+        {msg.gameOver.title}
+      </p>
       <p className="max-w-md rounded-lg border border-ink-line bg-ink-raised px-4 py-3 text-center text-sm leading-relaxed text-muted">
-        这一局没有你的座位，所以没有可复盘的视角。
+        {msg.gameOver.noSeat}
       </p>
     </>
   );
@@ -82,9 +91,13 @@ function Result({ brief }: { brief: GameOverBrief }) {
 // ---------------------------------------------------------------------------
 
 function Banner({ brief }: { brief: GameOverBrief }) {
+  const msg = useMessages();
+
   return (
     <header className="flex flex-col items-center gap-3 text-center">
-      <p className="font-display text-xs tracking-[0.3em] text-muted">对局结束</p>
+      <p className="font-display text-xs tracking-[var(--track-3)] text-muted">
+        {msg.gameOver.title}
+      </p>
 
       <h1
         className={cn(
@@ -98,9 +111,9 @@ function Banner({ brief }: { brief: GameOverBrief }) {
       <p className="max-w-md text-sm leading-relaxed text-muted">{brief.reasonLabel}</p>
 
       <p className="text-sm text-vellum">
-        你是{brief.yourRoleLabel}，
+        {msg.gameOver.youAre(brief.yourRoleLabel)}
         <span className={brief.youWon ? "text-loyal" : "text-mordred"}>
-          {brief.youWon ? "你赢了" : "你输了"}
+          {brief.youWon ? msg.gameOver.youWon : msg.gameOver.youLost}
         </span>
       </p>
     </header>
@@ -114,6 +127,8 @@ function Banner({ brief }: { brief: GameOverBrief }) {
  * 才是玩家真正在找的一行，所以它跟命中时一样显眼。
  */
 function Strike({ strike }: { strike: StrikeOutcome }) {
+  const msg = useMessages();
+
   return (
     <section
       className={cn(
@@ -121,27 +136,33 @@ function Strike({ strike }: { strike: StrikeOutcome }) {
         strike.hit ? "border-mordred bg-mordred/10" : "border-loyal bg-loyal/10",
       )}
     >
-      <h2 className="font-display text-sm tracking-[0.2em] text-muted">刺杀</h2>
+      <h2 className="font-display text-sm tracking-[var(--track-1)] text-muted">
+        {msg.gameOver.strikeTitle}
+      </h2>
 
       <p className="mt-3 text-sm leading-relaxed text-vellum">
-        {strike.assassinLabel} 指认了 {strike.targetLabel}，那一座是
+        {msg.gameOver.strikeLine(strike.assassinLabel, strike.targetLabel)}
         <strong className="px-1 font-normal text-brass">{strike.targetRoleLabel}</strong>—
         <strong
           className={cn("px-1 font-normal", strike.hit ? "text-mordred" : "text-loyal")}
         >
           {strike.headline}
         </strong>
-        。
+        {msg.gameOver.period}
       </p>
 
-      <p className="mt-1 text-sm text-muted">{strike.merlinLabel}。</p>
+      <p className="mt-1 text-sm text-muted">
+        {strike.merlinLabel}
+        {msg.gameOver.period}
+      </p>
 
       {/* break-words：模型自由文本里可能有一长串不带空格的东西，不加会撑破 max-w-md */}
       {strike.opinions.length > 0 && (
         <ul className="mt-4 space-y-2 border-t border-ink-line pt-3">
           {strike.opinions.map((opinion, i) => (
             <li key={i} className="break-words text-xs leading-relaxed text-muted">
-              <span className="tabular text-vellum">{opinion.label}</span>：{opinion.content}
+              <span className="tabular text-vellum">{opinion.label}</span>
+              {msg.gameOver.opinionLine("", opinion.content)}
             </li>
           ))}
         </ul>
@@ -151,10 +172,12 @@ function Strike({ strike }: { strike: StrikeOutcome }) {
 }
 
 function Identities({ brief }: { brief: GameOverBrief }) {
+  const msg = useMessages();
+
   return (
     <section className="w-full">
-      <h2 className="text-center font-display text-sm tracking-[0.2em] text-muted">
-        全部身份
+      <h2 className="text-center font-display text-sm tracking-[var(--track-1)] text-muted">
+        {msg.gameOver.allRoles}
       </h2>
 
       <SeatRing
@@ -162,7 +185,9 @@ function Identities({ brief }: { brief: GameOverBrief }) {
         marks={brief.seats.map((seat) => ({ id: seat.id, tone: seat.tone }))}
         seatLabel={(id) => {
           const seat = brief.seats.find((s) => s.id === id);
-          return seat ? `${seat.label}：${seat.roleLabel}` : `${id} 号座位`;
+          return seat
+            ? msg.gameOver.seatRole(seat.label, seat.roleLabel)
+            : msg.seat.short(id);
         }}
       />
 
@@ -194,9 +219,13 @@ function Identities({ brief }: { brief: GameOverBrief }) {
  * 所以对局中任何人（包括你）都只知道"几张失败票"，不知道是谁投的。
  */
 function Missions({ missions }: { missions: RevealedMission[] }) {
+  const msg = useMessages();
+
   return (
     <section className="w-full max-w-md">
-      <h2 className="font-display text-sm tracking-[0.2em] text-muted">任务票来源</h2>
+      <h2 className="font-display text-sm tracking-[var(--track-1)] text-muted">
+        {msg.gameOver.failSourceTitle}
+      </h2>
 
       <ul className="mt-3 space-y-2">
         {missions.map((mission) => (
@@ -212,12 +241,12 @@ function Missions({ missions }: { missions: RevealedMission[] }) {
             </p>
 
             <p className="tabular mt-1 text-xs leading-relaxed text-muted">
-              上车：{mission.teamLabels.join("、")}
+              {msg.gameOver.onTeam(mission.teamLabels)}
             </p>
 
             {mission.failedByLabels.length > 0 && (
               <p className="tabular mt-1 text-xs leading-relaxed text-mordred">
-                投了失败票：{mission.failedByLabels.join("、")}
+                {msg.gameOver.failedBy(mission.failedByLabels)}
               </p>
             )}
           </li>
@@ -234,11 +263,14 @@ function Missions({ missions }: { missions: RevealedMission[] }) {
  * 未调用模型的那些单独报一个数，混进平均值会把它算得虚低。
  */
 function Timing({ timing }: { timing: TimingBrief }) {
+  const msg = useMessages();
   const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 
   return (
     <section className="w-full max-w-md">
-      <h2 className="font-display text-sm tracking-[0.2em] text-muted">AI 思考耗时</h2>
+      <h2 className="font-display text-sm tracking-[var(--track-1)] text-muted">
+        {msg.gameOver.timingTitle}
+      </h2>
 
       <ul className="mt-3 divide-y divide-ink-line rounded-lg border border-ink-line bg-ink-raised">
         {timing.rows.map((row) => (
@@ -248,15 +280,18 @@ function Timing({ timing }: { timing: TimingBrief }) {
           >
             <span className="text-vellum">{row.kindLabel}</span>
             <span className="text-muted">
-              {row.count} 次 · 平均 {seconds(row.avgMs)} · 最慢 {seconds(row.maxMs)}
+              {msg.gameOver.timingRow(row.count, seconds(row.avgMs), seconds(row.maxMs))}
             </span>
           </li>
         ))}
       </ul>
 
       <p className="tabular mt-2 text-xs leading-relaxed text-muted">
-        共调用模型 {timing.askedCount} 次，合计 {seconds(timing.totalMs)}；
-        另有 {timing.autoCount} 次只有一个合法动作，没有调用模型。
+        {msg.gameOver.timingSummary(
+          timing.askedCount,
+          seconds(timing.totalMs),
+          timing.autoCount,
+        )}
       </p>
     </section>
   );
@@ -264,11 +299,15 @@ function Timing({ timing }: { timing: TimingBrief }) {
 
 /** AI 心证。对局中读到就是开天眼，所以它的闸在 store 的 reviewDecisionsAtom 上 */
 function Replay({ rounds }: { rounds: ReplayRound[] }) {
+  const msg = useMessages();
+
   if (rounds.length === 0) return null;
 
   return (
     <section className="w-full max-w-md">
-      <h2 className="font-display text-sm tracking-[0.2em] text-muted">AI 心证回放</h2>
+      <h2 className="font-display text-sm tracking-[var(--track-1)] text-muted">
+        {msg.gameOver.replayTitle}
+      </h2>
 
       <div className="mt-3 space-y-4">
         {rounds.map((round) => (
@@ -276,7 +315,7 @@ function Replay({ rounds }: { rounds: ReplayRound[] }) {
             <summary className="tabular flex min-h-11 cursor-pointer list-none items-center rounded-lg border border-ink-line bg-ink-raised px-4 py-2 text-sm text-vellum transition-colors hover:border-muted">
               {round.label}
               <span className="pl-2 text-xs text-muted">
-                {round.entries.length} 次决策 · 点开
+                {msg.gameOver.replayCount(round.entries.length)}
               </span>
             </summary>
 

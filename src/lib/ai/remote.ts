@@ -7,7 +7,8 @@
  * 【不做兜底】网络不通就抛（见 client.ts 顶部的说明）：随机兜底只服务于
  * "模型说了胡话"这一种情况，把网络故障也算进 fallback 率，那个指标就废了。
  */
-import { AiError } from "./errors";
+import { AiError, type AiErrorCode } from "./errors";
+import { PROMPT_COPY } from "./prompt-copy";
 import type {
   AiClient,
   AiDecisionKind,
@@ -62,10 +63,12 @@ export function createRemoteAiClient(options: RemoteAiClientOptions = {}): AiCli
       }
 
       if (!response.ok) {
-        // route handler 的错误响应形如 { error: "..." }，取出来当消息，
-        // 取不到就退回状态码——服务端已经保证这段文本里不含 key
-        const message = await readErrorMessage(response);
-        throw new AiError(`${endpoint} 返回 HTTP ${response.status}：${message}`, "PROVIDER_UNAVAILABLE", {
+        // route handler 的错误响应形如 { code, error }。
+        // 【code 要原样带上】玩家看到的那句话按它在 src/i18n 里查——退回
+        // PROVIDER_UNAVAILABLE 的话，"服务端没配 key" 会被说成 "上游暂时不可用"，
+        // 而这两件事该做的处置完全不同。error 只进 console，不显示给玩家
+        const { code, detail } = await readError(response);
+        throw new AiError(`${endpoint} 返回 HTTP ${response.status}：${detail}`, code, {
           endpoint,
           status: response.status,
         });
@@ -76,17 +79,43 @@ export function createRemoteAiClient(options: RemoteAiClientOptions = {}): AiCli
   };
 }
 
-async function readErrorMessage(response: Response): Promise<string> {
+const AI_ERROR_CODES: readonly AiErrorCode[] = [
+  "CONFIG_MISSING",
+  "PROVIDER_REJECTED",
+  "PROVIDER_UNAVAILABLE",
+  "BAD_REQUEST",
+];
+
+/**
+ * 从错误响应里取出 { code, detail }。
+ *
+ * 【code 要校验，不能直接信】这是一段跨 HTTP 边界的输入。虽然两端都是我们自己的
+ * 代码，但版本可以不一致（缓存住的旧页面打新服务端），认不出的值退回
+ * PROVIDER_UNAVAILABLE ——那是"再试试"，是最不会误导人的一档。
+ */
+async function readError(
+  response: Response,
+): Promise<{ code: AiErrorCode; detail: string }> {
+  let code: AiErrorCode = "PROVIDER_UNAVAILABLE";
+  let detail = "无错误详情";
+
   try {
     const body: unknown = await response.json();
     if (typeof body === "object" && body !== null) {
-      const error = (body as { error?: unknown }).error;
-      if (typeof error === "string") return error;
+      const raw = body as { code?: unknown; error?: unknown };
+      if (
+        typeof raw.code === "string" &&
+        (AI_ERROR_CODES as readonly string[]).includes(raw.code)
+      ) {
+        code = raw.code as AiErrorCode;
+      }
+      if (typeof raw.error === "string") detail = raw.error;
     }
   } catch {
     // 响应体不是 JSON。没什么可说的，交给上面的状态码
   }
-  return "无错误详情";
+
+  return { code, detail };
 }
 
 // ---------------------------------------------------------------------------
@@ -116,6 +145,7 @@ export interface FetchPersonasOptions {
  */
 export async function fetchPersonas(
   count: number,
+  locale: "zh" | "en",
   options: FetchPersonasOptions = {},
 ): Promise<PersonaFetchResult> {
   const endpoint = options.endpoint ?? "/api/personas";
@@ -126,13 +156,17 @@ export async function fetchPersonas(
     response = await fetchFn(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ count }),
+      body: JSON.stringify({ count, locale }),
       ...(options.signal ? { signal: options.signal } : {}),
     });
   } catch (cause) {
     return {
       personas: null,
-      notes: [`请求人设失败：${cause instanceof Error ? cause.message : "未知原因"}`],
+      notes: [
+        PROMPT_COPY[locale].personaGen.noteFallback(
+          cause instanceof Error ? cause.message : PROMPT_COPY[locale].personaGen.unknownReason,
+        ),
+      ],
     };
   }
 
@@ -140,7 +174,11 @@ export async function fetchPersonas(
     // 服务端已经保证这段文本里不含 key（见 api/personas/route.ts 的 503 分支）
     return {
       personas: null,
-      notes: [`生成人设失败（HTTP ${response.status}）：${await readErrorMessage(response)}`],
+      notes: [
+        PROMPT_COPY[locale].personaGen.noteFallback(
+          `HTTP ${response.status}: ${(await readError(response)).detail}`,
+        ),
+      ],
     };
   }
 
@@ -148,6 +186,9 @@ export async function fetchPersonas(
     const body = (await response.json()) as PersonaFetchResult;
     return { personas: body.personas ?? null, notes: body.notes ?? [] };
   } catch {
-    return { personas: null, notes: ["人设接口返回的不是合法 JSON"] };
+    return {
+      personas: null,
+      notes: [PROMPT_COPY[locale].personaGen.noteFallback(PROMPT_COPY[locale].personaGen.badJson(""))],
+    };
   }
 }

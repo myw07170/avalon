@@ -195,6 +195,13 @@ export interface RunGameOptions {
   /** 中途退出。玩家关掉页面后循环还在烧 token，是真会花钱的 */
   signal?: AbortSignal;
   maxRetries?: number;
+  /**
+   * 这一局的 AI 用哪种语言。缺省中文。
+   *
+   * 【开局定死，中途不跟着界面变】store 在起跑时取一次 localeAtom 传进来。
+   * 玩家中途切界面语言，AI 仍然说开局那种语言——一份 transcript 不该说到一半换语言。
+   */
+  locale?: "zh" | "en";
 }
 
 // ---------------------------------------------------------------------------
@@ -271,6 +278,9 @@ async function takeTurn(
     persona: requirePersona(state, playerId),
     legalActions,
     maxRetries: options.maxRetries ?? DEFAULT_MAX_RETRIES,
+    // 【全项目唯一一处构造 AiDecisionRequest 的生产代码】远端走
+    // remote.ts 的 JSON.stringify(req)，locale 就此免费随行到 /api/ai
+    locale: options.locale ?? "zh",
   };
   const startedAt = performance.now();
   const result = await options.client.decide(request);

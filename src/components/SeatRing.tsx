@@ -17,6 +17,7 @@
  * 本文件没有 "use client"：它只被客户端组件渲染，指令由那些文件带。
  */
 import type { PlayerId } from "@/lib/game";
+import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
 import type { SeatTone } from "./role-card-model";
 import type { SeatStatus } from "./seat-table-model";
@@ -96,6 +97,7 @@ export function SeatRing(props: SeatRingProps) {
 }
 
 function Ring({ count, marks, center, onSelect, seatLabel }: SeatRingProps) {
+  const msg = useMessages();
   const markOf = new Map(marks?.map((m) => [m.id, m]));
 
   return (
@@ -111,7 +113,7 @@ function Ring({ count, marks, center, onSelect, seatLabel }: SeatRingProps) {
 
       {seatRingPositions(count).map((point) => {
         const mark = markOf.get(point.id) ?? { ...DEFAULT_MARK, id: point.id };
-        const label = seatLabel?.(point.id, mark) ?? `${point.id} 号座位`;
+        const label = seatLabel?.(point.id, mark) ?? msg.seat.short(point.id);
 
         // 光环画在外层：节点自己的 border 归 tone 用，两者不打架
         const wrapper = cn(
@@ -134,7 +136,7 @@ function Ring({ count, marks, center, onSelect, seatLabel }: SeatRingProps) {
                 aria-hidden
                 className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-sm bg-brass px-1 text-[9px] leading-tight text-ink"
               >
-                队长
+                {msg.seat.leader}
               </span>
             )}
             {mark.status === "done" && (

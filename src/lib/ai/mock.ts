@@ -14,6 +14,7 @@
  * 它拿到的信息必须和真实 LLM 一模一样，否则调通了也不算调通。
  */
 import { pick, shuffle } from "../game/rng";
+import { PROMPT_COPY } from "./prompt-copy";
 import {
   EngineError,
   type ActionType,
@@ -65,12 +66,23 @@ function requireActions<T extends ActionType>(
   return candidates;
 }
 
-/** 模板文本。带上人设与局势，让阶段 5 的 UI 有东西可渲染 */
+/**
+ * 模板文本。带上人设与局势，让 UI 有东西可渲染。
+ *
+ * 【mock 也要分语言】它是 dev 用的，但**会渲染进 SpeechFeed**——
+ * 英文界面配一屏中文的 [mock] 发言，跟真实模式下 AI 说中文是同一种半成品。
+ */
 function mockText(req: AiDecisionRequest<AiDecisionKind>, topic: string): string {
   const { view, persona } = req;
-  return (
-    `[mock] ${persona.name}（座位 ${view.selfId}）第 ${view.missionIndex + 1} 轮${topic}：` +
-    `当前好人 ${view.goodScore} 比 ${view.evilScore}，本轮已否决 ${view.rejectCount} 次。`
+  const c = PROMPT_COPY[req.locale];
+  return c.mock.text(
+    persona.name,
+    c.seat(view.selfId),
+    c.nth(view.missionIndex),
+    topic,
+    view.goodScore,
+    view.evilScore,
+    view.rejectCount,
   );
 }
 
@@ -98,6 +110,7 @@ function buildPayload(
   rng: RngFn,
 ): AiDecisionPayload[AiDecisionKind] {
   const { view } = req;
+  const mock = PROMPT_COPY[req.locale].mock;
 
   switch (req.kind) {
     case "TEAM_PROPOSAL": {
@@ -110,32 +123,32 @@ function buildPayload(
         .slice(0, view.currentMission.teamSize)
         .sort((a, b) => a - b);
       return {
-        reasoning: `[mock] 从 ${view.players.length} 人里随机挑 ${view.currentMission.teamSize} 人`,
+        reasoning: mock.reasoningTeam(view.players.length, view.currentMission.teamSize),
         team,
-        statement: mockText(req, "组队说明"),
+        statement: mockText(req, mock.topicProposal),
       };
     }
 
     case "SPEECH":
       requireActions(req, "SPEAK");
       return {
-        reasoning: "[mock] 没有策略，按模板发言",
-        content: mockText(req, "发言"),
+        reasoning: mock.reasoningSpeech,
+        content: mockText(req, mock.topicSpeech),
         suspicions: mockSuspicions(view, rng),
       };
 
     case "ASSASSIN_OPINION":
       requireActions(req, "ASSASSIN_OPINION");
       return {
-        reasoning: "[mock] 没有策略，按模板发表推测",
-        content: mockText(req, "刺杀前推测"),
+        reasoning: mock.reasoningOpinion,
+        content: mockText(req, mock.topicOpinion),
         suspicions: mockSuspicions(view, rng),
       };
 
     case "VOTE": {
       const chosen = pick(requireActions(req, "CAST_VOTE"), rng);
       return {
-        reasoning: `[mock] 随机${chosen.approve ? "同意" : "否决"}`,
+        reasoning: mock.reasoningVote(chosen.approve),
         approve: chosen.approve,
       };
     }
@@ -145,7 +158,7 @@ function buildPayload(
     case "MISSION_CARD": {
       const chosen = pick(requireActions(req, "CAST_MISSION_CARD"), rng);
       return {
-        reasoning: `[mock] 在 ${req.legalActions.length} 个合法选项里随机取一个`,
+        reasoning: mock.reasoningCard(req.legalActions.length),
         success: chosen.success,
       };
     }
@@ -153,7 +166,7 @@ function buildPayload(
     case "ASSASSINATION": {
       const chosen = pick(requireActions(req, "ASSASSINATE"), rng);
       return {
-        reasoning: "[mock] 随机指一个座位",
+        reasoning: mock.reasoningStrike,
         targetId: chosen.targetId,
       };
     }

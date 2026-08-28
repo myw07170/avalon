@@ -13,21 +13,22 @@
  * 不能等它回退完再猜。
  */
 import { readProviderConfig } from "@/lib/ai/client";
-import { AiError } from "@/lib/ai/errors";
+import { AiError, type AiErrorCode } from "@/lib/ai/errors";
 import { generatePersonas } from "@/lib/ai/personas";
 import { personaRequestSchema } from "@/lib/ai/schema";
 
 export const maxDuration = 30;
 
-const fail = (status: number, error: string): Response =>
-  Response.json({ error }, { status });
+/** 与 /api/ai 同一份约定：code 给界面查文案，error 是只进 console 的运维细节 */
+const fail = (status: number, code: AiErrorCode, error: string): Response =>
+  Response.json({ code, error }, { status });
 
 export async function POST(request: Request): Promise<Response> {
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return fail(400, "请求体不是合法 JSON");
+    return fail(400, "BAD_REQUEST", "请求体不是合法 JSON");
   }
 
   const parsed = personaRequestSchema.safeParse(body);
@@ -35,7 +36,7 @@ export async function POST(request: Request): Promise<Response> {
     const detail = parsed.error.issues
       .map((issue) => `${issue.path.join(".") || "(根)"}: ${issue.message}`)
       .join("; ");
-    return fail(400, `请求体不合法：${detail}`);
+    return fail(400, "BAD_REQUEST", `请求体不合法：${detail}`);
   }
 
   let config;
@@ -45,7 +46,7 @@ export async function POST(request: Request): Promise<Response> {
     if (error instanceof AiError) {
       // 服务端没配好。消息里只有变量名，没有任何密钥
       console.error("[api/personas] 配置错误：", error.message);
-      return fail(503, error.message);
+      return fail(503, error.code, error.message);
     }
     throw error;
   }
@@ -56,6 +57,7 @@ export async function POST(request: Request): Promise<Response> {
   const personas = await generatePersonas({
     config,
     count: parsed.data.count,
+    locale: parsed.data.locale,
     onNote: (note) => void notes.push(note),
   });
 

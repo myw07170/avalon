@@ -12,14 +12,13 @@
  * 【不抛】认不出的形状返回 null，由面板兜一句话。渲染期抛就是白屏——
  * 与 action-panel-model 的 describeTurn 同一条约定。
  */
+import type { Messages } from "@/i18n/messages";
 import {
-  ROLE_META,
   ROLE_TEAM,
   type PlayerId,
   type PlayerView,
   type Role,
   type Team,
-  type WinReason,
 } from "@/lib/game";
 import type { DecisionRecord } from "@/lib/ai/orchestrator";
 import type { SeatTone } from "./role-card-model";
@@ -118,52 +117,24 @@ export interface GameOverBrief {
 // 文案
 // ---------------------------------------------------------------------------
 
-const TEAM_LABEL: Record<Team, string> = {
-  GOOD: "好人阵营",
-  EVIL: "坏人阵营",
-};
-
-/**
- * 四种终局各一句。
+/*
+ * 阵营名、四种终局各一句、六类决策的名字，都在
+ * `src/i18n/messages.zh.ts` 的 `team` / `gameOver` 命名空间里。
  *
- * 【穷尽 switch 不是风格】WinReason 是闭合联合类型，将来加一种终局会在这里
- * 变成编译错误，而不是悄悄渲染出一个空字符串。
+ * 【`gameOver.reason` 仍然是 `Record<WinReason, string>`】原来这里是一个穷尽
+ * switch，加一种终局会变成编译错误。搬进目录之后那条性质由 Record 的键完整性接管，
+ * 而且**两种语言各查一次**——漏译一种终局同样是编译错误。
  */
-function reasonLabelOf(reason: WinReason): string {
-  switch (reason) {
-    case "THREE_MISSIONS":
-      return "坏人破坏了三次任务";
-    case "REJECT_LIMIT":
-      return "同一轮里连续否决撞上了上限，视为坏人获胜";
-    case "ASSASSINATION_HIT":
-      return "好人做完了三次任务，但刺客认出了梅林";
-    case "ASSASSINATION_MISS":
-      return "好人做完了三次任务，刺客没能认出梅林";
-  }
-}
-
-const KIND_LABEL: Record<DecisionRecord["kind"], string> = {
-  TEAM_PROPOSAL: "组队",
-  SPEECH: "发言",
-  VOTE: "投票",
-  MISSION_CARD: "任务票",
-  ASSASSIN_OPINION: "刺杀推测",
-  ASSASSINATION: "刺杀",
-};
 
 // ---------------------------------------------------------------------------
 // 工具
 // ---------------------------------------------------------------------------
 
 /** 座位一律按号称呼，名字只是补充——与 role-card-model 的 seatName 同口径 */
-function seatLabel(view: PlayerView, id: PlayerId): string {
+function seatLabel(view: PlayerView, id: PlayerId, msg: Messages): string {
   const player = view.players.find((p) => p.id === id);
-  const base = player ? `${id} 号（${player.name}）` : `${id} 号`;
-  return id === view.selfId ? `${base}（你）` : base;
-}
-
-function roleLabel(role: Role): string {
-  return ROLE_META[role].label;
+  const base = player ? msg.seat.named(id, player.name) : msg.seat.short(id);
+  return id === view.selfId ? msg.seat.withYou(base) : base;
 }
 
 /** reveal.roles 里第一个梅林。引擎保证本局恰有一个 */
@@ -176,7 +147,7 @@ function findMerlin(roles: Record<PlayerId, Role>): PlayerId | null {
 // 各块
 // ---------------------------------------------------------------------------
 
-function strikeOf(view: PlayerView): StrikeOutcome | null {
+function strikeOf(view: PlayerView, msg: Messages): StrikeOutcome | null {
   const record = view.reveal?.assassination;
   // 坏人靠三次任务赢、或者否决撞线时，游戏根本没走到刺杀。
   // 这是正常的终局形态，不是缺数据
@@ -188,29 +159,33 @@ function strikeOf(view: PlayerView): StrikeOutcome | null {
 
   return {
     hit: record.hit,
-    headline: record.hit ? "刺中了梅林" : "刺空了",
-    assassinLabel: seatLabel(view, record.assassinId),
-    targetLabel: seatLabel(view, record.targetId),
-    targetRoleLabel: targetRole ? roleLabel(targetRole) : "身份不明",
+    headline: record.hit ? msg.gameOver.hit : msg.gameOver.miss,
+    assassinLabel: seatLabel(view, record.assassinId, msg),
+    targetLabel: seatLabel(view, record.targetId, msg),
+    targetRoleLabel: targetRole
+      ? msg.roles[targetRole].label
+      : msg.gameOver.unknownRole,
     merlinLabel:
-      merlinId === null ? "本局没有梅林" : `梅林是 ${seatLabel(view, merlinId)}`,
+      merlinId === null
+        ? msg.gameOver.noMerlin
+        : msg.gameOver.merlinIs(seatLabel(view, merlinId, msg)),
     opinions: record.opinions.map((o) => ({
-      label: seatLabel(view, o.playerId),
+      label: seatLabel(view, o.playerId, msg),
       // 空发言是合法状态（legal.ts 不校验文本），如实显示而不是画个空气泡
-      content: o.content.trim() === "" ? "（没有开口）" : o.content,
+      content: o.content.trim() === "" ? msg.gameOver.silent : o.content,
     })),
   };
 }
 
-function seatsOf(view: PlayerView): RevealedSeat[] {
+function seatsOf(view: PlayerView, msg: Messages): RevealedSeat[] {
   const roles = view.reveal?.roles ?? {};
   return view.players.map((player) => {
     const role = roles[player.id];
     const team = role ? ROLE_TEAM[role] : "GOOD";
     return {
       id: player.id,
-      label: seatLabel(view, player.id),
-      roleLabel: role ? roleLabel(role) : "身份不明",
+      label: seatLabel(view, player.id, msg),
+      roleLabel: role ? msg.roles[role].label : msg.gameOver.unknownRole,
       team,
       // 【终局按阵营染色，不再标 self】self 那一档是黄铜，会把你自己的阵营盖掉，
       // 而复盘要看的恰恰是"谁跟谁一伙"。是不是你，由 label 里的「你」说明
@@ -220,7 +195,7 @@ function seatsOf(view: PlayerView): RevealedSeat[] {
   });
 }
 
-function missionsOf(view: PlayerView): RevealedMission[] {
+function missionsOf(view: PlayerView, msg: Messages): RevealedMission[] {
   return (view.reveal?.missions ?? []).map((mission) => {
     const failedBy = mission.cards
       .filter((card) => !card.success)
@@ -229,34 +204,38 @@ function missionsOf(view: PlayerView): RevealedMission[] {
 
     return {
       index: mission.missionIndex,
-      label: `第 ${mission.missionIndex + 1} 轮`,
+      label: msg.common.round(mission.missionIndex + 1),
       succeeded: mission.succeeded,
       failCount: mission.failCount,
-      teamLabels: mission.team.map((id) => seatLabel(view, id)),
-      failedByLabels: failedBy.map((id) => seatLabel(view, id)),
+      teamLabels: mission.team.map((id) => seatLabel(view, id, msg)),
+      failedByLabels: failedBy.map((id) => seatLabel(view, id, msg)),
       // 第四轮要两张失败票，所以"成功"也可能带着一张——那张票是有信息的
       detail: mission.succeeded
         ? mission.failCount > 0
-          ? `成功 · ${mission.failCount} 张失败票`
-          : "成功"
-        : `失败 · ${mission.failCount} 张失败票`,
+          ? msg.gameOver.missionSuccessWithFails(mission.failCount)
+          : msg.gameOver.missionSuccess
+        : msg.gameOver.missionFail(mission.failCount),
     };
   });
 }
 
-function replayOf(view: PlayerView, decisions: readonly DecisionRecord[]): ReplayRound[] {
+function replayOf(
+  view: PlayerView,
+  decisions: readonly DecisionRecord[],
+  msg: Messages,
+): ReplayRound[] {
   const rounds = new Map<number, ReplayEntry[]>();
 
   for (const record of decisions) {
     const entry: ReplayEntry = {
       playerId: record.playerId,
-      seatLabel: seatLabel(view, record.playerId),
-      kindLabel: KIND_LABEL[record.kind],
+      seatLabel: seatLabel(view, record.playerId, msg),
+      kindLabel: msg.gameOver.kind[record.kind],
       reasoning: record.result.payload.reasoning,
       flags: [
-        record.result.fallback ? "schema 兜底" : null,
-        record.rescued ? "合法性兜底" : null,
-        record.auto ? "未调用模型" : null,
+        record.result.fallback ? msg.gameOver.flagSchema : null,
+        record.rescued ? msg.gameOver.flagRescued : null,
+        record.auto ? msg.gameOver.flagAuto : null,
       ].filter((flag): flag is string => flag !== null),
       latencyLabel: record.auto ? null : `${(record.latencyMs / 1000).toFixed(1)}s`,
     };
@@ -269,7 +248,7 @@ function replayOf(view: PlayerView, decisions: readonly DecisionRecord[]): Repla
     .sort(([a], [b]) => a - b)
     .map(([missionIndex, entries]) => ({
       missionIndex,
-      label: `第 ${missionIndex + 1} 轮`,
+      label: msg.common.round(missionIndex + 1),
       entries,
     }));
 }
@@ -280,7 +259,7 @@ function replayOf(view: PlayerView, decisions: readonly DecisionRecord[]): Repla
  * 【未调用模型的那些要排除】把好人的任务票（恒为 0ms）混进平均值，
  * 会把"模型到底有多慢"这个数字算得虚低，而这张表存在的全部意义就是回答那个问题。
  */
-function timingOf(decisions: readonly DecisionRecord[]): TimingBrief | null {
+function timingOf(decisions: readonly DecisionRecord[], msg: Messages): TimingBrief | null {
   const asked = decisions.filter((d) => !d.auto);
   if (asked.length === 0) return null;
 
@@ -290,7 +269,7 @@ function timingOf(decisions: readonly DecisionRecord[]): TimingBrief | null {
       const ms = asked.filter((d) => d.kind === kind).map((d) => d.latencyMs);
       const total = ms.reduce((sum, v) => sum + v, 0);
       return {
-        kindLabel: KIND_LABEL[kind],
+        kindLabel: msg.gameOver.kind[kind],
         count: ms.length,
         avgMs: Math.round(total / ms.length),
         maxMs: Math.max(...ms),
@@ -318,20 +297,21 @@ function timingOf(decisions: readonly DecisionRecord[]): TimingBrief | null {
 export function describeGameOver(
   view: PlayerView | null,
   decisions: readonly DecisionRecord[],
+  msg: Messages,
 ): GameOverBrief | null {
   if (!view?.reveal) return null;
   const { winner, winReason } = view.reveal;
 
   return {
     winner,
-    winnerLabel: `${TEAM_LABEL[winner]}获胜`,
-    reasonLabel: reasonLabelOf(winReason),
+    winnerLabel: msg.gameOver.winner(msg.team.label[winner]),
+    reasonLabel: msg.gameOver.reason[winReason],
     youWon: view.selfTeam === winner,
-    yourRoleLabel: roleLabel(view.selfRole),
-    strike: strikeOf(view),
-    seats: seatsOf(view),
-    missions: missionsOf(view),
-    replay: replayOf(view, decisions),
-    timing: timingOf(decisions),
+    yourRoleLabel: msg.roles[view.selfRole].label,
+    strike: strikeOf(view, msg),
+    seats: seatsOf(view, msg),
+    missions: missionsOf(view, msg),
+    replay: replayOf(view, decisions, msg),
+    timing: timingOf(decisions, msg),
   };
 }

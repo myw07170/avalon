@@ -7,6 +7,9 @@ import { ROLE_META, ROLE_TEAM, createPending, type Role } from "./types";
  * 不是占位用的假测试：ROLE_TEAM 与 ROLE_META 是两张手写的表，
  * 加角色时漏改一张不会有任何编译错误，但会让 prompt 里的阵营和引擎判定对不上。
  * 这组断言把两张表钉在一起。
+ *
+ * 角色的**文案**（名字与能力描述）已经不在 ROLE_META 上了，它们分语言，
+ * 由 `src/i18n/roles.test.ts` 覆盖。
  */
 
 const ALL_ROLES: Role[] = [
@@ -39,13 +42,6 @@ describe("角色元数据", () => {
     const evil = ALL_ROLES.filter((r) => ROLE_TEAM[r] === "EVIL");
     expect(good).toEqual(["MERLIN", "PERCIVAL", "LOYAL_SERVANT"]);
     expect(evil).toEqual(["MORGANA", "ASSASSIN", "MORDRED", "OBERON", "MINION"]);
-  });
-
-  it("每个角色都有非空的中文名和能力描述，prompt 直接取用", () => {
-    for (const role of ALL_ROLES) {
-      expect(ROLE_META[role].label.length).toBeGreaterThan(0);
-      expect(ROLE_META[role].ability.length).toBeGreaterThan(0);
-    }
   });
 });
 

@@ -9,7 +9,6 @@
  */
 import {
   EngineError,
-  ROLE_META,
   ROLE_TEAM,
   type ConfigIssue,
   type GameConfig,
@@ -275,7 +274,7 @@ export function checkConfig(config: GameConfig): ConfigIssue[] {
       {
         severity: "error",
         code: "PLAYER_COUNT_UNSUPPORTED",
-        message: `人数必须是 ${MIN_PLAYERS}-${MAX_PLAYERS} 之间的整数，当前为 ${playerCount}`,
+        params: { min: MIN_PLAYERS, max: MAX_PLAYERS, playerCount },
       },
     ];
   }
@@ -287,7 +286,7 @@ export function checkConfig(config: GameConfig): ConfigIssue[] {
     issues.push({
       severity: "error",
       code: "ROLE_COUNT_MISMATCH",
-      message: `角色数量 ${roles.length} 与人数 ${playerCount} 不符`,
+      params: { roleCount: roles.length, playerCount },
     });
   }
 
@@ -297,9 +296,13 @@ export function checkConfig(config: GameConfig): ConfigIssue[] {
     issues.push({
       severity: "error",
       code: "TEAM_SPLIT_MISMATCH",
-      message:
-        `${playerCount} 人局应为好人 ${split.good} 坏人 ${split.evil}，` +
-        `当前为好人 ${good} 坏人 ${evil}`,
+      params: {
+        playerCount,
+        expectedGood: split.good,
+        expectedEvil: split.evil,
+        good,
+        evil,
+      },
     });
   }
 
@@ -311,10 +314,7 @@ export function checkConfig(config: GameConfig): ConfigIssue[] {
       issues.push({
         severity: "error",
         code: "ROLE_BOUND_VIOLATION",
-        message:
-          bound.min === bound.max
-            ? `${ROLE_META[role].label}必须恰好 ${bound.min} 个，当前 ${n} 个`
-            : `${ROLE_META[role].label}数量须在 ${bound.min}-${bound.max} 之间，当前 ${n} 个`,
+        params: { role, min: bound.min, max: bound.max, n },
         roles: [role],
       });
     }
@@ -334,7 +334,7 @@ export function checkConfig(config: GameConfig): ConfigIssue[] {
     issues.push({
       severity: "error",
       code: "MISSION_TABLE_MISMATCH",
-      message: `任务配置与 ${playerCount} 人局的规则表不符`,
+      params: { playerCount },
     });
   }
 
@@ -345,7 +345,7 @@ export function checkConfig(config: GameConfig): ConfigIssue[] {
       issues.push({
         severity: "warning",
         code: "BELOW_RECOMMENDED_COUNT",
-        message: `${ROLE_META[role].label}建议 ${recommended} 人以上使用，当前 ${playerCount} 人`,
+        params: { role, recommended, playerCount },
         roles: [role],
       });
     }
@@ -358,8 +358,10 @@ export function checkConfig(config: GameConfig): ConfigIssue[] {
 export function validateConfig(config: GameConfig): void {
   const errors = checkConfig(config).filter((i) => i.severity === "error");
   if (errors.length > 0) {
+    // 【只拼 code，不拼句子】这条消息是给开发者看的诊断，玩家看到的那份
+    // 由 SetupScreen 直接渲染 issues（见 store/game.ts 的 errorAtom）
     throw new EngineError(
-      `配置非法：${errors.map((e) => e.message).join("；")}`,
+      `配置非法：${errors.map((e) => e.code).join("；")}`,
       "CONFIG_INVALID",
       { issues: errors },
     );

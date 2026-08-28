@@ -13,6 +13,7 @@
  *
  * 【本文件不抛】渲染期抛异常就是白屏。形状对不上时返回 null，由面板给一句话兜底。
  */
+import type { Messages } from "@/i18n/messages";
 import type { GameAction, PlayerId, PlayerView } from "@/lib/game";
 import type { HumanTurn } from "@/lib/ai/orchestrator";
 import { describeRole, type SeatTone } from "./role-card-model";
@@ -125,20 +126,27 @@ function pickAll<T extends GameAction["type"]>(
  * 复用 describeRole 的 marks，梅林在选人和开刀时看到的红圈跟他开局看到的是同一套——
  * 让他每轮重新回忆一遍座位号不是难度，是负担。
  */
-function seatChoicesOf(view: PlayerView): SeatChoice[] {
-  const tones = new Map(describeRole(view).marks.map((m) => [m.id, m.tone]));
+function seatChoicesOf(view: PlayerView, msg: Messages): SeatChoice[] {
+  const tones = new Map(describeRole(view, msg).marks.map((m) => [m.id, m.tone]));
 
   return view.players.map((player) => {
     const tone = tones.get(player.id) ?? "plain";
     const isSelf = player.id === view.selfId;
     const isLeader = player.id === view.currentLeaderId;
 
-    const parts = [`${player.id} 号`, isSelf ? "你" : player.name];
-    if (isLeader) parts.push("队长");
-    if (tone === "evil") parts.push("你知道他是坏人");
-    if (tone === "unsure") parts.push("梅林与莫甘娜二者之一");
+    const parts = [msg.seat.short(player.id), isSelf ? msg.seat.you : player.name];
+    if (isLeader) parts.push(msg.seat.leader);
+    if (tone === "evil") parts.push(msg.role.toneLabel.evil);
+    if (tone === "unsure") parts.push(msg.role.toneLabel.unsure);
 
-    return { id: player.id, name: player.name, isSelf, isLeader, tone, label: parts.join("，") };
+    return {
+      id: player.id,
+      name: player.name,
+      isSelf,
+      isLeader,
+      tone,
+      label: msg.turn.joinSeatParts(parts),
+    };
   });
 }
 
@@ -146,7 +154,7 @@ function seatChoicesOf(view: PlayerView): SeatChoice[] {
 // 各类表单
 // ---------------------------------------------------------------------------
 
-function teamForm(turn: HumanTurn): TeamForm | null {
+function teamForm(turn: HumanTurn, msg: Messages): TeamForm | null {
   const template = pick(turn.legalActions, "PROPOSE_TEAM");
   if (!template) return null;
 
@@ -155,21 +163,21 @@ function teamForm(turn: HumanTurn): TeamForm | null {
 
   return {
     kind: "TEAM_PROPOSAL",
-    title: "你是本轮队长",
+    title: msg.turn.team.title,
     hint:
-      `挑 ${teamSize} 个人去执行第 ${view.missionIndex + 1} 轮任务，可以选自己。` +
-      (failsRequired > 1 ? `这一轮要 ${failsRequired} 张失败票才算失败。` : ""),
+      msg.turn.team.hint(teamSize, view.missionIndex + 1) +
+      (failsRequired > 1 ? msg.turn.failsNote(failsRequired) : ""),
     teamSize,
-    candidates: seatChoicesOf(view),
+    candidates: seatChoicesOf(view, msg),
     // types.ts 写得很明白：statement 就是队长在本次提议讨论里的那一次发言，
     // reduce 会把它记进 speeches，队长因此不会在 PROPOSAL_DISCUSSION 里再轮到一次
-    statementHint: "这段话就是你在本轮组队讨论里的发言——交了名单，讨论阶段不会再轮到你。",
-    placeholder: "为什么是这几个人？",
+    statementHint: msg.turn.team.statementHint,
+    placeholder: msg.turn.team.placeholder,
     template,
   };
 }
 
-function speechForm(turn: HumanTurn): SpeechForm | null {
+function speechForm(turn: HumanTurn, msg: Messages): SpeechForm | null {
   const template =
     pick(turn.legalActions, "SPEAK") ?? pick(turn.legalActions, "ASSASSIN_OPINION");
   if (!template) return null;
@@ -177,12 +185,12 @@ function speechForm(turn: HumanTurn): SpeechForm | null {
   if (template.type === "ASSASSIN_OPINION") {
     return {
       kind: "ASSASSIN_OPINION",
-      title: "刺杀前的推测",
+      title: msg.turn.opinion.title,
       // assassination.ts 把这段话记进公开的 speeches，不是坏人内部的暗票。
       // 不说清楚，玩家会以为只有队友听得见
-      hint: "说说你觉得谁是梅林。这是公开发言，全场都听得到。",
-      placeholder: "梅林最可能是谁？为什么？",
-      skipLabel: "不说了",
+      hint: msg.turn.opinion.hint,
+      placeholder: msg.turn.opinion.placeholder,
+      skipLabel: msg.turn.opinion.skipLabel,
       template,
     };
   }
@@ -190,22 +198,22 @@ function speechForm(turn: HumanTurn): SpeechForm | null {
   const review = turn.view.phase === "REVIEW_DISCUSSION";
   return {
     kind: "SPEECH",
-    title: "轮到你发言",
-    hint: review
-      ? "任务结果出来了，说说你怎么看这一轮。"
-      : "对这支队伍表个态：该不该上，为什么。",
-    placeholder: review ? "这一轮说明了什么？" : "你怎么看这份名单？",
-    skipLabel: "不说了",
+    title: msg.turn.speech.title,
+    hint: review ? msg.turn.speech.hintReview : msg.turn.speech.hintProposal,
+    placeholder: review
+      ? msg.turn.speech.placeholderReview
+      : msg.turn.speech.placeholderProposal,
+    skipLabel: msg.turn.speech.skipLabel,
     template,
   };
 }
 
-function voteForm(turn: HumanTurn): VoteForm | null {
+function voteForm(turn: HumanTurn, msg: Messages): VoteForm | null {
   const votes = pickAll(turn.legalActions, "CAST_VOTE");
   if (votes.length === 0) return null;
 
   const { view } = turn;
-  const seats = new Map(seatChoicesOf(view).map((s) => [s.id, s]));
+  const seats = new Map(seatChoicesOf(view, msg).map((s) => [s.id, s]));
   const team = (view.proposedTeam ?? [])
     .map((id) => seats.get(id))
     .filter((s): s is SeatChoice => s !== undefined);
@@ -215,14 +223,14 @@ function voteForm(turn: HumanTurn): VoteForm | null {
     action.approve
       ? {
           action,
-          label: "赞成",
-          detail: "让这支队伍去执行任务",
+          label: msg.turn.vote.approve,
+          detail: msg.turn.vote.approveDetail,
           tone: "positive" as const,
         }
       : {
           action,
-          label: "反对",
-          detail: "否决名单，队长顺延给下一位",
+          label: msg.turn.vote.reject,
+          detail: msg.turn.vote.rejectDetail,
           tone: "negative" as const,
         },
   );
@@ -232,17 +240,15 @@ function voteForm(turn: HumanTurn): VoteForm | null {
 
   return {
     kind: "VOTE",
-    title: "表决这支队伍",
-    hint: "全场同时投，你看不到别人先投了什么。结果一起公开。",
+    title: msg.turn.vote.title,
+    hint: msg.turn.vote.hint,
     team,
     options,
-    warning: lastChance
-      ? `本轮已经否决 ${view.rejectCount} 次。再否一次就撞上上限，坏人直接获胜。`
-      : null,
+    warning: lastChance ? msg.turn.vote.warning(view.rejectCount) : null,
   };
 }
 
-function missionCardForm(turn: HumanTurn): MissionCardForm | null {
+function missionCardForm(turn: HumanTurn, msg: Messages): MissionCardForm | null {
   const cards = pickAll(turn.legalActions, "CAST_MISSION_CARD");
   if (cards.length === 0) return null;
 
@@ -253,38 +259,34 @@ function missionCardForm(turn: HumanTurn): MissionCardForm | null {
     action.success
       ? {
           action,
-          label: "任务成功",
-          detail: "投一张成功票",
+          label: msg.turn.mission.success,
+          detail: msg.turn.mission.successDetail,
           tone: "positive" as const,
         }
       : {
           action,
-          label: "任务失败",
-          detail: "投一张失败票",
+          label: msg.turn.mission.fail,
+          detail: msg.turn.mission.failDetail,
           tone: "negative" as const,
         },
   );
 
   return {
     kind: "MISSION_CARD",
-    title: `你在第 ${view.missionIndex + 1} 轮任务里`,
+    title: msg.turn.mission.title(view.missionIndex + 1),
     hint:
-      "你的票是匿名的，公开出去的只有成功和失败各几张。" +
-      (failsRequired > 1 ? `这一轮要 ${failsRequired} 张失败票才算失败。` : ""),
+      msg.turn.mission.hint + (failsRequired > 1 ? msg.turn.failsNote(failsRequired) : ""),
     options,
     // 一颗孤零零的按钮看起来像界面把另一个选项藏了，得说清楚它压根不存在
-    note:
-      options.length === 1
-        ? "你是好人，只能投成功。这是引擎层面的硬约束，不是界面把选项藏起来了。"
-        : null,
+    note: options.length === 1 ? msg.turn.mission.onlySuccessNote : null,
   };
 }
 
-function assassinationForm(turn: HumanTurn): AssassinationForm | null {
+function assassinationForm(turn: HumanTurn, msg: Messages): AssassinationForm | null {
   const strikes = pickAll(turn.legalActions, "ASSASSINATE");
   if (strikes.length === 0) return null;
 
-  const seats = new Map(seatChoicesOf(turn.view).map((s) => [s.id, s]));
+  const seats = new Map(seatChoicesOf(turn.view, msg).map((s) => [s.id, s]));
   const targets: TargetChoice[] = [];
   for (const action of strikes) {
     const seat = seats.get(action.targetId);
@@ -294,10 +296,10 @@ function assassinationForm(turn: HumanTurn): AssassinationForm | null {
 
   return {
     kind: "ASSASSINATION",
-    title: "指认梅林",
+    title: msg.turn.assassination.title,
     // rules.md §4.5 允许指自己和队友，就是为了不出现"没有合法目标"的死局。
     // 玩家看到自己也在名单里会以为是 bug，所以直说
-    hint: "好人已经拿下三轮。指对梅林，坏人当场翻盘；指错，好人获胜。队友和你自己也在名单里。",
+    hint: msg.turn.assassination.hint,
     targets,
   };
 }
@@ -306,19 +308,19 @@ function assassinationForm(turn: HumanTurn): AssassinationForm | null {
 // 出口
 // ---------------------------------------------------------------------------
 
-export function describeTurn(turn: HumanTurn): TurnForm | null {
+export function describeTurn(turn: HumanTurn, msg: Messages): TurnForm | null {
   switch (turn.kind) {
     case "TEAM_PROPOSAL":
-      return teamForm(turn);
+      return teamForm(turn, msg);
     case "SPEECH":
     case "ASSASSIN_OPINION":
-      return speechForm(turn);
+      return speechForm(turn, msg);
     case "VOTE":
-      return voteForm(turn);
+      return voteForm(turn, msg);
     case "MISSION_CARD":
-      return missionCardForm(turn);
+      return missionCardForm(turn, msg);
     case "ASSASSINATION":
-      return assassinationForm(turn);
+      return assassinationForm(turn, msg);
   }
 }
 

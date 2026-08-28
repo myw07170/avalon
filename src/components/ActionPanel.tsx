@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "framer-motion";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { GameAction } from "@/lib/game";
+import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
 import { humanTurnAtom, submitActionAtom } from "@/store/game";
 import { AssassinationModal } from "./AssassinationModal";
@@ -36,6 +37,7 @@ type Submit = (action: GameAction) => void;
 
 export function ActionPanel() {
   const turn = useAtomValue(humanTurnAtom);
+  const msg = useMessages();
   const submit = useSetAtom(submitActionAtom);
   const reduced = useReducedMotion() === true;
   const ref = useRef<HTMLElement>(null);
@@ -50,7 +52,7 @@ export function ActionPanel() {
 
   if (!turn) return null;
 
-  const form = describeTurn(turn);
+  const form = describeTurn(turn, msg);
 
   return (
     <section
@@ -58,14 +60,14 @@ export function ActionPanel() {
       aria-live="polite"
       className="w-full scroll-mb-6 rounded-xl border border-brass/60 bg-ink-raised p-5 shadow-[0_0_0_1px_rgba(192,138,62,0.08)]"
     >
-      <p className="font-display text-[10px] tracking-[0.3em] text-brass">
-        <span className="-mr-[0.3em]">轮到你</span>
+      <p className="font-display text-[10px] tracking-[var(--track-3)] text-brass">
+        <span className="-mr-[var(--track-3)]">{msg.turn.heading}</span>
       </p>
 
       {form === null ? (
         // 引擎给了一手面板认不出来的棋。宁可说实话也不要白屏
         <p className="mt-3 text-sm leading-relaxed text-mordred">
-          这一步（{turn.kind}）面板还画不出来。
+          {msg.turn.unsupported(turn.kind)}
         </p>
       ) : (
         <>
@@ -101,6 +103,7 @@ export function ActionPanel() {
 // ---------------------------------------------------------------------------
 
 function TeamBody({ form, submit }: { form: TeamForm; submit: Submit }) {
+  const msg = useMessages();
   const [team, setTeam] = useState<number[]>([]);
   const [statement, setStatement] = useState("");
   const full = team.length >= form.teamSize;
@@ -123,12 +126,11 @@ function TeamBody({ form, submit }: { form: TeamForm; submit: Submit }) {
       />
 
       <p className="tabular text-xs text-muted">
-        已选 {team.length} / {form.teamSize}
-        {full && "，要换人先取消一个"}
+        {msg.turn.picked(team.length, form.teamSize, full)}
       </p>
 
       <TextBox
-        label="选人说明"
+        label={msg.turn.statementLabel}
         note={form.statementHint}
         value={statement}
         placeholder={form.placeholder}
@@ -140,7 +142,7 @@ function TeamBody({ form, submit }: { form: TeamForm; submit: Submit }) {
         disabled={!ready}
         onClick={() => submit(proposeAction(form, team, statement))}
       >
-        {ready ? "交名单" : `还差 ${form.teamSize - team.length} 个人`}
+        {ready ? msg.turn.submitTeam : msg.turn.needMore(form.teamSize - team.length)}
       </PrimaryButton>
     </div>
   );
@@ -151,6 +153,7 @@ function TeamBody({ form, submit }: { form: TeamForm; submit: Submit }) {
 // ---------------------------------------------------------------------------
 
 function SpeechBody({ form, submit }: { form: SpeechForm; submit: Submit }) {
+  const msg = useMessages();
   const [content, setContent] = useState("");
   const send = () => submit(speakAction(form, content));
 
@@ -165,7 +168,7 @@ function SpeechBody({ form, submit }: { form: SpeechForm; submit: Submit }) {
 
       <div className="flex flex-wrap items-center gap-3">
         <PrimaryButton disabled={content.trim().length === 0} onClick={send}>
-          发言
+          {msg.turn.speechLabel}
         </PrimaryButton>
         {/* 空发言在引擎里是合法的，所以给一个明写的出口，
             而不是让玩家交一个空文本框去试 */}
@@ -186,10 +189,12 @@ function SpeechBody({ form, submit }: { form: SpeechForm; submit: Submit }) {
 // ---------------------------------------------------------------------------
 
 function VoteBody({ form, submit }: { form: VoteForm; submit: Submit }) {
+  const msg = useMessages();
+
   return (
     <div className="space-y-4">
       <div>
-        <p className="mb-2 text-xs text-muted">本次名单</p>
+        <p className="mb-2 text-xs text-muted">{msg.turn.teamPreview}</p>
         <ul className="flex flex-wrap gap-2">
           {form.team.map((seat) => (
             <li
@@ -200,7 +205,10 @@ function VoteBody({ form, submit }: { form: VoteForm; submit: Submit }) {
                 SEAT_TONE_CLASS[seat.tone],
               )}
             >
-              {seat.id} <span className="text-xs opacity-70">{seat.isSelf ? "你" : seat.name}</span>
+              {seat.id}{" "}
+              <span className="text-xs opacity-70">
+                {seat.isSelf ? msg.seat.you : seat.name}
+              </span>
             </li>
           ))}
         </ul>
@@ -323,14 +331,14 @@ function PrimaryButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "w-full rounded-lg px-6 py-3 font-display text-base tracking-[0.2em] transition-colors",
+        "w-full rounded-lg px-6 py-3 font-display text-base tracking-[var(--track-1)] transition-colors",
         "disabled:cursor-not-allowed disabled:border disabled:border-ink-line disabled:bg-transparent disabled:text-muted",
         tone === "brass"
           ? "bg-brass text-ink hover:bg-brass/85"
           : "bg-mordred text-vellum hover:bg-mordred/85",
       )}
     >
-      <span className="-mr-[0.2em]">{children}</span>
+      <span className="-mr-[var(--track-1)]">{children}</span>
     </button>
   );
 }

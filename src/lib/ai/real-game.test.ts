@@ -13,8 +13,14 @@
  *   LLM_MODEL=gpt-5-nano
  *   LLM_EXTRA_BODY={"reasoning_effort":"minimal"}   # 推理模型不加会慢十倍
  *   LLM_REAL_GAME=1                                 # ← 这一行才是开关
+ *   LLM_REAL_GAME_LOCALE=en                         # 可选，缺省 zh
  *
  * 然后 pnpm vitest run src/lib/ai/real-game.test.ts
+ *
+ * 【英文语料的验收门槛在这里过】docs/todos.md §6.3 定的是"新语言的 fallback 率
+ * 与自曝率各验一遍"。把 LLM_REAL_GAME_LOCALE 设成 en 各跑一局，比对两份记录末尾
+ * 的 fallback 率（应 < 5%）与自曝统计（blatant 应≈0）。
+ * **英文语料在这一步跑过之前不算完成**——直译不保证复现中文那边的每一条实验结论。
  *
  * 【全 AI 局不需要 UI，也不需要起 Next 服务器】直接用 createAiClient 调 provider——
  * /api/ai 那层存在的意义是别让 key 进浏览器，而这里本来就跑在 Node 里。
@@ -89,6 +95,14 @@ const configured =
   Boolean(process.env.LLM_PROVIDER) &&
   process.env.LLM_PROVIDER !== "mock";
 
+/**
+ * 这一局用哪种语料。
+ *
+ * 【不跟界面语言走】这是个 Node 里的测试，根本没有界面。显式一个环境变量，
+ * 才能"同一台机器上先跑中文再跑英文"，而那正是这个门槛要做的对比。
+ */
+const LOCALE: "zh" | "en" = process.env.LLM_REAL_GAME_LOCALE === "en" ? "en" : "zh";
+
 const PLAYER_COUNT = 5;
 const TRANSCRIPT_DIR = "transcripts";
 
@@ -161,6 +175,7 @@ describe.skipIf(!configured)("真实模型试跑", () => {
       // 而这个测试的全部意义就是人工读发言（失败会自动回退，不会让整局跑不起来）
       const personas = await generatePersonas({
         config,
+        locale: LOCALE,
         count: PLAYER_COUNT,
         onNote: (note) => say(`  ${note}`),
       });
@@ -174,6 +189,7 @@ describe.skipIf(!configured)("真实模型试跑", () => {
         }),
         client,
         rng,
+        locale: LOCALE,
         maxRetries: readMaxRetries(),
         hooks: {
           onDecision: (record) => {
@@ -202,13 +218,17 @@ describe.skipIf(!configured)("真实模型试跑", () => {
       const report = renderTranscript(final, records, {
         model: `${config.provider} / ${config.model}`,
         seed,
+        // 自曝判定按这一局真正用的语料走。传错的话英文局会报出 0 条自曝，
+        // 而那个漂亮的假数字正是这份记录最不该给出的东西
+        locale: LOCALE,
       });
       say(`\n${report}`);
       say(`\n${renderLatency(records)}`);
 
       // 也落一份盘：几十条发言在终端里翻着读很难受，而"人工读一遍"正是这个测试的全部意义
       mkdirSync(TRANSCRIPT_DIR, { recursive: true });
-      const file = `${TRANSCRIPT_DIR}/real-game-${seed}.txt`;
+      // 文件名带上语言：中英各跑一局是要**并排比**的，同名会把前一份盖掉
+      const file = `${TRANSCRIPT_DIR}/real-game-${LOCALE}-${seed}.txt`;
       writeFileSync(file, report, "utf8");
       say(`\n对局记录已写入 ${file}\n`);
 

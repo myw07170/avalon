@@ -9,7 +9,8 @@
  */
 import { useState } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { MAX_PLAYERS, MIN_PLAYERS, ROLE_META, type MissionConfig } from "@/lib/game";
+import { useLocale, useMessages } from "@/i18n/useMessages";
+import { MAX_PLAYERS, MIN_PLAYERS, type MissionConfig } from "@/lib/game";
 import { cn } from "@/lib/utils";
 import { fetchPersonas } from "@/lib/ai/remote";
 import { aiModeAtom, createGameAtom, errorAtom } from "@/store/game";
@@ -35,6 +36,9 @@ export function SetupScreen() {
   const [aiMode, setAiMode] = useAtom(aiModeAtom);
   const createGame = useSetAtom(createGameAtom);
   const storeError = useAtomValue(errorAtom);
+  const msg = useMessages();
+  // 人设跟着**界面语言**生成：英文界面下的那桌人该有英文名字
+  const locale = useLocale();
 
   const [busy, setBusy] = useState(false);
 
@@ -67,7 +71,7 @@ export function SetupScreen() {
 
     setBusy(true);
     try {
-      const { personas, notes } = await fetchPersonas(aiSeatCount);
+      const { personas, notes } = await fetchPersonas(aiSeatCount, locale);
       createGame({
         config,
         humanSeat,
@@ -83,14 +87,14 @@ export function SetupScreen() {
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-10 px-5 py-12 sm:px-8 sm:py-16">
       <header className="text-center">
-        <h1 className="-mr-[0.35em] font-display text-4xl tracking-[0.35em] sm:text-5xl">
-          阿瓦隆
+        <h1 className="-mr-[var(--track-4)] font-display text-4xl tracking-[var(--track-4)] sm:text-5xl">
+          {msg.app.title}
         </h1>
-        <p className="mt-4 text-sm text-muted">一个人，一桌会说话的 AI。</p>
+        <p className="mt-4 text-sm text-muted">{msg.app.tagline}</p>
       </header>
 
-      <Field label="人数">
-        <div role="radiogroup" aria-label="人数" className="flex gap-2">
+      <Field label={msg.setup.playerCount}>
+        <div role="radiogroup" aria-label={msg.setup.playerCount} className="flex gap-2">
           {PLAYER_COUNTS.map((count) => (
             <Choice
               key={count}
@@ -112,18 +116,18 @@ export function SetupScreen() {
         onSeat={(id) => setDraft((d) => withHumanSeat(d, id))}
       />
 
-      <Field label={`坏人自由位 ${preview.freeEvilSlots} 个`}>
+      <Field label={msg.setup.freeEvilSlots(preview.freeEvilSlots)}>
         {preview.freeEvilSlots === 0 ? (
           // rules.md §3.2.1：5、6 人局没有任何可调空间，
           // 如实说明，不要渲染一个点了没反应的编辑器
           <p className="rounded-lg border border-ink-line bg-ink-raised px-4 py-3 text-sm text-muted">
-            该人数配置固定，坏人恒为莫甘娜与刺客。
+            {msg.setup.fixedEvil}
           </p>
         ) : (
           <>
             <div
               role="radiogroup"
-              aria-label="坏人自由位"
+              aria-label={msg.setup.freeEvilAria}
               className="grid grid-cols-2 gap-2 sm:grid-cols-4"
             >
               {preview.evilOptions.map((option, index) => (
@@ -133,15 +137,15 @@ export function SetupScreen() {
                   onSelect={() => setDraft((d) => withEvilOption(d, index))}
                   className="min-h-11 px-3 py-2.5 text-sm"
                 >
-                  {option.map((role) => ROLE_META[role].label).join(" + ")}
+                  {option.map((role) => msg.roles[role].label).join(" + ")}
                 </Choice>
               ))}
             </div>
             <ul className="mt-3 space-y-1.5">
               {dedupe(preview.selectedEvil).map((role) => (
                 <li key={role} className="text-xs leading-relaxed text-muted">
-                  <span className="text-mordred">{ROLE_META[role].label}</span>
-                  ：{ROLE_META[role].ability}
+                  <span className="text-mordred">{msg.roles[role].label}</span>
+                  {msg.gameOver.opinionLine("", msg.roles[role].ability)}
                 </li>
               ))}
             </ul>
@@ -149,7 +153,7 @@ export function SetupScreen() {
         )}
       </Field>
 
-      <Field label="本局角色">
+      <Field label={msg.setup.rolesField}>
         <ul className="flex flex-wrap gap-2">
           {tallyRoles(preview.roles).map((entry) => (
             <li
@@ -161,19 +165,19 @@ export function SetupScreen() {
                   : "border-mordred/40 text-mordred",
               )}
             >
-              {ROLE_META[entry.role].label}
+              {msg.roles[entry.role].label}
               {entry.count > 1 && <span className="tabular"> ×{entry.count}</span>}
             </li>
           ))}
         </ul>
       </Field>
 
-      <Field label="任务">
+      <Field label={msg.setup.missionsField}>
         <MissionTable missions={preview.missions} />
       </Field>
 
-      <Field label="模型">
-        <div role="radiogroup" aria-label="模型" className="flex gap-2">
+      <Field label={msg.setup.modelField}>
+        <div role="radiogroup" aria-label={msg.setup.modelField} className="flex gap-2">
           <Choice
             checked={aiMode === "mock"}
             onSelect={() => setAiMode("mock")}
@@ -190,25 +194,24 @@ export function SetupScreen() {
           </Choice>
         </div>
         <p className="mt-3 text-xs leading-relaxed text-muted">
-          mock 不发网络请求，也不花钱。remote 走 /api/ai，需要先在 .env.local
-          配好 provider 和 key。
+          {msg.setup.modelNote}
         </p>
       </Field>
 
       <div className="flex flex-col gap-3">
         {preview.errors.map((issue) => (
-          <Notice key={issue.code + issue.message} tone="error">
-            {issue.message}
+          <Notice key={issue.code} tone="error">
+            {msg.configIssue[issue.code](issue.params)}
           </Notice>
         ))}
         {preview.warnings.map((issue) => (
-          <Notice key={issue.code + issue.message} tone="warning">
-            {issue.message}。这是平衡性建议，不阻止开局。
+          <Notice key={issue.code} tone="warning">
+            {msg.setup.balanceNote(msg.configIssue[issue.code](issue.params))}
           </Notice>
         ))}
         {!seated && (
           <Notice tone="warning">
-            先选一个座位。全 AI 观战局引擎已经支持，但观战界面要等阶段 6。
+            {msg.setup.pickSeatFirst}
           </Notice>
         )}
         {storeError && <Notice tone="error">{storeError}</Notice>}
@@ -220,12 +223,12 @@ export function SetupScreen() {
           disabled={!preview.canStart || !seated || busy}
           aria-busy={busy}
           className={cn(
-            "mt-1 w-full rounded-lg px-6 py-3.5 font-display text-lg tracking-[0.3em] transition-colors",
+            "mt-1 w-full rounded-lg px-6 py-3.5 font-display text-lg tracking-[var(--track-3)] transition-colors",
             "bg-brass text-ink hover:bg-brass/85",
             "disabled:cursor-not-allowed disabled:bg-ink-raised disabled:text-muted",
           )}
         >
-          <span className="-mr-[0.3em]">{busy ? "正在生成人设…" : "入座"}</span>
+          <span className="-mr-[var(--track-3)]">{busy ? msg.setup.busy : msg.setup.submit}</span>
         </button>
       </div>
     </main>
@@ -249,6 +252,8 @@ interface RoundTableProps {
  * 这里只负责把"我的座位"翻译成 self tone，再配一句说明。
  */
 function RoundTable({ playerCount, humanSeat, good, evil, onSeat }: RoundTableProps) {
+  const msg = useMessages();
+
   return (
     <div>
       <SeatRing
@@ -256,20 +261,22 @@ function RoundTable({ playerCount, humanSeat, good, evil, onSeat }: RoundTablePr
         marks={humanSeat === null ? [] : [{ id: humanSeat, tone: "self" }]}
         onSelect={onSeat}
         seatLabel={(id, mark) =>
-          mark.tone === "self" ? `你的座位，${id} 号` : `${id} 号座位`
+          mark.tone === "self" ? msg.setup.seatAriaSelf(id) : msg.setup.seatAria(id)
         }
         center={
           <>
-            <p className="tabular text-sm text-loyal">好人 {good}</p>
-            <p className="tabular mt-1 text-sm text-mordred">坏人 {evil}</p>
+            <p className="tabular text-sm text-loyal">{msg.setup.goodCount(good)}</p>
+            <p className="tabular mt-1 text-sm text-mordred">
+              {msg.setup.evilCount(evil)}
+            </p>
           </>
         }
       />
 
       <p className="mt-4 text-center text-xs text-muted">
         {humanSeat === null
-          ? "点击落座"
-          : `点击落座 · 你坐 ${humanSeat} 号 · 再点一次起身`}
+          ? msg.setup.seatHintIdle
+          : msg.setup.seatHintSeated(humanSeat)}
       </p>
     </div>
   );
@@ -280,6 +287,7 @@ function RoundTable({ playerCount, humanSeat, good, evil, onSeat }: RoundTablePr
 // ---------------------------------------------------------------------------
 
 function MissionTable({ missions }: { missions: MissionConfig[] }) {
+  const msg = useMessages();
   const hasDoubleFail = missions.some((m) => m.failsRequired > 1);
 
   return (
@@ -290,7 +298,9 @@ function MissionTable({ missions }: { missions: MissionConfig[] }) {
             key={index}
             className="flex-1 rounded-lg border border-ink-line bg-ink-raised py-3 text-center"
           >
-            <p className="text-[10px] tracking-widest text-muted">第 {index + 1} 轮</p>
+            <p className="text-[10px] tracking-widest text-muted">
+              {msg.common.round(index + 1)}
+            </p>
             <p className="tabular mt-1 text-xl">
               {mission.teamSize}
               {mission.failsRequired > 1 && (
@@ -303,8 +313,8 @@ function MissionTable({ missions }: { missions: MissionConfig[] }) {
         ))}
       </ol>
       <p className="mt-3 text-xs text-muted">
-        数字是该轮出任务的人数。
-        {hasDoubleFail && "带 ✳ 的那轮要 2 张失败票才算失败。"}
+        {msg.setup.missionsNote}
+        {hasDoubleFail && ` ${msg.setup.doubleFailNote}`}
       </p>
     </div>
   );
@@ -317,7 +327,7 @@ function MissionTable({ missions }: { missions: MissionConfig[] }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 className="mb-3 font-display text-xs tracking-[0.3em] text-muted">{label}</h2>
+      <h2 className="mb-3 font-display text-xs tracking-[var(--track-3)] text-muted">{label}</h2>
       {children}
     </section>
   );

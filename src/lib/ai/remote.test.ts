@@ -55,6 +55,7 @@ function makeReq(): AiDecisionRequest<"VOTE"> {
     persona: { name: "P2", traits: ["谨慎"], speechStyle: "短句" },
     legalActions: getLegalActions(state, 2),
     maxRetries: 2,
+    locale: "zh",
   };
 }
 
@@ -176,11 +177,11 @@ describe("fetchPersonas", () => {
       return Promise.resolve(Response.json(OK));
     };
 
-    const result = await fetchPersonas(4, { fetchFn });
+    const result = await fetchPersonas(4, "zh", { fetchFn });
 
     expect(result).toEqual(OK);
     expect(calls[0]?.url).toBe("/api/personas");
-    expect(JSON.parse(String(calls[0]?.init.body))).toEqual({ count: 4 });
+    expect(JSON.parse(String(calls[0]?.init.body))).toEqual({ count: 4, locale: "zh" });
   });
 
   it("【这个函数不抛】网络不通只返回 personas: null，原因写进 notes", async () => {
@@ -188,7 +189,7 @@ describe("fetchPersonas", () => {
     // 但绝不静默——悄悄回退会让人对着一桌说话雷同的 AI 找半天 prompt 的毛病
     const fetchFn: FetchFn = () => Promise.reject(new Error("Failed to fetch"));
 
-    const result = await fetchPersonas(4, { fetchFn });
+    const result = await fetchPersonas(4, "zh", { fetchFn });
 
     expect(result.personas).toBeNull();
     expect(result.notes.join("")).toContain("Failed to fetch");
@@ -198,7 +199,7 @@ describe("fetchPersonas", () => {
     const fetchFn: FetchFn = () =>
       Promise.resolve(Response.json({ error: "缺少环境变量 LLM_API_KEY" }, { status: 503 }));
 
-    const result = await fetchPersonas(4, { fetchFn });
+    const result = await fetchPersonas(4, "zh", { fetchFn });
 
     expect(result.personas).toBeNull();
     expect(result.notes.join("")).toContain("LLM_API_KEY");
@@ -207,7 +208,7 @@ describe("fetchPersonas", () => {
   it("响应体不是 JSON 也不抛", async () => {
     const fetchFn: FetchFn = () => Promise.resolve(new Response("不是 JSON"));
 
-    const result = await fetchPersonas(4, { fetchFn });
+    const result = await fetchPersonas(4, "zh", { fetchFn });
 
     expect(result.personas).toBeNull();
     expect(result.notes).toHaveLength(1);
