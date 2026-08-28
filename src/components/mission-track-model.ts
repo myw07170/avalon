@@ -7,7 +7,7 @@
  * 不是流水计数。
  */
 import type { Messages } from "@/i18n/messages";
-import { MISSIONS_TO_WIN, type PlayerView } from "@/lib/game";
+import { MISSIONS_TO_WIN, type AnyView } from "@/lib/game";
 
 export type MissionOutcome = "success" | "fail" | "current" | "upcoming";
 
@@ -43,7 +43,7 @@ function detailOf(succeeded: boolean, failCount: number, msg: Messages): string 
   return failCount > 0 ? msg.track.successWithFails(failCount) : msg.track.success;
 }
 
-export function describeTrack(view: PlayerView, msg: Messages): TrackState {
+export function describeTrack(view: AnyView, msg: Messages): TrackState {
   const settled = new Map(view.missionHistory.map((m) => [m.missionIndex, m]));
 
   const nodes: MissionNode[] = view.missionConfigs.map((config, index) => {
@@ -95,7 +95,7 @@ export function describeTrack(view: PlayerView, msg: Messages): TrackState {
  * 而 SetupScreen 也从不开启它（createConfig 的缺省是 false）。真要支持这个变体，
  * 得先把它投影进 PlayerView，而不是在这里猜。
  */
-function rejectWarningOf(view: PlayerView, msg: Messages): string | null {
+function rejectWarningOf(view: AnyView, msg: Messages): string | null {
   if (view.phase === "GAME_OVER") return null;
   if (view.rejectCount !== view.maxRejects - 1) return null;
   return msg.track.rejectWarning;

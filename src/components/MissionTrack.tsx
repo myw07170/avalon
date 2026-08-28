@@ -8,7 +8,7 @@
 import { useAtomValue } from "jotai";
 import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
-import { myViewAtom } from "@/store/game";
+import { viewAtom } from "@/store/game";
 import { describeTrack, type MissionNode, type MissionOutcome } from "./mission-track-model";
 
 const OUTCOME_CLASS: Record<MissionOutcome, string> = {
@@ -19,7 +19,7 @@ const OUTCOME_CLASS: Record<MissionOutcome, string> = {
 };
 
 export function MissionTrack() {
-  const view = useAtomValue(myViewAtom);
+  const view = useAtomValue(viewAtom);
   const msg = useMessages();
   if (!view) return null;
 

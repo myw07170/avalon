@@ -9,7 +9,7 @@
 
 | atom | 给的是什么 |
 | --- | --- |
-| `myViewAtom` | `PlayerView`，绝大多数组件只需要它 |
+| `viewAtom` | `AnyView`，绝大多数组件只需要它。落座给 `PlayerView`，观战给 `SpectatorView` |
 | `humanTurnAtom` / `isMyTurnAtom` | 轮到你时的 `view` + `legalActions` |
 | `teamConstraintAtom` | 组队的 `{ teamSize, candidateIds }` |
 | `revealAtom` | 终局公开面，非 `GAME_OVER` 恒为 `null` |
@@ -17,10 +17,19 @@
 | `thinkingAtom` | 现在是谁在等模型。只有座位号与决策种类，**没有 payload** |
 | `personaNotesAtom` | 人设生成的打点。回退到占位时必须让玩家看见 |
 | `runStatusAtom` / `errorAtom` | 页面壳的状态与报错 |
+| `isSpectatingAtom` | 这一局有没有人坐在桌上 |
+| `revealedSeatsAtom` / `toggleSeatAtom` / `revealAllSeatsAtom` / `hideAllSeatsAtom` | 观战的翻牌状态与三个写入口 |
+| `revealedRolesAtom` | **已翻开**座位的身份。落座局恒为 `null` |
+| `liveDecisionsAtom` | 观战时的实时 AI 心证。**有人落座就恒为空数组** |
+| `pausedAtom` / `togglePauseAtom` | 观战的暂停闸 |
+| `paceMsAtom` | 节奏基准值。`SpectatorBar` 的四档就是写它 |
 
 **`gameStateAtom` 是全知视角，组件读它一律算 bug。** 需要的东西如果只在 `GameState` 上
 （比如 `getLegalActions` 和 `getTeamConstraint` 都要 `GameState`），正确做法是让 `store/game.ts`
 从 `PlayerView` 里重推一份派生 atom，而不是把全知状态漏到组件层。
+
+观战也不例外：它要的全场身份走的是引擎里另一份投影 `toSpectatorView(state)`，
+**不是** `gameStateAtom`。`leak.test.ts` 的三条源码断言因此一个字都没改。
 
 ## 两条约定
 
@@ -132,16 +141,50 @@ tone → 配色的映射集中在 `SeatRing` 导出的 `SEAT_TONE_CLASS`，加�
 `self` 那一档是黄铜，会把你自己的阵营盖掉，而复盘要看的恰恰是谁跟谁一伙；
 是不是你，由标签里的「你」说明。
 
-**`good` 只准在终局用。** 对局中没有任何一个座位配得上"确定是好人"，
-用在别处就是开天眼。
+**`good` 只有两处能用：终局，和观战中被观战者主动翻开的那一座。**
+落座的对局中没有任何一个座位配得上"确定是好人"，用在别处就是开天眼。
 
 **任务票来源是全项目唯一显示得出这件事的地方。** `PublicMissionRecord` 刻意丢掉了
 `cards`，所以对局中任何人（包括你）都只知道"几张失败票"，不知道是谁投的。
 只有 `reveal.missions` 带着它。
 
-**`describeGameOver` 不抛。** 还没到终局、以及观战局（没有视角）都返回 null，
-由面板兜一句话——与 `describeTurn` 同一条约定。`reveal.assassination` 为 null
-（坏人靠三次任务赢、或否决撞线）是正常的终局形态，不是缺数据。
+**`describeGameOver` 不抛。** 还没到终局返回 null，由面板兜一句话——与 `describeTurn`
+同一条约定。`reveal.assassination` 为 null（坏人靠三次任务赢、或否决撞线）
+是正常的终局形态，不是缺数据。
+
+**观战局不再返回 null。** 它有自己的视角，终局照样出复盘；差的只是"你"——
+`youWon` / `yourRoleLabel` 为 null，`Banner` 那一行换成一句中立的说明。
+这推翻了 `GameOverBrief` 上原来那句"观战局走不到这里，所以恒有值"。
+
+## 观战
+
+`GameShell` 的分岔是二维的：先按 `runStatusAtom` 取生命周期，再在 `ready` / `running`
+两档里按 `isSpectatingAtom` 二选一（`finished` 两种形态共用 `GameOverPanel`）。
+**观战没有加进 `RunStatus`**——那是生命周期，而观战是与它正交的形态，观战局同样要
+经历 ready / running / finished。
+
+三层各管一件事，别在下游重复上游做过的事：
+
+| 层 | 做什么 |
+| --- | --- |
+| 引擎 `toSpectatorView` | 恒给全场 `roles`。观战没有对手，信息隔离保护的是坐在桌上的人 |
+| store `revealedRolesAtom` | 按 `revealedSeatsAtom` 过滤。**过滤只发生在这一处** |
+| 组件 | 只见过滤后的那一份，取不到 role 的座位自然是 `plain` |
+
+**默认一张牌都不翻。** 引擎给全量、界面扣着，这个分工是刻意的：一上来铺开全部身份，
+"谁在撒谎"就没有悬念了，而那恰好是观战唯一好看的地方。
+
+**翻牌闸不是信息隔离边界。** 它可以随时撤销，而且不密封——翻开 3 号的心证，
+很可能顺带读到"我知道 5 号是坏人"，`MindPanel` 上那句提示就是为这件事写的。
+真正的边界是 `liveDecisionsAtom`：**只要有人坐在桌上就恒为空数组**。
+两件事的注释要分清楚，不然下一个人会以为这里漏了。
+
+`SpectatorBar` 给的是节奏（四档 + 暂停），**中止仍然只走 `resetGameAtom`**——
+`abortAtom` 一个字都没导出。暂停闸挂在 `onDecision` 里（节奏本来就落在那一处），
+所以引擎与 orchestrator 一行都没改。
+
+翻牌动作复用 `FlipCard`：那套 3D 翻牌 `RoleCard` 上已经有了，尺寸和牌面由调用方给。
+玩家在这个项目里见到的"翻身份"始终是同一个动作。
 
 ## 等待要看得见
 

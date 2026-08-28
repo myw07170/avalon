@@ -15,7 +15,8 @@
  * 且刺杀发生在终局前一步），但我们不主动把整份名单铺开。
  */
 import type { Messages } from "@/i18n/messages";
-import type { PlayerId, PlayerView } from "@/lib/game";
+import type { AnyView, PlayerId, Role } from "@/lib/game";
+import { ROLE_TEAM } from "@/lib/game";
 import { describeRole, type SeatTone } from "./role-card-model";
 
 /** idle = 本阶段不需要他动；acting = 还在等他；done = 已经交了 */
@@ -61,7 +62,7 @@ export interface TableState {
  *
  * 刺杀阶段一律返回空：那个阶段只有坏人行动，标出来等于把坏人名单画出来。
  */
-function doneIdsOf(view: PlayerView): PlayerId[] {
+function doneIdsOf(view: AnyView): PlayerId[] {
   const waiting = new Set(view.awaitingPlayerIds);
 
   switch (view.phase) {
@@ -87,12 +88,12 @@ function doneIdsOf(view: PlayerView): PlayerId[] {
   }
 }
 
-function nameOf(view: PlayerView, id: PlayerId, msg: Messages): string {
+function nameOf(view: AnyView, id: PlayerId, msg: Messages): string {
   const player = view.players.find((p) => p.id === id);
   return player ? msg.seat.named(id, player.name) : msg.seat.short(id);
 }
 
-function statusLineOf(view: PlayerView, msg: Messages): string {
+function statusLineOf(view: AnyView, msg: Messages): string {
   const waiting = view.awaitingPlayerIds;
   const verb = msg.table.verb[view.phase];
 
@@ -106,17 +107,53 @@ function statusLineOf(view: PlayerView, msg: Messages): string {
       ? msg.table.yourTurn(verb)
       : msg.table.waitingOne(nameOf(view, only, msg), verb);
   }
-  return msg.table.waitingMany(waiting.length, verb, waiting.includes(view.selfId));
+  // 观战时 selfId 是 null，那一档的「含你」自然恒 false
+  const includesSelf = view.selfId !== null && waiting.includes(view.selfId);
+  return msg.table.waitingMany(waiting.length, verb, includesSelf);
 }
 
-function progressLabelOf(view: PlayerView, msg: Messages): string | null {
+function progressLabelOf(view: AnyView, msg: Messages): string | null {
   const counter = msg.table.counter[view.phase];
   if (!counter || view.progress.required === 0) return null;
   return msg.table.progress(counter, view.progress.submitted, view.progress.required);
 }
 
-export function describeTable(view: PlayerView, msg: Messages): TableState {
-  const knowledge = new Map(describeRole(view, msg).marks.map((m) => [m.id, m.tone]));
+/**
+ * 身份认知层的配色来源，两种视角各一条路。
+ *
+ * - 落座：`describeRole` 从 view.knowledge 推，那是引擎算好的"你知道谁"
+ * - 观战：直接按阵营染色，但**只染 roles 里有的那几座**
+ *
+ * 传进来的 roles 已经被 store 的 revealedRolesAtom 按翻牌状态过滤过，
+ * 没翻的座位在这里取不到 role，自然落到 plain。**不要在这里再实现一遍翻牌逻辑**——
+ * 过滤只该有一处，否则迟早出现"牌还扣着但桌上已经染色了"。
+ */
+function tonesOf(
+  view: AnyView,
+  msg: Messages,
+  roles: Record<PlayerId, Role> | null,
+): Map<PlayerId, SeatTone> {
+  if (view.selfId !== null) {
+    return new Map(describeRole(view, msg).marks.map((m) => [m.id, m.tone]));
+  }
+
+  const tones = new Map<PlayerId, SeatTone>();
+  for (const [id, role] of Object.entries(roles ?? {})) {
+    tones.set(Number(id), ROLE_TEAM[role] === "EVIL" ? "evil" : "good");
+  }
+  return tones;
+}
+
+/**
+ * 第三个参数只有观战局会用上：已翻开座位的身份，见 tonesOf。
+ * 落座局传什么都不影响结果（那一支走 describeRole），所以缺省 null。
+ */
+export function describeTable(
+  view: AnyView,
+  msg: Messages,
+  roles: Record<PlayerId, Role> | null = null,
+): TableState {
+  const knowledge = tonesOf(view, msg, roles);
   const waiting = new Set(view.awaitingPlayerIds);
   const done = new Set(doneIdsOf(view));
   const team = new Set(view.proposedTeam ?? []);

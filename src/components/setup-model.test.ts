@@ -9,6 +9,8 @@ import {
   tallyRoles,
   withEvilOption,
   withHumanSeat,
+  withSeat,
+  withSpectator,
   withPlayerCount,
   type SetupDraft,
 } from "./setup-model";
@@ -169,6 +171,28 @@ describe("草稿变更", () => {
   it("越界座位当作起身，不静默钳到边界", () => {
     expect(withHumanSeat(defaultDraft(7), 7).humanSeat).toBeNull();
     expect(withHumanSeat(defaultDraft(7), -1).humanSeat).toBeNull();
+  });
+
+  it("起身观战 / 坐回去，是那个动作说得出名字的入口", () => {
+    const seated = withHumanSeat(defaultDraft(7), 3);
+
+    const watching = withSpectator(seated);
+    expect(watching.humanSeat).toBeNull();
+    // 【坐回去固定 0 号】不记住上一次坐哪：多存一个字段就多一处会和 playerCount 对不上的地方
+    expect(withSeat(watching).humanSeat).toBe(0);
+  });
+
+  it("已经是那个状态时原样返回，不制造无谓的重渲染", () => {
+    const seated = withHumanSeat(defaultDraft(7), 3);
+    const watching = withSpectator(seated);
+
+    expect(withSeat(seated)).toBe(seated);
+    expect(withSpectator(watching)).toBe(watching);
+  });
+
+  it("观战草稿照样开得了局——canStart 不看座位", () => {
+    // 座位是"你玩不玩"，不是配置合不合法。SetupScreen 那边的按钮也因此不再拦它
+    expect(previewSetup(withSpectator(defaultDraft(7))).canStart).toBe(true);
   });
 
   it("越界的自由位下标退回第一项", () => {

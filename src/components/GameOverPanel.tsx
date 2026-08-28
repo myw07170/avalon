@@ -12,7 +12,7 @@
  */
 import { useAtomValue, useSetAtom } from "jotai";
 import { useMemo } from "react";
-import { myViewAtom, resetGameAtom, reviewDecisionsAtom } from "@/store/game";
+import { viewAtom, resetGameAtom, reviewDecisionsAtom } from "@/store/game";
 import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
 import { SeatRing } from "./SeatRing";
@@ -27,7 +27,7 @@ import {
 } from "./game-over-model";
 
 export function GameOverPanel() {
-  const view = useAtomValue(myViewAtom);
+  const view = useAtomValue(viewAtom);
   const decisions = useAtomValue(reviewDecisionsAtom);
   const reset = useSetAtom(resetGameAtom);
   const msg = useMessages();
@@ -110,12 +110,18 @@ function Banner({ brief }: { brief: GameOverBrief }) {
 
       <p className="max-w-md text-sm leading-relaxed text-muted">{brief.reasonLabel}</p>
 
-      <p className="text-sm text-vellum">
-        {msg.gameOver.youAre(brief.yourRoleLabel)}
-        <span className={brief.youWon ? "text-loyal" : "text-mordred"}>
-          {brief.youWon ? msg.gameOver.youWon : msg.gameOver.youLost}
-        </span>
-      </p>
+      {/* 观战局没有"你"，这一行整块换成一句中立的说明——
+          留着「你是 —— 你输了」比不显示更糟 */}
+      {brief.yourRoleLabel === null || brief.youWon === null ? (
+        <p className="text-sm text-muted">{msg.gameOver.spectated}</p>
+      ) : (
+        <p className="text-sm text-vellum">
+          {msg.gameOver.youAre(brief.yourRoleLabel)}
+          <span className={brief.youWon ? "text-loyal" : "text-mordred"}>
+            {brief.youWon ? msg.gameOver.youWon : msg.gameOver.youLost}
+          </span>
+        </p>
+      )}
     </header>
   );
 }

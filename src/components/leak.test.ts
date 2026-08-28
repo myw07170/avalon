@@ -68,23 +68,47 @@ describe("组件够不着全知状态", () => {
   });
 });
 
-describe("store 的三个私有 atom 没有被导出", () => {
+describe("store 的私有 atom 没有被导出", () => {
   const text = readFileSync(STORE, "utf8");
 
   /**
-   * 三样东西各堵着一类 bug（store/game.ts 文件头列着）：
-   * decisionsAtom 是 AI 心证，对局中读到即开天眼；
+   * 每一样各堵着一类 bug（store/game.ts 文件头列着）：
+   * decisionsAtom 是 AI 心证，落座局中读到即开天眼；
    * pendingTurnAtom 带着 promise 的 resolve，拿到就能绕过 validateHumanAction；
-   * abortAtom 是中止句柄，组件不该能单方面掐断循环。
+   * abortAtom 是中止句柄，组件不该能单方面掐断循环；
+   * pauseStateAtom / gateAtom 是暂停闸，后者存着 resume——
+   * 拿到它就能在界面显示"已暂停"的同时把循环放走。
    */
-  it.each(["decisionsAtom", "pendingTurnAtom", "abortAtom"])("%s 是私有的", (name) => {
+  it.each([
+    "decisionsAtom",
+    "pendingTurnAtom",
+    "abortAtom",
+    // 暂停闸的两个：gateAtom 存着当前挂起那一手的 resume，
+    // 组件拿到它就能绕过 pausedAtom 单方面推进循环
+    "pauseStateAtom",
+    "gateAtom",
+  ])("%s 是私有的", (name) => {
     expect(text).toContain(`const ${name} = atom`);
     expect(text).not.toContain(`export const ${name}`);
   });
 
-  it("能拿到 AI 心证的公开入口只有 reviewDecisionsAtom", () => {
-    // 它自己带闸：view.reveal 为 null 时恒返回空数组
+  it("能拿到 AI 心证的公开入口只有两个，而且各自带闸", () => {
+    // reviewDecisionsAtom：view.reveal 为 null 时恒返回空数组
     expect(text).toContain("export const reviewDecisionsAtom");
     expect(text).toMatch(/reveal == null\) return EMPTY_DECISIONS/);
+
+    // liveDecisionsAtom：观战才放行。**只要有人坐在桌上就恒空**——
+    // 边打边读对手的 reasoning 就是开天眼，与上面那条同规格
+    expect(text).toContain("export const liveDecisionsAtom");
+    expect(text).toMatch(/mySeatAtom\) !== null\) return EMPTY_DECISIONS/);
+  });
+
+  it("没有第三个地方直接读 decisionsAtom", () => {
+    // 【判据是"出现了几次"】上面那条只能证明两扇门各自带闸，
+    // 证明不了没人在别处开第三扇。decisionsAtom 一共该出现五次：
+    // 声明、两个派生 atom 各读一次、onDecision 里写一次、resetGameAtom 里清一次。
+    // 数字变了就说明多了一个消费者——**先想清楚它凭什么能读**，再改这个数
+    const stripped = stripComments(text);
+    expect(stripped.split("decisionsAtom").length - 1).toBe(5);
   });
 });

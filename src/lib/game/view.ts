@@ -25,6 +25,7 @@ import {
   type PublicMissionRecord,
   type PublicProposalRecord,
   type Role,
+  type SpectatorView,
 } from "./types";
 import { getKnownIdentities } from "./visibility";
 
@@ -72,8 +73,12 @@ interface Submission {
  * 分成两个函数，早晚出现一个阶段更新了进度、另一个忘了改 selfSubmitted 的情况。
  *
  * 让 AI 知道"还剩 2 人没投"，但不知道任何一票的内容和归属。
+ *
+ * 【selfId 可以是 null】观战没有"自己"，selfSubmitted 恒 false，但 progress 照算——
+ * 它是公开信息。**仍然只有这一个 switch**：为观战另写一个 progressOf，
+ * 就正好制造了上面那句话说的那种漂移。
  */
-function submissionOf(state: GameState, selfId: PlayerId): Submission {
+function submissionOf(state: GameState, selfId: PlayerId | null): Submission {
   const { pending } = state;
   const playerCount = state.players.length;
 
@@ -81,7 +86,7 @@ function submissionOf(state: GameState, selfId: PlayerId): Submission {
     case "ROLE_REVEAL":
       return {
         progress: { submitted: pending.acknowledged.length, required: playerCount },
-        selfSubmitted: pending.acknowledged.includes(selfId),
+        selfSubmitted: selfId !== null && pending.acknowledged.includes(selfId),
       };
 
     case "TEAM_BUILDING":
@@ -90,13 +95,14 @@ function submissionOf(state: GameState, selfId: PlayerId): Submission {
 
     case "PROPOSAL_DISCUSSION":
     case "REVIEW_DISCUSSION": {
-      const index = pending.speakingOrder.indexOf(selfId);
+      // selfId 为 null 时 indexOf 给 -1，下面那条判断本来就要求 index >= 0
+      const index = selfId === null ? -1 : pending.speakingOrder.indexOf(selfId);
       return {
         progress: {
           submitted: pending.speakerIndex,
           required: pending.speakingOrder.length,
         },
-        selfSubmitted: index >= 0 && index < pending.speakerIndex,
+        selfSubmitted: selfId !== null && index >= 0 && index < pending.speakerIndex,
       };
     }
 
@@ -106,14 +112,14 @@ function submissionOf(state: GameState, selfId: PlayerId): Submission {
           submitted: Object.keys(pending.votes).length,
           required: playerCount,
         },
-        selfSubmitted: selfId in pending.votes,
+        selfSubmitted: selfId !== null && selfId in pending.votes,
       };
 
     case "MISSION_EXECUTION": {
       const team = requireProposedTeam(state);
       return {
         progress: { submitted: pending.cards.length, required: team.length },
-        selfSubmitted: pending.cards.some((c) => c.playerId === selfId),
+        selfSubmitted: selfId !== null && pending.cards.some((c) => c.playerId === selfId),
       };
     }
 
@@ -122,7 +128,8 @@ function submissionOf(state: GameState, selfId: PlayerId): Submission {
       const evilCount = state.players.filter((p) => ROLE_TEAM[p.role] === "EVIL").length;
       return {
         progress: { submitted: pending.assassinOpinions.length, required: evilCount },
-        selfSubmitted: pending.assassinOpinions.some((o) => o.playerId === selfId),
+        selfSubmitted:
+          selfId !== null && pending.assassinOpinions.some((o) => o.playerId === selfId),
       };
     }
 
@@ -132,6 +139,19 @@ function submissionOf(state: GameState, selfId: PlayerId): Submission {
     case "GAME_OVER":
       return { progress: { submitted: 0, required: 0 }, selfSubmitted: false };
   }
+}
+
+/**
+ * 座位 -> 真实身份的全表。
+ *
+ * 【只有两个调用方，而且都是"已经允许知道"的场合】终局复盘（revealOf）
+ * 与观战视角（toSpectatorView）。**不要给它加第三个调用方**——
+ * 这个函数是全文件唯一能把 Player.role 铺开的地方。
+ */
+function rolesOf(state: GameState): Record<PlayerId, Role> {
+  const roles: Record<PlayerId, Role> = {};
+  for (const player of state.players) roles[player.id] = player.role;
+  return roles;
 }
 
 /** 终局复盘：这是整个 PlayerView 里唯一允许出现他人身份和任务票来源的地方 */
@@ -147,11 +167,8 @@ function revealOf(state: GameState): PlayerView["reveal"] {
     });
   }
 
-  const roles: Record<PlayerId, Role> = {};
-  for (const player of state.players) roles[player.id] = player.role;
-
   return {
-    roles,
+    roles: rolesOf(state),
     missions: state.missionHistory.map(
       (m): MissionRecord => ({
         missionIndex: m.missionIndex,
@@ -233,6 +250,71 @@ export function toPlayerView(state: GameState, playerId: PlayerId): PlayerView {
     speakingOrder: isDiscussion ? [...state.pending.speakingOrder] : [],
     progress,
     selfSubmitted,
+
+    reveal: revealOf(state),
+  };
+}
+
+/**
+ * GameState -> SpectatorView。全 AI 局的观战投影。
+ *
+ * 与 toPlayerView 的差别只有两处：没有"自己"，多一份全场身份。
+ *
+ * 【为什么是逐字段抄一遍，而不是 `...toPlayerView(state, 0)` 再改几个字段】
+ * 借 0 号座位的视角当底子，等于让观战的公开面依赖"0 号看得见什么"——
+ * 那正好是本文件全部工作的反面。而且展开写法在给 PlayerView 加自我字段时
+ * 不会有任何提示，selfRole 会自己漏进观战视角。
+ *
+ * 【两份字面量会不会漂移】会，所以 spectator-view.test.ts 有一条等价性断言：
+ * 同一个 state 下，本函数与 toPlayerView 的每个公开字段必须深相等。
+ * 防漂移靠那条测试，不靠共享代码。
+ *
+ * 【roles 恒给全量】观战没有对手，"开天眼"这个概念不成立——信息隔离保护的是
+ * **坐在桌上的人**。界面默认把牌全扣着（store 的 revealedSeatsAtom），
+ * 但那是观战者给自己设的剧透闸，不是这里的事。
+ */
+export function toSpectatorView(state: GameState): SpectatorView {
+  const { progress } = submissionOf(state, null);
+  const isDiscussion =
+    state.phase === "PROPOSAL_DISCUSSION" || state.phase === "REVIEW_DISCUSSION";
+
+  return {
+    selfId: null,
+    selfRole: null,
+    selfTeam: null,
+    knowledge: [],
+    selfSubmitted: false,
+
+    roles: rolesOf(state),
+
+    phase: state.phase,
+    missionIndex: state.missionIndex,
+    currentLeaderId: state.currentLeaderId,
+    rejectCount: state.rejectCount,
+    maxRejects: state.config.maxRejects,
+
+    players: state.players.map((p) => ({
+      id: p.id,
+      name: p.name,
+      isHuman: p.isHuman,
+    })),
+    roleComposition: rolesToCounts(state.config.roles),
+    missionConfigs: state.config.missions.map((m) => ({ ...m })),
+    currentMission: { ...getCurrentMission(state) },
+
+    proposedTeam: state.proposedTeam ? [...state.proposedTeam] : null,
+    proposalHistory: state.proposalHistory.map(toPublicProposal),
+    // 【观战也拿不到 cards】"谁投的失败票"归 MissionTrack 的时间轴，不在本次范围内。
+    // 走同一个 toPublicMission，就不会有人在这条路上把它悄悄放宽
+    missionHistory: state.missionHistory.map(toPublicMission),
+    speeches: state.speeches.map((s) => ({ ...s })),
+
+    goodScore: state.goodScore,
+    evilScore: state.evilScore,
+
+    awaitingPlayerIds: getAwaitingPlayerIds(state),
+    speakingOrder: isDiscussion ? [...state.pending.speakingOrder] : [],
+    progress,
 
     reveal: revealOf(state),
   };

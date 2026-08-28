@@ -475,6 +475,24 @@ describe("client 的选择", () => {
 });
 
 describe("边界", () => {
+  /**
+   * AI 层只认 PlayerView。
+   *
+   * 【类型已经拦住了，为什么还要一条源码断言】SpectatorView.selfId 是字面量 null，
+   * 传进 AiDecisionRequest 是编译错误——这确实是主防线。但把某个参数放宽成
+   * AnyView "先让它编过去"是一次极小的改动，而它会把观战的全场身份直接接到 prompt 上，
+   * 出问题的样子是"AI 推理准得反常但不报错"。所以这里再钝钝地钉一次：
+   * **AI 层的任何一个文件里都不该出现这个类型名。**
+   */
+  it.each(["orchestrator.ts", "prompt.ts", "client.ts", "remote.ts", "perspective.ts"])(
+    "%s 不认识 SpectatorView",
+    (name) => {
+      const source = readFileSync(new URL(`./${name}`, import.meta.url), "utf8");
+      expect(source).not.toContain("SpectatorView");
+      expect(source).not.toContain("AnyView");
+    },
+  );
+
   it("不 import client.ts —— 那是服务端的东西", () => {
     const source = readFileSync(new URL("./orchestrator.ts", import.meta.url), "utf8");
     expect(source).not.toContain("./client");

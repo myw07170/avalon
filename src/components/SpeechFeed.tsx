@@ -13,7 +13,7 @@ import { useReducedMotion } from "framer-motion";
 import { useAtomValue } from "jotai";
 import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
-import { myViewAtom } from "@/store/game";
+import { viewAtom } from "@/store/game";
 import {
   describeFeed,
   typewriterStepMs,
@@ -21,7 +21,7 @@ import {
 } from "./speech-feed-model";
 
 export function SpeechFeed() {
-  const view = useAtomValue(myViewAtom);
+  const view = useAtomValue(viewAtom);
   const msg = useMessages();
   const reduced = useReducedMotion() === true;
   const boxRef = useRef<HTMLDivElement>(null);

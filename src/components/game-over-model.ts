@@ -15,8 +15,8 @@
 import type { Messages } from "@/i18n/messages";
 import {
   ROLE_TEAM,
+  type AnyView,
   type PlayerId,
-  type PlayerView,
   type Role,
   type Team,
 } from "@/lib/game";
@@ -102,9 +102,15 @@ export interface GameOverBrief {
   winner: Team;
   winnerLabel: string;
   reasonLabel: string;
-  /** 观战局走不到这里（reveal 为 null），所以恒有值 */
-  youWon: boolean;
-  yourRoleLabel: string;
+  /**
+   * 观战局为 null——没有"你"，也就无所谓输赢。
+   *
+   * 【这里原来写着"观战局走不到这里，所以恒有值"】那句话在观战模式做出来的
+   * 同一刻就不成立了：观战局照样会走到 GAME_OVER，照样有 reveal。
+   */
+  youWon: boolean | null;
+  /** 同上，观战局为 null */
+  yourRoleLabel: string | null;
   strike: StrikeOutcome | null;
   seats: RevealedSeat[];
   missions: RevealedMission[];
@@ -131,7 +137,7 @@ export interface GameOverBrief {
 // ---------------------------------------------------------------------------
 
 /** 座位一律按号称呼，名字只是补充——与 role-card-model 的 seatName 同口径 */
-function seatLabel(view: PlayerView, id: PlayerId, msg: Messages): string {
+function seatLabel(view: AnyView, id: PlayerId, msg: Messages): string {
   const player = view.players.find((p) => p.id === id);
   const base = player ? msg.seat.named(id, player.name) : msg.seat.short(id);
   return id === view.selfId ? msg.seat.withYou(base) : base;
@@ -147,7 +153,7 @@ function findMerlin(roles: Record<PlayerId, Role>): PlayerId | null {
 // 各块
 // ---------------------------------------------------------------------------
 
-function strikeOf(view: PlayerView, msg: Messages): StrikeOutcome | null {
+function strikeOf(view: AnyView, msg: Messages): StrikeOutcome | null {
   const record = view.reveal?.assassination;
   // 坏人靠三次任务赢、或者否决撞线时，游戏根本没走到刺杀。
   // 这是正常的终局形态，不是缺数据
@@ -177,7 +183,7 @@ function strikeOf(view: PlayerView, msg: Messages): StrikeOutcome | null {
   };
 }
 
-function seatsOf(view: PlayerView, msg: Messages): RevealedSeat[] {
+function seatsOf(view: AnyView, msg: Messages): RevealedSeat[] {
   const roles = view.reveal?.roles ?? {};
   return view.players.map((player) => {
     const role = roles[player.id];
@@ -195,7 +201,7 @@ function seatsOf(view: PlayerView, msg: Messages): RevealedSeat[] {
   });
 }
 
-function missionsOf(view: PlayerView, msg: Messages): RevealedMission[] {
+function missionsOf(view: AnyView, msg: Messages): RevealedMission[] {
   return (view.reveal?.missions ?? []).map((mission) => {
     const failedBy = mission.cards
       .filter((card) => !card.success)
@@ -220,7 +226,7 @@ function missionsOf(view: PlayerView, msg: Messages): RevealedMission[] {
 }
 
 function replayOf(
-  view: PlayerView,
+  view: AnyView,
   decisions: readonly DecisionRecord[],
   msg: Messages,
 ): ReplayRound[] {
@@ -290,12 +296,14 @@ function timingOf(decisions: readonly DecisionRecord[], msg: Messages): TimingBr
 // ---------------------------------------------------------------------------
 
 /**
- * 返回 null 的两种情形，面板都要能画出一句话：
- * - 还没到终局（reveal 恒为 null，见 view.ts 的 revealOf）
- * - 观战局（mySeatAtom 为 null → myViewAtom 为 null，视角本身就不存在）
+ * 【只剩一种情形返回 null】还没到终局——reveal 在 GAME_OVER 之前恒为 null
+ * （见 view.ts 的 revealOf）。
+ *
+ * 观战局**不再**返回 null：它有自己的视角（toSpectatorView），终局照样出复盘，
+ * 只是 youWon / yourRoleLabel 两项为 null，面板画中立版标题。
  */
 export function describeGameOver(
-  view: PlayerView | null,
+  view: AnyView | null,
   decisions: readonly DecisionRecord[],
   msg: Messages,
 ): GameOverBrief | null {
@@ -306,8 +314,8 @@ export function describeGameOver(
     winner,
     winnerLabel: msg.gameOver.winner(msg.team.label[winner]),
     reasonLabel: msg.gameOver.reason[winReason],
-    youWon: view.selfTeam === winner,
-    yourRoleLabel: msg.roles[view.selfRole].label,
+    youWon: view.selfTeam === null ? null : view.selfTeam === winner,
+    yourRoleLabel: view.selfRole === null ? null : msg.roles[view.selfRole].label,
     strike: strikeOf(view, msg),
     seats: seatsOf(view, msg),
     missions: missionsOf(view, msg),

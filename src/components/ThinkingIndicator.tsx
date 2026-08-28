@@ -13,11 +13,11 @@
 import { useAtomValue } from "jotai";
 import { useEffect, useState } from "react";
 import { useMessages } from "@/i18n/useMessages";
-import { myViewAtom, thinkingAtom } from "@/store/game";
+import { viewAtom, thinkingAtom } from "@/store/game";
 
 export function ThinkingIndicator() {
   const thinking = useAtomValue(thinkingAtom);
-  const view = useAtomValue(myViewAtom);
+  const view = useAtomValue(viewAtom);
   const msg = useMessages();
   const seconds = useElapsedSeconds(thinking?.startedAt ?? null);
 

@@ -10,6 +10,8 @@ import {
   createRng,
   makePlaceholderPersonas,
   toPlayerView,
+  toSpectatorView,
+  type AnyView,
   type GameState,
   type PlayerView,
   type WinReason,
@@ -21,7 +23,7 @@ import { describeGameOver as describeGameOverRaw } from "./game-over-model";
  * 会让某个漏改的调用点在英文模式下安静地渲染中文，而没有任何东西会报错。
  * 代价就是这里补一行。下面的断言仍然逐字断言中文，那才是真正在验文案。
  */
-const describeGameOver = (view: PlayerView | null, decisions: readonly DecisionRecord[]) =>
+const describeGameOver = (view: AnyView | null, decisions: readonly DecisionRecord[]) =>
   describeGameOverRaw(view, decisions, zh);
 
 
@@ -265,7 +267,7 @@ describe("边界", () => {
     expect(describeGameOver(toPlayerView(state, 0), [])).toBeNull();
   });
 
-  it("观战局（没有视角）也返回 null", () => {
+  it("根本没有视角时返回 null", () => {
     expect(describeGameOver(null, [])).toBeNull();
   });
 
@@ -273,5 +275,66 @@ describe("边界", () => {
     const game = GAMES[0]!;
     expect(describeGameOver(game.view, [])?.timing).toBeNull();
     expect(describeGameOver(game.view, [])?.replay).toEqual([]);
+  });
+});
+
+describe("观战局的终局", () => {
+  /**
+   * 【这一组推翻了一句旧注释】GameOverBrief.youWon 上原来写着
+   * "观战局走不到这里（reveal 为 null），所以恒有值"。观战模式做出来之后，
+   * 观战局照样会走到 GAME_OVER、照样有 reveal——差的只是"你"。
+   */
+  const spectated = (game: Finished) => ({
+    view: toSpectatorView(game.final),
+    decisions: game.decisions,
+  });
+
+  it("画得出来，不再退化成 null", () => {
+    const { view, decisions } = spectated(GAMES[0]!);
+    expect(describeGameOver(view, decisions)).not.toBeNull();
+  });
+
+  it("胜负与身份两项为 null，其余照旧", () => {
+    const game = GAMES[0]!;
+    const { view, decisions } = spectated(game);
+    const brief = describeGameOver(view, decisions)!;
+    const seated = describeGameOver(game.view, decisions)!;
+
+    expect(brief.youWon).toBeNull();
+    expect(brief.yourRoleLabel).toBeNull();
+
+    // 公开的那几块与落座视角完全一致——reveal 是同一份。
+    // 【座位标签不能拿来比】落座视角会给自己那一座加个「你」，
+    // 而观战没有"你"，两边的 teamLabels 本来就该不一样
+    expect(brief.winner).toBe(seated.winner);
+    expect(brief.winnerLabel).toBe(seated.winnerLabel);
+    expect(brief.reasonLabel).toBe(seated.reasonLabel);
+    const outcomes = (b: typeof brief) =>
+      b.missions.map((m) => ({
+        index: m.index,
+        succeeded: m.succeeded,
+        failCount: m.failCount,
+        detail: m.detail,
+      }));
+    expect(outcomes(brief)).toEqual(outcomes(seated));
+  });
+
+  it("没有任何一座带「你」的标记", () => {
+    const { view, decisions } = spectated(GAMES[0]!);
+    const brief = describeGameOver(view, decisions)!;
+
+    expect(brief.seats).toHaveLength(view.players.length);
+    expect(brief.seats.every((seat) => !seat.isSelf)).toBe(true);
+    expect(brief.seats.every((seat) => !seat.label.includes("你"))).toBe(true);
+  });
+
+  it("终局的全部身份仍然公开——那是引擎批准的，不受翻牌控制", () => {
+    const { view, decisions } = spectated(GAMES[0]!);
+    const brief = describeGameOver(view, decisions)!;
+
+    for (const seat of brief.seats) {
+      expect(seat.roleLabel).not.toBe(zh.gameOver.unknownRole);
+      expect(["good", "evil"]).toContain(seat.tone);
+    }
   });
 });

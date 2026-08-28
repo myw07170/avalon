@@ -19,18 +19,27 @@ import {
   createGameAtom,
   errorAtom,
   gameStateAtom,
+  hideAllSeatsAtom,
   humanTurnAtom,
   isMyTurnAtom,
-  myViewAtom,
+  isSpectatingAtom,
+  liveDecisionsAtom,
   mySeatAtom,
   paceMsAtom,
+  pausedAtom,
   resetGameAtom,
+  revealAllSeatsAtom,
   revealAtom,
+  revealedRolesAtom,
+  revealedSeatsAtom,
   reviewDecisionsAtom,
   runGameAtom,
   runStatusAtom,
   submitActionAtom,
   teamConstraintAtom,
+  toggleSeatAtom,
+  togglePauseAtom,
+  viewAtom,
 } from "./game";
 
 // ---------------------------------------------------------------------------
@@ -102,19 +111,33 @@ async function drive(
 
 // ---------------------------------------------------------------------------
 
-describe("myViewAtom", () => {
-  it("状态或座位缺一个就给 null，不抛错", () => {
+describe("viewAtom", () => {
+  it("没有对局就给 null，不抛错", () => {
     const store = createStore();
-    expect(store.get(myViewAtom)).toBeNull();
+    expect(store.get(viewAtom)).toBeNull();
 
+    // 座位单独设上也没用：没有 state 就没有视角
     store.set(mySeatAtom, 0);
-    expect(store.get(myViewAtom)).toBeNull();
+    expect(store.get(viewAtom)).toBeNull();
   });
 
-  it("全 AI 观战局没有视角", () => {
+  it("全 AI 观战局给的是观战视角，不是 null", () => {
     const store = newStore(5, 42, null);
     expect(store.get(gameStateAtom)).not.toBeNull();
-    expect(store.get(myViewAtom)).toBeNull();
+
+    const view = store.get(viewAtom);
+    expect(view).not.toBeNull();
+    // 没有"自己"——组件里那些 `id === view.selfId` 因此恒为 false
+    expect(view?.selfId).toBeNull();
+    expect(view?.selfRole).toBeNull();
+    expect(view?.knowledge).toEqual([]);
+    expect(store.get(isSpectatingAtom)).toBe(true);
+  });
+
+  it("落座局不是观战局", () => {
+    const store = newStore();
+    expect(store.get(isSpectatingAtom)).toBe(false);
+    expect(store.get(viewAtom)?.selfId).toBe(SEAT);
   });
 });
 
@@ -125,7 +148,7 @@ describe("建局", () => {
     expect(store.get(runStatusAtom)).toBe("ready");
     expect(store.get(errorAtom)).toBeNull();
 
-    const view = store.get(myViewAtom);
+    const view = store.get(viewAtom);
     expect(view).not.toBeNull();
     // RoleCard 的翻牌动效就靠这一档：SETUP 阶段身份已经发完
     expect(view?.phase).toBe("SETUP");
@@ -138,7 +161,7 @@ describe("建局", () => {
     const store = newStore(7);
     const constraint = store.get(teamConstraintAtom);
     expect(constraint).toEqual({
-      teamSize: store.get(myViewAtom)?.currentMission.teamSize,
+      teamSize: store.get(viewAtom)?.currentMission.teamSize,
       candidateIds: [0, 1, 2, 3, 4, 5, 6],
     });
   });
@@ -165,7 +188,7 @@ describe("跑完整一局", () => {
 
     expect(store.get(runStatusAtom)).toBe("finished");
     expect(store.get(errorAtom)).toBeNull();
-    expect(store.get(myViewAtom)?.phase).toBe("GAME_OVER");
+    expect(store.get(viewAtom)?.phase).toBe("GAME_OVER");
 
     const reveal = store.get(revealAtom);
     expect(reveal).not.toBeNull();
@@ -269,7 +292,7 @@ describe("以梅林身份完整玩完一局", () => {
     if (!played) throw new Error("30 颗梅林种子里没有一局走到刺杀，夹具要加种子");
 
     const { store } = played;
-    const view = store.get(myViewAtom);
+    const view = store.get(viewAtom);
 
     // 1. 对局正常收尾
     expect(store.get(runStatusAtom)).toBe("finished");
@@ -302,7 +325,7 @@ describe("reviewDecisionsAtom 的泄漏闸", () => {
     const paused = await drive(store, run, (turn) => turn.view.speeches.length > 0);
     expect(paused).not.toBeNull();
     expect(store.get(runStatusAtom)).toBe("running");
-    expect(store.get(myViewAtom)?.reveal).toBeNull();
+    expect(store.get(viewAtom)?.reveal).toBeNull();
     expect(store.get(reviewDecisionsAtom)).toEqual([]);
 
     await drive(store, run);
@@ -435,5 +458,166 @@ describe("重入闸门", () => {
     // runStatus 是 "idle"，闸门直接挡回去，不该留下半开的循环
     expect(store.get(runStatusAtom)).toBe("idle");
     expect(store.get(gameStateAtom)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 观战
+// ---------------------------------------------------------------------------
+
+/** 一局全 AI。没有人类座位，所以不需要 drive 去替谁点按钮 */
+function spectate(playerCount = 5, seed = 42): Store {
+  return newStore(playerCount, seed, null);
+}
+
+describe("观战：默认什么都不知道", () => {
+  it("翻牌状态初值是空集，露出来的身份也是空的", () => {
+    const store = spectate();
+
+    expect(store.get(revealedSeatsAtom).size).toBe(0);
+    // **这条钉住"默认不知道"**：引擎给了全量身份，但组件读到的这一份是空的
+    expect(store.get(revealedRolesAtom)).toEqual({});
+  });
+
+  it("引擎那一份仍然是全量的——扣着是 UI 的事，不是投影裁过", () => {
+    const store = spectate();
+    const view = store.get(viewAtom);
+
+    expect(view?.selfId).toBeNull();
+    expect(Object.keys(view?.selfId === null ? view.roles : {})).toHaveLength(5);
+  });
+
+  it("翻一张只露一张，再点一次盖回去", () => {
+    const store = spectate();
+
+    store.set(toggleSeatAtom, 2);
+    expect(store.get(revealedSeatsAtom)).toEqual(new Set([2]));
+    expect(Object.keys(store.get(revealedRolesAtom) ?? {})).toEqual(["2"]);
+
+    store.set(toggleSeatAtom, 2);
+    expect(store.get(revealedSeatsAtom).size).toBe(0);
+    expect(store.get(revealedRolesAtom)).toEqual({});
+  });
+
+  it("不存在的座位静默忽略，不抛也不加进去", () => {
+    const store = spectate();
+    store.set(toggleSeatAtom, 99);
+    expect(store.get(revealedSeatsAtom).size).toBe(0);
+  });
+
+  it("全翻 / 全盖", () => {
+    const store = spectate();
+
+    store.set(revealAllSeatsAtom);
+    expect(store.get(revealedSeatsAtom).size).toBe(5);
+    expect(Object.keys(store.get(revealedRolesAtom) ?? {})).toHaveLength(5);
+
+    store.set(hideAllSeatsAtom);
+    expect(store.get(revealedSeatsAtom).size).toBe(0);
+  });
+
+  it("落座局没有翻牌这回事：revealedRolesAtom 恒为 null", () => {
+    const store = newStore();
+    store.set(revealAllSeatsAtom);
+    // 翻牌 atom 本身可以被写，但派生出来的身份表认的是"有没有人坐着"
+    expect(store.get(revealedRolesAtom)).toBeNull();
+  });
+
+  it("重开会把牌全部盖回去", () => {
+    const store = spectate();
+    store.set(revealAllSeatsAtom);
+    store.set(resetGameAtom);
+    expect(store.get(revealedSeatsAtom).size).toBe(0);
+  });
+});
+
+describe("观战：跑得完，且心证是实时的", () => {
+  it("不传 onHumanAction 也能一路跑到终局", async () => {
+    const store = spectate();
+
+    expect(store.get(runStatusAtom)).toBe("ready");
+    await store.set(runGameAtom);
+
+    expect(store.get(runStatusAtom)).toBe("finished");
+    expect(store.get(errorAtom)).toBeNull();
+    // 全程没有人类回合
+    expect(store.get(humanTurnAtom)).toBeNull();
+  });
+
+  it("终局复盘对观战局也画得出，只是没有那一行「你是谁」", async () => {
+    const store = spectate();
+    await store.set(runGameAtom);
+
+    const brief = describeGameOver(store.get(viewAtom), store.get(reviewDecisionsAtom), zh);
+    // 【这一条推翻了旧注释】"观战局走不到这里"曾经写在 GameOverBrief 上
+    expect(brief).not.toBeNull();
+    expect(brief?.youWon).toBeNull();
+    expect(brief?.yourRoleLabel).toBeNull();
+    expect(brief?.seats).toHaveLength(5);
+    // 没有"你"，所以没有任何一座带「你」的标记
+    expect(brief?.seats.every((seat) => !seat.isSelf)).toBe(true);
+  });
+
+  it("liveDecisionsAtom：观战局边打边有，落座局恒空", async () => {
+    const spectator = spectate();
+    await spectator.set(runGameAtom);
+    expect(spectator.get(liveDecisionsAtom).length).toBeGreaterThan(0);
+
+    // 【信息隔离的那道真闸】有人坐在桌上，对手的 reasoning 一条都不给
+    const seated = newStore();
+    const run = seated.set(runGameAtom);
+    const paused = await drive(seated, run, (turn) => turn.view.speeches.length > 0);
+    expect(paused).not.toBeNull();
+    expect(seated.get(liveDecisionsAtom)).toEqual([]);
+
+    await drive(seated, run);
+    // 终局之后也一样：落座局要看心证只能走 reviewDecisionsAtom
+    expect(seated.get(liveDecisionsAtom)).toEqual([]);
+    expect(seated.get(reviewDecisionsAtom).length).toBeGreaterThan(0);
+  });
+});
+
+describe("观战：暂停闸", () => {
+  /**
+   * 【必须在起跑的同一个同步块里按下】mock + paceMs 0 的一局在几个宏任务里就跑完了，
+   * 等看到第一条决策再按，往往已经 finished——那样测的就不是闸，是运气。
+   */
+  it("按下暂停循环就停住，恢复后接着跑到终局", async () => {
+    const store = spectate();
+    const run = store.set(runGameAtom);
+    store.set(togglePauseAtom);
+    expect(store.get(pausedAtom)).toBe(true);
+
+    // 第一手决策会先落进 decisions，再撞上闸
+    for (let i = 0; i < 20; i += 1) await tick();
+    const at = store.get(liveDecisionsAtom).length;
+    expect(at).toBeGreaterThan(0);
+    expect(store.get(runStatusAtom)).toBe("running");
+
+    // 再让出一批宏任务：真停住了的话这个数不会再涨
+    for (let i = 0; i < 20; i += 1) await tick();
+    expect(store.get(liveDecisionsAtom).length).toBe(at);
+    expect(store.get(runStatusAtom)).toBe("running");
+
+    store.set(togglePauseAtom);
+    expect(store.get(pausedAtom)).toBe(false);
+    await run;
+    expect(store.get(runStatusAtom)).toBe("finished");
+  });
+
+  it("暂停着重开也不会把循环卡死", async () => {
+    const store = spectate();
+    const run = store.set(runGameAtom);
+    store.set(togglePauseAtom);
+
+    for (let i = 0; i < 20; i += 1) await tick();
+    expect(store.get(runStatusAtom)).toBe("running");
+
+    store.set(resetGameAtom);
+
+    // 中止会 resolve 挂着的那一手，promise 必须结算——不结算就是泄漏
+    await expect(run).resolves.toBeUndefined();
+    expect(store.get(pausedAtom)).toBe(false);
+    expect(store.get(runStatusAtom)).toBe("idle");
   });
 });

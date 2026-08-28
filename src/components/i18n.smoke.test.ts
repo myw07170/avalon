@@ -1,5 +1,5 @@
 /**
- * 八个 view-model 在英文模式下不许产出汉字。
+ * 九个 view-model 在英文模式下不许产出汉字。
  *
  * 【为什么是这一条，而不是逐条写英文期望】逐条断言英文文案是同义反复：
  * `expect(track.detail).toBe(en.track.fail(2))` 只证明了接线，不证明文案，
@@ -32,9 +32,11 @@ import {
   getLegalActions,
   makePlaceholderPersonas,
   toPlayerView,
+  toSpectatorView,
   type GameState,
   type PlayerView,
   type Role,
+  type SpectatorView,
 } from "@/lib/game";
 import { describeTurn, type AssassinationForm } from "./action-panel-model";
 import { describeStrike, strikeLabel } from "./assassination-model";
@@ -43,6 +45,7 @@ import { describeTrack } from "./mission-track-model";
 import { describeRole } from "./role-card-model";
 import { describeTable } from "./seat-table-model";
 import { describeFeed } from "./speech-feed-model";
+import { describeCast, describeMinds } from "./spectator-model";
 
 const CJK = /[　-〿一-鿿＀-￯]/;
 
@@ -55,6 +58,9 @@ interface Sample {
   turns: HumanTurn[];
   /** 终局那一份视角 + 全部心证，喂给 describeGameOver */
   finals: Array<{ view: PlayerView; decisions: DecisionRecord[] }>;
+  /** 观战视角。夹具本来就是全 AI 局，顺手多投影一份 */
+  spectator: SpectatorView[];
+  spectatorFinals: Array<{ view: SpectatorView; decisions: DecisionRecord[] }>;
 }
 
 function turnsAt(state: GameState): HumanTurn[] {
@@ -76,7 +82,13 @@ let SAMPLE: Sample | null = null;
 async function sample(): Promise<Sample> {
   if (SAMPLE) return SAMPLE;
 
-  const out: Sample = { views: [], turns: [], finals: [] };
+  const out: Sample = {
+    views: [],
+    turns: [],
+    finals: [],
+    spectator: [],
+    spectatorFinals: [],
+  };
 
   for (const seed of SEEDS) {
     const rng = createRng(seed);
@@ -91,6 +103,7 @@ async function sample(): Promise<Sample> {
     const collect = (next: GameState) => {
       for (const player of next.players) out.views.push(toPlayerView(next, player.id));
       out.turns.push(...turnsAt(next));
+      out.spectator.push(toSpectatorView(next));
     };
 
     collect(state);
@@ -110,6 +123,7 @@ async function sample(): Promise<Sample> {
     for (const player of final.players) {
       out.finals.push({ view: toPlayerView(final, player.id), decisions });
     }
+    out.spectatorFinals.push({ view: toSpectatorView(final), decisions });
   }
 
   SAMPLE = out;
@@ -146,6 +160,7 @@ describe("英文模式下 view-model 不产出汉字", () => {
     expect(views.length).toBeGreaterThan(200);
     expect(turns.length).toBeGreaterThan(50);
     expect(finals.length).toBeGreaterThan(0);
+    expect((await sample()).spectator.length).toBeGreaterThan(20);
     // 刺杀那几个表单只在走到刺杀的局里出现，缺了就等于白测一大块
     expect(turns.some((t) => t.kind === "ASSASSINATION")).toBe(true);
   });
@@ -228,6 +243,39 @@ describe("英文模式下 view-model 不产出汉字", () => {
             opinions: brief.strike.opinions.map((o) => o.label),
           },
         }),
+      );
+      if (offenders.length > 0) break;
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("describeCast / describeMinds（观战）", async () => {
+    const { spectator, spectatorFinals } = await sample();
+    const offenders: string[] = [];
+
+    for (const view of spectator) {
+      const all = new Set(view.players.map((p) => p.id));
+      // 两种极端都要走：全盖时是牌背那几句，全翻时才轮到角色名
+      offenders.push(...offendersIn("describeCast:down", describeCast(view, new Set(), en)));
+      offenders.push(...offendersIn("describeCast:up", describeCast(view, all, en)));
+      if (offenders.length > 0) break;
+    }
+
+    for (const { view, decisions } of spectatorFinals) {
+      const all = new Set(view.players.map((p) => p.id));
+      // reasoning 是 mock 造的中文，不是文案；只查我们自己拼的那几段
+      offenders.push(
+        ...offendersIn(
+          "describeMinds",
+          describeMinds(view, decisions, all, en).map((entry) => ({
+            seatLabel: entry.seatLabel,
+            roleLabel: entry.roleLabel,
+            kindLabel: entry.kindLabel,
+            flags: entry.flags,
+            latencyLabel: entry.latencyLabel,
+          })),
+        ),
       );
       if (offenders.length > 0) break;
     }

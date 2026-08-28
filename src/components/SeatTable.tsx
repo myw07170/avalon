@@ -9,21 +9,26 @@
  * 【身份认知在对局中一直显示】梅林知道谁是坏人，这一整局都不会忘——
  * 让他每轮重新回忆一遍座位号不是难度，是负担。这不构成泄漏：
  * 画出来的只有 view.knowledge 明确给他的那些座位。
+ *
+ * 【观战局走另一条染色路】那时没有 knowledge，改按已翻开座位的阵营染色。
+ * 默认一张牌都没翻，所以观战的圆桌一开始与落座局长得一模一样。
  */
 import { useAtomValue } from "jotai";
 import type { Messages } from "@/i18n/messages";
 import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
-import { myViewAtom } from "@/store/game";
+import { revealedRolesAtom, viewAtom } from "@/store/game";
 import { SeatRing } from "./SeatRing";
 import { describeTable, type SeatState } from "./seat-table-model";
 
 export function SeatTable() {
-  const view = useAtomValue(myViewAtom);
+  const view = useAtomValue(viewAtom);
+  // 落座局恒为 null；观战局只含**已翻开**的座位，过滤在 store 那一层做过了
+  const roles = useAtomValue(revealedRolesAtom);
   const msg = useMessages();
   if (!view) return null;
 
-  const table = describeTable(view, msg);
+  const table = describeTable(view, msg, roles);
 
   return (
     <section className="w-full">

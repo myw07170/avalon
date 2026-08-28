@@ -16,12 +16,13 @@ import { useAtomValue, useSetAtom } from "jotai";
 import type { PlayerView } from "@/lib/game";
 import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
-import { myViewAtom, personaNotesAtom, resetGameAtom, runGameAtom } from "@/store/game";
+import { viewAtom, personaNotesAtom, resetGameAtom, runGameAtom } from "@/store/game";
+import { FlipCard, TableMotif } from "./FlipCard";
 import { SeatRing } from "./SeatRing";
 import { describeRole, type RoleBrief, type SeatTone } from "./role-card-model";
 
 export function RoleCard() {
-  const view = useAtomValue(myViewAtom);
+  const view = useAtomValue(viewAtom);
   const msg = useMessages();
   const personaNotes = useAtomValue(personaNotesAtom);
   const startRun = useSetAtom(runGameAtom);
@@ -29,8 +30,9 @@ export function RoleCard() {
   const [flipped, setFlipped] = useState(false);
   const reduced = useReducedMotion();
 
-  if (!view) {
-    // 观战局在 SetupScreen 就被拦住了，走到这里说明状态不该出现，给句话别崩
+  // 观战局走的是 SpectatorIntro（GameShell 按 isSpectatingAtom 分的岔），
+  // 所以这里 selfId 必然不是 null。走到这一支说明状态不该出现，给句话别崩
+  if (!view || view.selfId === null) {
     return (
       <Screen>
         <p className="text-sm text-muted">{msg.role.noSeat}</p>
@@ -52,7 +54,7 @@ export function RoleCard() {
           SetupScreen 点完就卸载了，所以这句话只能落在这一屏 */}
       <PersonaNotes notes={personaNotes} />
 
-      <FlipCard
+      <RoleFlipCard
         flipped={flipped}
         reduced={reduced === true}
         onToggle={() => setFlipped((f) => !f)}
@@ -92,7 +94,7 @@ export function RoleCard() {
 // 卡片
 // ---------------------------------------------------------------------------
 
-interface FlipCardProps {
+interface RoleFlipCardProps {
   flipped: boolean;
   reduced: boolean;
   onToggle: () => void;
@@ -100,82 +102,49 @@ interface FlipCardProps {
 }
 
 /**
- * 3D 翻牌。
- *
- * 【CSS perspective 必须在外层普通 div 上】在 motion.* 元素的 style 里，
- * perspective 被当成 transform 值（MotionCSS 把它从 CSSProperties 里删了，
- * TransformProperties 里另有一个同名的），写在那儿卡片会翻得是平的。
- *
- * useReducedMotion 是必须的：globals.css 里那条 prefers-reduced-motion
- * 只管 CSS 过渡，管不到 framer-motion 这种 JS 驱动的动画。
+ * 身份卡的牌面。翻牌的机械部分在 FlipCard 里，与观战的身份牌堆共用。
  */
-function FlipCard({ flipped, reduced, onToggle, brief }: FlipCardProps) {
+function RoleFlipCard({ flipped, reduced, onToggle, brief }: RoleFlipCardProps) {
   const msg = useMessages();
   const isEvil = brief.team === "EVIL";
 
   return (
-    <div style={{ perspective: 1200 }} className="w-full max-w-sm">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-pressed={flipped}
-        aria-label={flipped ? msg.role.flipToBack : msg.role.flipToFront}
-        className="block w-full rounded-2xl"
-      >
-        <motion.div
-          style={{ transformStyle: "preserve-3d" }}
-          animate={{ rotateY: flipped ? 180 : 0 }}
-          transition={
-            reduced ? { duration: 0 } : { type: "spring", stiffness: 260, damping: 26 }
-          }
-          className="relative aspect-[3/4] w-full sm:aspect-[4/5]"
+    <FlipCard
+      flipped={flipped}
+      reduced={reduced}
+      onToggle={onToggle}
+      label={flipped ? msg.role.flipToBack : msg.role.flipToFront}
+      className="aspect-[3/4] w-full max-w-sm sm:aspect-[4/5]"
+      back={
+        <div className="grid size-full place-content-center gap-6 rounded-2xl border border-ink-line bg-ink-raised">
+          <TableMotif />
+          <p className="font-display text-sm tracking-[var(--track-3)] text-muted">
+            <span className="-mr-[var(--track-3)]">{msg.role.tapToReveal}</span>
+          </p>
+        </div>
+      }
+      front={
+        <div
+          className={cn(
+            "flex size-full flex-col items-center justify-center gap-4 rounded-2xl border-2 bg-ink-raised px-7 text-center",
+            isEvil ? "border-mordred/60" : "border-loyal/60",
+          )}
         >
-          {/* 卡背 */}
-          <div
-            style={{ backfaceVisibility: "hidden" }}
-            className="absolute inset-0 grid place-content-center gap-6 rounded-2xl border border-ink-line bg-ink-raised"
-          >
-            <TableMotif />
-            <p className="font-display text-sm tracking-[var(--track-3)] text-muted">
-              <span className="-mr-[var(--track-3)]">{msg.role.tapToReveal}</span>
-            </p>
-          </div>
-
-          {/* 卡面 */}
-          <div
-            style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+          <p
             className={cn(
-              "absolute inset-0 flex flex-col items-center justify-center gap-4 rounded-2xl border-2 bg-ink-raised px-7 text-center",
-              isEvil ? "border-mordred/60" : "border-loyal/60",
+              "font-display text-xs tracking-[var(--track-3)]",
+              isEvil ? "text-mordred" : "text-loyal",
             )}
           >
-            <p
-              className={cn(
-                "font-display text-xs tracking-[var(--track-3)]",
-                isEvil ? "text-mordred" : "text-loyal",
-              )}
-            >
-              <span className="-mr-[var(--track-3)]">{brief.teamLabel}</span>
-            </p>
-            <h2 className="-mr-[var(--track-1)] font-display text-4xl tracking-[var(--track-1)]">
-              {brief.label}
-            </h2>
-            <p className="text-sm leading-relaxed text-muted">{brief.ability}</p>
-          </div>
-        </motion.div>
-      </button>
-    </div>
-  );
-}
-
-/** 卡背图案：还是那张桌子，黄铜细线的同心圆 */
-function TableMotif() {
-  return (
-    <div className="relative mx-auto size-28" aria-hidden>
-      <div className="absolute inset-0 rounded-full border border-brass/30" />
-      <div className="absolute inset-[18%] rounded-full border border-brass/20" />
-      <div className="absolute inset-[42%] rounded-full border border-brass/50" />
-    </div>
+            <span className="-mr-[var(--track-3)]">{brief.teamLabel}</span>
+          </p>
+          <h2 className="-mr-[var(--track-1)] font-display text-4xl tracking-[var(--track-1)]">
+            {brief.label}
+          </h2>
+          <p className="text-sm leading-relaxed text-muted">{brief.ability}</p>
+        </div>
+      }
+    />
   );
 }
 

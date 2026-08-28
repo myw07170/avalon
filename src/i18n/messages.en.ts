@@ -84,6 +84,46 @@ export const en: Messages = {
     seconds: (n) => `(${n}s)`,
   },
 
+  spectator: {
+    introTitle: "This table is all AI",
+    introNote:
+      "Roles are already dealt, but every card starts face down. Flip whoever you " +
+      "want, whenever you want — and flip them back.",
+    start: "Start watching",
+    badge: "Watching",
+    exit: "Stop watching",
+
+    deckTitle: "Identities",
+    faceDown: "Face down",
+    faceDownHint: "Tap to reveal",
+    flipAria: (id) => `Reveal the identity of Seat ${id}`,
+    hideAria: (id) => `Hide the identity of Seat ${id}`,
+    revealAll: "Reveal all",
+    hideAll: "Hide all",
+    revealedCount: (n, total) => `${n} of ${total} revealed`,
+
+    pauseField: "Pace",
+    pause: "Pause",
+    resume: "Resume",
+    paused: "Paused",
+    pace: {
+      slow: "Slow",
+      normal: "Normal",
+      fast: "Fast",
+      instant: "Instant",
+    },
+
+    mindsTitle: "What the AI is thinking",
+    mindsExpand: "Show",
+    mindsCollapse: "Hide",
+    mindsSpoilerNote:
+      "This is the model's private reasoning, and it spoils — including what it " +
+      "believes about everyone else.",
+    mindsEmpty: "Reveal an identity and that seat's reasoning shows up here.",
+    mindsWaiting: "Nothing to show yet.",
+    mindsAuto: "model not called",
+  },
+
   track: {
     fail: (failCount) => `Failed · ${plural(failCount, "1 fail", `${failCount} fails`)}`,
     successWithFails: (failCount) =>
@@ -320,6 +360,7 @@ export const en: Messages = {
     youAre: (roleLabel) => `You were ${roleLabel} — `,
     youWon: "you won",
     youLost: "you lost",
+    spectated: "You only watched this one.",
     strikeTitle: "Assassination",
     strikeLine: (assassin, target) => `${assassin} named ${target}, who was`,
     period: ".",
@@ -407,16 +448,22 @@ export const en: Messages = {
     // 【issue.message 目前仍是中文】阶段 3 会把 ConfigIssue 换成 code + params，
     // 那之后这个参数才真的是本地化过的
     balanceNote: (message) => `${message}. This is a balance suggestion, not a blocker.`,
-    pickSeatFirst:
-      "Pick a seat first. The engine already supports all-AI spectator games, but the " +
-      "spectator view is not built yet.",
+    spectateHint:
+      "Leave every seat empty and the whole table is AI — you just watch. Identities " +
+      "start face down; flip any of them whenever you like.",
+    spectateCostNote:
+      "Every turn of a spectated game calls the model, roughly 60–116 calls a game, " +
+      "with no human turn to slow it down. Watch your spend in remote mode.",
+    standUp: "Stand up and watch",
+    sitDown: "Sit back down",
     busy: "Generating characters…",
     submit: "Take the seat",
+    spectate: "Start watching",
     seatAriaSelf: (id) => `Your seat, Seat ${id}`,
     seatAria: (id) => `Seat ${id}`,
     goodCount: (n) => `Good ${n}`,
     evilCount: (n) => `Evil ${n}`,
-    seatHintIdle: "Tap to take a seat",
+    seatHintIdle: "Tap any seat to sit down, or just start watching",
     seatHintSeated: (id) =>
       `Tap to take a seat · you are Seat ${id} · tap again to stand up`,
     missionsNote: "The number is how many players go on that mission.",

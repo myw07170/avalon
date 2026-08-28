@@ -3,8 +3,9 @@
 /**
  * Jotai atoms + 驱动层。React 世界与引擎/AI 层的唯一接缝。
  *
- * 【组件只能读 myViewAtom】gameStateAtom 是全知视角，任何组件读它都视为 bug。
+ * 【组件只能读 viewAtom】gameStateAtom 是全知视角，任何组件读它都视为 bug。
  * 终局复盘面板也不例外——它读的是 view.reveal，那是引擎批准公开的部分。
+ * 观战局的 viewAtom 给的是 toSpectatorView 的结果，同样是引擎批准过的一份投影。
  *
  * 【"use client" 不是形式】它把本文件钉在客户端边界上：
  * Server Component 误 import 这里的 atom 会在构建期就炸，而不是在运行时
@@ -14,6 +15,7 @@
  * - `decisionsAtom`   AI 心证，对局中读到就是泄漏（见 reviewDecisionsAtom）
  * - `pendingTurnAtom` 带着 promise 的 resolve，组件拿到就能绕过校验直接放行
  * - `abortAtom`       中止句柄，组件不该有能力单方面掐断循环
+ * - `gateAtom`        暂停闸的 resume，拿到就能绕过 pausedAtom 单方面推进循环
  */
 import { atom } from "jotai";
 import {
@@ -22,15 +24,18 @@ import {
   createRng,
   makePlaceholderPersonas,
   toPlayerView,
+  toSpectatorView,
   type AiClient,
   type AiDecisionKind,
   type GameAction,
   type GameConfig,
   type GameState,
   type Persona,
+  type AnyView,
   type PlayerId,
   type PlayerView,
   type RngFn,
+  type Role,
   type ActionProblem,
   type EngineErrorCode,
   type TeamConstraint,
@@ -59,23 +64,33 @@ export const mySeatAtom = atom<PlayerId | null>(null);
 /**
  * 组件的唯一数据源。
  *
- * 两个来源任一为空都给 null——`toPlayerView` 对不存在的座位会抛 INTERNAL，
+ * 没有对局时给 null——`toPlayerView` 对不存在的座位会抛 INTERNAL，
  * 判空是必须的，不是防御性编程。
  *
- * 观战局（mySeatAtom 为 null）在这里也是 null。**不要退化成读 gameStateAtom**：
- * 观战需要一份"全公开但仍不含隐藏信息"的独立投影，那是阶段 6 的事。
+ * **观战局（mySeatAtom 为 null）走 toSpectatorView，不是给 null，更不是读
+ * gameStateAtom。** 那是一份引擎批准过的独立投影：它带着全场身份（观战没有对手，
+ * 信息隔离保护的是坐在桌上的人），但界面默认把牌全扣着——见 revealedSeatsAtom。
+ *
+ * 【类型是 AnyView，不是 PlayerView】观战那一支没有 selfId/selfRole。
+ * 组件里 `player.id === view.selfId` 这类写法一行都不用改：观战时 selfId 是
+ * 字面量 null，那些比较恒为 false，正是想要的行为。
  *
  * 【刻意不上 selectAtom 切片】每次 gameStateAtom 写入都会重算出一个全新的
- * PlayerView（toPlayerView 逐字段抄写、不做 memo），所有订阅者跟着重渲染。
+ * view（两个投影都逐字段抄写、不做 memo），所有订阅者跟着重渲染。
  * 但写入节奏被下面的 paceMsAtom 卡在几百毫秒一次，组件也就十来个，
  * 这点开销可以忽略。真测出掉帧再切片，现在加就是没有消费者的死代码。
  */
-export const myViewAtom = atom<PlayerView | null>((get) => {
+export const viewAtom = atom<AnyView | null>((get) => {
   const state = get(gameStateAtom);
+  if (!state) return null;
   const seat = get(mySeatAtom);
-  if (!state || seat === null) return null;
-  return toPlayerView(state, seat);
+  return seat === null ? toSpectatorView(state) : toPlayerView(state, seat);
 });
+
+/** 这一局有没有人坐在桌上。没有对局时为 false */
+export const isSpectatingAtom = atom(
+  (get) => get(gameStateAtom) !== null && get(mySeatAtom) === null,
+);
 
 // ---------------------------------------------------------------------------
 // 运行状态
@@ -186,6 +201,18 @@ const pendingTurnAtom = atom<PendingTurn | null>(null);
 const abortAtom = atom<AbortController | null>(null);
 
 /**
+ * 暂停闸。【两个都不导出】
+ *
+ * `gateAtom` 存的是"当前挂着的那一手"的 resume，组件拿到它就能绕过 pausedAtom
+ * 单方面推进循环——与 pendingTurnAtom 的 resolve 是同一类后门。
+ * 组件的入口只有只读的 pausedAtom 和 togglePauseAtom。
+ *
+ * 存的是函数，写入时必须包一层（`set(gateAtom, () => fn)`），理由同 rngAtom。
+ */
+const pauseStateAtom = atom(false);
+const gateAtom = atom<(() => void) | null>(null);
+
+/**
  * 建局时创建，起跑时复用。同一个实例贯穿发牌与决策，是确定性重放的前提。
  *
  * 存的是函数，所以写入时必须包一层（`set(rngAtom, () => rng)`），
@@ -228,7 +255,7 @@ export const thinkingAtom = atom<Thinking | null>(null);
 
 /** 终局复盘的公开面。非 GAME_OVER 恒为 null */
 export const revealAtom = atom<PlayerView["reveal"]>(
-  (get) => get(myViewAtom)?.reveal ?? null,
+  (get) => get(viewAtom)?.reveal ?? null,
 );
 
 /**
@@ -243,7 +270,7 @@ export const revealAtom = atom<PlayerView["reveal"]>(
  * C(10,5)=252 种），所以选人界面必须靠这个约束自己拼 team。
  */
 export const teamConstraintAtom = atom<TeamConstraint | null>((get) => {
-  const view = get(myViewAtom);
+  const view = get(viewAtom);
   if (!view) return null;
   return {
     teamSize: view.currentMission.teamSize,
@@ -258,8 +285,100 @@ export const teamConstraintAtom = atom<TeamConstraint | null>((get) => {
  * phase，因为 reveal 才是引擎明确批准公开的那一刻。
  */
 export const reviewDecisionsAtom = atom<readonly DecisionRecord[]>((get) => {
-  if (get(myViewAtom)?.reveal == null) return EMPTY_DECISIONS;
+  if (get(viewAtom)?.reveal == null) return EMPTY_DECISIONS;
   return get(decisionsAtom);
+});
+
+/**
+ * 观战时的实时 AI 心证。
+ *
+ * 【这是 AI 心证的第二扇门，闸就在这一行】判据是**桌上没有人**。
+ * 只要有人坐着，reasoning 就是对手的内心分析，边打边读等于开天眼——
+ * 与 reviewDecisionsAtom 那条「终局之前恒空」同规格，leak.test.ts 两条一起钉着。
+ *
+ * 观战没有对手，所以这里放行。要显示哪几座是 MindPanel 按 revealedSeatsAtom
+ * 自己筛的，那是剧透闸，不是信息隔离——两件事不要混。
+ */
+export const liveDecisionsAtom = atom<readonly DecisionRecord[]>((get) => {
+  if (get(mySeatAtom) !== null) return EMPTY_DECISIONS;
+  return get(decisionsAtom);
+});
+
+// ---------------------------------------------------------------------------
+// 观战：暂停
+// ---------------------------------------------------------------------------
+
+/** 循环是不是被按停了。只读——推进循环的能力不交给组件 */
+export const pausedAtom = atom((get) => get(pauseStateAtom));
+
+/**
+ * 暂停 / 继续。
+ *
+ * 恢复时要**立刻**放掉当前挂着的那一手：只把 pauseStateAtom 改回 false，
+ * 已经挂在 waitWhileGated 里的那个 promise 没人去 resolve，循环就再也不动了。
+ */
+export const togglePauseAtom = atom(null, (get, set) => {
+  const paused = get(pauseStateAtom);
+  set(pauseStateAtom, !paused);
+  if (paused) get(gateAtom)?.();
+});
+
+// ---------------------------------------------------------------------------
+// 观战：翻牌
+// ---------------------------------------------------------------------------
+
+const NO_SEATS: ReadonlySet<PlayerId> = Object.freeze(new Set<PlayerId>());
+
+/**
+ * 观战者已经翻开的座位。**默认空集，也就是一桌牌全扣着。**
+ *
+ * 【为什么默认不给看】引擎那边 SpectatorView.roles 是全量的，一上来就铺开
+ * 技术上毫无障碍——但那样"谁在撒谎"这件事就没有悬念了，而那恰好是观战唯一好看的地方。
+ * 交给观战者自己翻，当推理题看和当剧场看就都成立，还能在同一局里随时切。
+ *
+ * 【它不是信息隔离边界】真正的边界是 liveDecisionsAtom 那一条。这里是剧透闸：
+ * 翻开 3 号的心证，很可能顺带读到"我知道 5 号是坏人"。面板上写明了这一点。
+ */
+export const revealedSeatsAtom = atom<ReadonlySet<PlayerId>>(NO_SEATS);
+
+/** 翻一张牌 / 扣回去。不存在的座位静默忽略，与 withHumanSeat 同口径 */
+export const toggleSeatAtom = atom(null, (get, set, seat: PlayerId) => {
+  const view = get(viewAtom);
+  if (!view || !view.players.some((p) => p.id === seat)) return;
+
+  const next = new Set(get(revealedSeatsAtom));
+  if (!next.delete(seat)) next.add(seat);
+  set(revealedSeatsAtom, next);
+});
+
+/** 全部翻开 / 全部盖上 */
+export const revealAllSeatsAtom = atom(null, (get, set) => {
+  const view = get(viewAtom);
+  if (!view) return;
+  set(revealedSeatsAtom, new Set(view.players.map((p) => p.id)));
+});
+
+export const hideAllSeatsAtom = atom(null, (_get, set) => {
+  set(revealedSeatsAtom, NO_SEATS);
+});
+
+/**
+ * 已翻开座位的身份。非观战局恒为 null。
+ *
+ * **组件只读这个，永远不直接读 view.roles。** 过滤只发生在这一处，
+ * 下游（SeatTable 的染色、MindPanel 的筛选）就不必各自再实现一遍翻牌逻辑，
+ * 也就不会出现"座位还扣着但心证已经露出来了"这种半开的状态。
+ */
+export const revealedRolesAtom = atom<Record<PlayerId, Role> | null>((get) => {
+  const view = get(viewAtom);
+  if (!view || view.selfId !== null) return null;
+
+  const revealed = get(revealedSeatsAtom);
+  const roles: Record<PlayerId, Role> = {};
+  for (const [id, role] of Object.entries(view.roles)) {
+    if (revealed.has(Number(id))) roles[Number(id)] = role;
+  }
+  return roles;
 });
 
 // ---------------------------------------------------------------------------
@@ -337,6 +456,35 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
     signal.addEventListener("abort", done, { once: true });
   });
 }
+
+/**
+ * 暂停时挂住，恢复或中止时放行。
+ *
+ * 【为什么挂在 onDecision 里而不是主循环里】节奏本来就落在那一处
+ * （orchestrator 会 await 这个 hook，有测试钉着），暂停跟着走同一条路，
+ * 引擎与 orchestrator 一行都不用改。粒度是"一手决策"：
+ * MISSION_RESULT 这类纯系统步是瞬时的，在那里设闸点看不出区别。
+ *
+ * 【中止时 resolve 而非 reject】同 sleep：循环的终止由 runGame 自己的
+ * signal.throwIfAborted 负责，这里跟着抛只会多出一条没人接的拒绝。
+ */
+function waitWhileGated(get: GateGetter, set: GateSetter, signal: AbortSignal): Promise<void> {
+  if (!get(pauseStateAtom) || signal.aborted) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const done = () => {
+      signal.removeEventListener("abort", done);
+      set(gateAtom, null);
+      resolve();
+    };
+    set(gateAtom, () => done);
+    signal.addEventListener("abort", done, { once: true });
+  });
+}
+
+/** 只用得上暂停闸这两个 atom，不把整个 store 的宽签名拖进来 */
+type GateGetter = (atom: typeof pauseStateAtom) => boolean;
+type GateSetter = (atom: typeof gateAtom, value: (() => void) | null) => void;
 
 /**
  * 给 client 包一层，把"谁在等模型"写进 thinkingAtom。
@@ -597,6 +745,8 @@ export const runGameAtom = atom(null, async (get, set) => {
         onDecision: async (record) => {
           set(decisionsAtom, (prev) => [...prev, record]);
           await sleep(paceOf(get(paceMsAtom), record.kind, record.latencyMs), signal);
+          // 停顿走完才看闸：先把这一手画出来再停，暂停键按下去的观感才是"停在这里"
+          await waitWhileGated(get, set, signal);
         },
       },
     });
@@ -622,6 +772,10 @@ export const runGameAtom = atom(null, async (get, set) => {
 export const resetGameAtom = atom(null, (get, set) => {
   get(abortAtom)?.abort();
   set(abortAtom, null);
+  // 闸先放掉再清状态：abort 已经会 resolve 挂着的那一手，这里只是把旗子归位
+  set(pauseStateAtom, false);
+  set(gateAtom, null);
+  set(revealedSeatsAtom, NO_SEATS);
   set(gameStateAtom, null);
   set(mySeatAtom, null);
   set(pendingTurnAtom, null);

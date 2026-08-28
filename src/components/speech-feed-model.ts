@@ -9,7 +9,7 @@
  * 刺杀讨论是终局前的公开推测，其余才是普通发言。
  */
 import type { Messages } from "@/i18n/messages";
-import type { Phase, PlayerId, PlayerView, Speech } from "@/lib/game";
+import type { AnyView, Phase, PlayerId, Speech } from "@/lib/game";
 
 export type SpeechKind = "proposal" | "speech" | "opinion";
 
@@ -76,7 +76,7 @@ function kindOf(phase: Phase): SpeechKind {
   return "speech";
 }
 
-export function describeFeed(view: PlayerView, msg: Messages): FeedEntry[] {
+export function describeFeed(view: AnyView, msg: Messages): FeedEntry[] {
   const nameOf = new Map(view.players.map((p) => [p.id, p.name]));
   let lastGroup: string | null = null;
 

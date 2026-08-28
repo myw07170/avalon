@@ -119,6 +119,50 @@ export const zh = {
     seconds: (n: number) => `（${n} 秒）`,
   },
 
+  /**
+   * 观战模式。SpectatorIntro / SpectatorTable / SpectatorBar / IdentityDeck / MindPanel。
+   *
+   * 【牌背文案要说清"可以翻"】默认全扣着是刻意的，但一屏扣着的牌如果看不出能点，
+   * 观战者只会以为界面没做完。
+   */
+  spectator: {
+    introTitle: "这一桌全是 AI",
+    introNote:
+      "身份已经发完，但默认全部扣着。想看谁就翻谁——随时可以，翻了也能盖回去。",
+    start: "开始观战",
+    badge: "观战中",
+    exit: "退出观战",
+
+    deckTitle: "身份牌",
+    faceDown: "未翻开",
+    faceDownHint: "点一下看身份",
+    flipAria: (id: number) => `翻开 ${id} 号的身份`,
+    hideAria: (id: number) => `盖上 ${id} 号的身份`,
+    revealAll: "全部翻开",
+    hideAll: "全部盖上",
+    revealedCount: (n: number, total: number) => `已翻开 ${n} / ${total}`,
+
+    pauseField: "节奏",
+    pause: "暂停",
+    resume: "继续",
+    paused: "已暂停",
+    pace: {
+      slow: "慢",
+      normal: "正常",
+      fast: "快",
+      instant: "瞬间",
+    },
+
+    mindsTitle: "AI 心证",
+    mindsExpand: "展开",
+    mindsCollapse: "收起",
+    /** 【必须明写】翻开 3 号的心证，很可能顺带读到"我知道 5 号是坏人" */
+    mindsSpoilerNote: "这里是模型的内心分析，会剧透——包括它对别人身份的判断。",
+    mindsEmpty: "先翻开一张身份牌，那一座的心证才会出现在这里。",
+    mindsWaiting: "还没有可显示的心证。",
+    mindsAuto: "未调用模型",
+  },
+
   /** mission-track-model.ts */
   track: {
     fail: (failCount: number) => `失败 · ${failCount} 败`,
@@ -374,6 +418,8 @@ export const zh = {
     youAre: (roleLabel: string) => `你是${roleLabel}，`,
     youWon: "你赢了",
     youLost: "你输了",
+    /** 观战局没有"你"，上面那两句整块换成这一句 */
+    spectated: "这一局你只是看着。",
     strikeTitle: "刺杀",
     /** 「3 号（孙娜）指认了 5 号（李明），那一座是」——后面接角色名，再接命中与否 */
     strikeLine: (assassin: string, target: string) => `${assassin} 指认了 ${target}，那一座是`,
@@ -482,14 +528,21 @@ export const zh = {
       "mock 不发网络请求，也不花钱。remote 走 /api/ai，需要先在 .env.local 配好 provider 和 key。",
     /** checkConfig 的 warning。阶段 3 会把 issue.message 也换成结构化的 */
     balanceNote: (message: string) => `${message}。这是平衡性建议，不阻止开局。`,
-    pickSeatFirst: "先选一个座位。全 AI 观战局引擎已经支持，但观战界面要等阶段 6。",
+    /** 不落座时给的一句说明。**不是错误**，所以不拦开局 */
+    spectateHint: "不落座就是全 AI 对局，你只看。身份默认全部扣着，随时可以自己翻。",
+    /** remote + 观战：全程无人干预，是本项目唯一会自己一路烧到终局的路径 */
+    spectateCostNote:
+      "观战局的每一手都要调模型，一局大约 60–116 次，中途没有人类回合可以喘口气。remote 模式下请留意花费。",
+    standUp: "起身观战",
+    sitDown: "坐回桌上",
     busy: "正在生成人设…",
     submit: "入座",
+    spectate: "开始观战",
     seatAriaSelf: (id: number) => `你的座位，${id} 号`,
     seatAria: (id: number) => `${id} 号座位`,
     goodCount: (n: number) => `好人 ${n}`,
     evilCount: (n: number) => `坏人 ${n}`,
-    seatHintIdle: "点击落座",
+    seatHintIdle: "点击任意座位落座，或者直接开始观战",
     seatHintSeated: (id: number) => `点击落座 · 你坐 ${id} 号 · 再点一次起身`,
     missionsNote: "数字是该轮出任务的人数。",
     doubleFailNote: "带 ✳ 的那轮要 2 张失败票才算失败。",

@@ -449,13 +449,16 @@ export interface PublicProposalRecord {
   forced: boolean;
 }
 
-export interface PlayerView {
-  selfId: PlayerId;
-  selfRole: Role;
-  selfTeam: Team;
-  /** 由 getKnownIdentities 计算，不同角色内容不同 */
-  knowledge: Knowledge[];
-
+/**
+ * 两种视角共有的公开面：凡是"这一桌所有人都看得见"的东西都在这里。
+ *
+ * 【为什么把它提出来】观战视角（SpectatorView）和玩家视角（PlayerView）唯一的差别
+ * 是"有没有自己"。公开面写两遍，早晚会有人只给其中一份加字段。
+ * 提成基类之后，加公开字段只有这一个地方能加。
+ *
+ * **字段名与顺序一个都没动**，PlayerView 的结构与拆分前完全一致。
+ */
+export interface PublicView {
   phase: Phase;
   missionIndex: number;
   currentLeaderId: PlayerId;
@@ -497,8 +500,6 @@ export interface PlayerView {
    * 让 AI 知道"还剩 2 人没投"，但不知道别人投了什么。
    */
   progress: { submitted: number; required: number };
-  /** 自己在本阶段是否已提交（投票 / 任务票 / 发言） */
-  selfSubmitted: boolean;
 
   /** 仅 GAME_OVER 阶段有值，公开全部身份用于复盘 */
   reveal: {
@@ -509,6 +510,55 @@ export interface PlayerView {
     winReason: WinReason;
   } | null;
 }
+
+/** 某个座位看到的一切。AI prompt 的唯一合法输入 */
+export interface PlayerView extends PublicView {
+  selfId: PlayerId;
+  selfRole: Role;
+  selfTeam: Team;
+  /** 由 getKnownIdentities 计算，不同角色内容不同 */
+  knowledge: Knowledge[];
+  /** 自己在本阶段是否已提交（投票 / 任务票 / 发言） */
+  selfSubmitted: boolean;
+}
+
+/**
+ * 观战视角：全 AI 对局，没有"自己"，但带着全场身份。
+ *
+ * 【self* 写成字面量 null 而不是省略字段】这样 `view.selfId === null` 就能把
+ * AnyView 收窄到这一支，组件里那些 `player.id === view.selfId` 一行都不用改，
+ * 而且恒为 false——正是观战该有的行为。省略字段做不到这一点，
+ * 只会让每个消费者去写 `"selfId" in view`。
+ *
+ * 【它进不了 AI 层，这是类型层面的防线】AiDecisionRequest.view 是 PlayerView，
+ * 而 selfId: null 不兼容 PlayerId，把观战视角喂进 buildPrompt 是**编译错误**。
+ * 不要为任何理由把那个字段放宽成 AnyView。
+ */
+export interface SpectatorView extends PublicView {
+  selfId: null;
+  selfRole: null;
+  selfTeam: null;
+  /** 观战没有"你知道谁"这回事。恒空 */
+  knowledge: readonly [];
+  /** 观战不提交任何东西。恒 false */
+  selfSubmitted: false;
+
+  /**
+   * 全场身份。**引擎恒给全量**——盖着还是翻开是 UI 的事（store 的 revealedSeatsAtom）。
+   *
+   * 【为什么不在这里按翻牌状态裁剪】那会让引擎持有一份界面状态，而且每翻一次牌
+   * 就要重算一遍投影。引擎只回答"观战能知道什么"，
+   * "观战者此刻想不想知道"是另一层的问题。
+   */
+  roles: Record<PlayerId, Role>;
+}
+
+/**
+ * 界面层的视角类型。
+ *
+ * **只有 UI 用它。** AI 层一律 PlayerView——见 SpectatorView 的说明。
+ */
+export type AnyView = PlayerView | SpectatorView;
 
 // ---------------------------------------------------------------------------
 // 动作

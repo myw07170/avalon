@@ -3,14 +3,20 @@
 /**
  * 按 runStatusAtom 分支的外壳。
  *
- * 四个分支都填齐了。分支本身不会再变——将来加"观战"之类的形态，
- * 加的是 RunStatus 的成员，switch 会当场提示这里漏了一支。
+ * 【观战没有加进 RunStatus，这是刻意的】原来这里写着"将来加观战之类的形态，
+ * 加的是 RunStatus 的成员"。做的时候发现那样不对：runStatus 是**生命周期**
+ * （建了没有、跑了没有、完了没有），而观战是与它**正交的形态**——观战局同样会
+ * 经历 ready / running / finished 三档。加成第五个成员会立刻逼出
+ * "spectating 之后是什么状态"这种答不上来的问题。
+ *
+ * 所以分岔是二维的：先按 runStatus 取生命周期，再在三档里各自按
+ * isSpectatingAtom 二选一。switch 仍然是穷尽的。
  */
 import { useAtomValue, useSetAtom } from "jotai";
 import { LocaleGate } from "@/i18n/LocaleGate";
 import { useMessages } from "@/i18n/useMessages";
 import { LocaleSwitcher } from "@/i18n/LocaleSwitcher";
-import { errorAtom, resetGameAtom, runStatusAtom } from "@/store/game";
+import { errorAtom, isSpectatingAtom, resetGameAtom, runStatusAtom } from "@/store/game";
 import { ActionPanel } from "./ActionPanel";
 import { GameOverPanel } from "./GameOverPanel";
 import { MissionTrack } from "./MissionTrack";
@@ -18,6 +24,8 @@ import { RoleCard } from "./RoleCard";
 import { SeatTable } from "./SeatTable";
 import { SpeechFeed } from "./SpeechFeed";
 import { SetupScreen } from "./SetupScreen";
+import { SpectatorIntro } from "./SpectatorIntro";
+import { SpectatorTable } from "./SpectatorTable";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 
 /**
@@ -38,6 +46,7 @@ export function GameShell() {
 
 function Screen() {
   const status = useAtomValue(runStatusAtom);
+  const spectating = useAtomValue(isSpectatingAtom);
 
   switch (status) {
     // 配置报错也留在设置页：玩家要能看着报错把配置改对
@@ -46,11 +55,13 @@ function Screen() {
       return <SetupScreen />;
 
     case "ready":
-      return <RoleCard />;
+      return spectating ? <SpectatorIntro /> : <RoleCard />;
 
     case "running":
-      return <Table />;
+      return spectating ? <SpectatorTable /> : <Table />;
 
+    // 【终局两种形态共用一块】reveal 是引擎批准的公开面，观战也该看到全部。
+    // 差别只有"你是谁、你赢没赢"那一行，由 describeGameOver 给 null 后面板自己换
     case "finished":
       return <GameOverPanel />;
   }

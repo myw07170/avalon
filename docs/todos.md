@@ -1133,6 +1133,8 @@ pnpm vitest run src/lib/ai/real-game.test.ts
       - `gameStateAtom`（全知，**只在客户端引擎里用**）
       - `myViewAtom = atom(get => toPlayerView(get(gameStateAtom), get(mySeatAtom)))`，两个来源任一为空给 `null`
       - **所有组件只读 `myViewAtom`**，读 `gameStateAtom` 的组件一律视为 bug（`GAME_OVER` 复盘面板除外，它读 `view.reveal`）
+        - 【阶段 6 更名】观战模式做出来之后它改叫 `viewAtom`，类型放宽成 `AnyView`：
+          观战局给的是 `toSpectatorView(state)`，不再是 `null`。上面那条规矩本身没变
       - 组件入口：`humanTurnAtom` / `isMyTurnAtom` / `teamConstraintAtom` / `revealAtom` / `reviewDecisionsAtom` / `runStatusAtom` / `errorAtom`
       - 写入口：`createGameAtom` / `runGameAtom` / `submitActionAtom` / `resetGameAtom`；设置 `aiModeAtom`（mock 开关）/ `paceMsAtom`
       - **开局分两步**：`createGameAtom` 停在 `SETUP`（`runStatus === "ready"`），玩家看完身份再 `runGameAtom` 起跑。
@@ -1544,11 +1546,26 @@ wolfcha 的 `components/analysis/` 有 13 个文件，是它投入第二大的�
 - [ ] `suspicions` 可视化成怀疑度热力图（对应 `IdentityDashboard`）。
       **横轴是轮次不是座位**——一张静态的怀疑矩阵只能看出"谁被怀疑"，
       而这个字段唯一有意思的地方是**怀疑链怎么演变的**
-- [ ] 观战模式：全 AI 对局，人类只看
-      - 引擎侧已经支持（`humanSeat` 可以不给，`orchestrator` 不传 `onHumanAction` 就是全 AI 局），
-        缺的是 UI 入口和"观战时给谁的视角"这个决定
-      - **先定死是上帝视角还是某个座位的视角，再动手。** 两者都合理，混着来会让
-        `describeGameOver(view, ...)` 拿到 null（它已经处理了这种情况，但那是兜底不是设计）
+- [x] 观战模式：全 AI 对局，人类只看
+      - **定下来的答案：引擎给上帝视角，界面默认全部盖着，观战者逐座翻牌。**
+        两条理由各管一层——
+        - 引擎侧不再造一份阉割投影：观战没有对手，**信息隔离保护的是坐在桌上的人**。
+          所以 `toSpectatorView(state)` 恒给全场 `roles`
+        - 界面侧默认扣着：**默认不知道才有得看**。一上来铺开全部身份，"谁在撒谎"
+          就没有悬念了，而那恰好是观战唯一好看的地方。翻牌交给观战者自己，
+          当推理题看和当剧场看就都成立，还能在同一局里随时切
+      - `PlayerView` 拆成了 `PublicView` + 自我面，`SpectatorView` 是另一支；
+        `AnyView` 只给 UI 用。**`SpectatorView.selfId` 是字面量 `null`**，
+        所以组件里那些 `id === view.selfId` 一行没改，而把它喂进 `buildPrompt` 是编译错误
+      - `describeGameOver` 因此**不再对观战返回 null**——观战局照样有 reveal，
+        只是 `youWon` / `yourRoleLabel` 为 null，面板画中立版那一行
+      - 观战是与 `RunStatus` **正交的形态**，不是第五个成员（`GameShell` 原来的注释猜错了）：
+        观战局同样要经历 ready / running / finished
+      - 附带做掉的两件：`SpectatorBar` 的节奏条（暂停 / 四档速度）与 `MindPanel` 的
+        实时心证。后者是新开的一扇心证门，闸在 `liveDecisionsAtom`——
+        **只要有人坐在桌上就恒空**，`leak.test.ts` 与 `reviewDecisionsAtom` 那条同规格钉着
+      - 【留下的坑】观战仍然看不到"谁投的失败票"（`missionHistory` 还是
+        `PublicMissionRecord`）。那件事归下面那条时间轴，不是这里少做了
 - [ ] **对局导出（seed + action 序列 JSON），导入可完整重放**
       - 底气在 [architecture.md §2](./architecture.md)：引擎确定性 ⇒ 一整局就是几百字节
       - **顺带把 wolfcha `/api/ai-log` 那件事一起办了**：现在只有 Node 侧的 `real-game.test.ts`
@@ -1583,10 +1600,13 @@ wolfcha 的 `components/analysis/` 有 13 个文件，是它投入第二大的�
       动画开关、中止本局
       - **中止已经有实现**（`abortAtom`，故意不导出）。这一条要做的是给它一个受控的出口，
         **不是把那个 atom 导出去**
+      - 【观战那边已经兑现了一半】`SpectatorBar` 有节奏四档 + 暂停，出口走的仍然是
+        `resetGameAtom`，`abortAtom` 一个字没导出。落座局要的是同一套东西，
+        **照抄 `SpectatorBar` 即可，别另起一份**
 - [ ] **系统事件流**（对应 `EventLog`）：`state.log` 里有 `GAME_STARTED` / `SPEECH` 等事件，
       **UI 里一条都没展示**。`SpeechFeed` 只画发言，所以"第 3 轮任务失败了"这件事
       玩家只能从 `MissionTrack` 的图形反推。做成可折叠的时间线，与发言流分开
-      - 它读的仍然只能是 `myViewAtom`——`state.log` 在 `GameState` 上，要先想清楚
+      - 它读的仍然只能是 `viewAtom`——`state.log` 在 `GameState` 上，要先想清楚
         哪些事件是公开的、怎么投影进 `PlayerView`。**这一条有引擎改动，不是纯 UI**
 - [ ] **座位头像**：wolfcha 有立绘、`TalkingAvatar` 口型同步、`GameBackground`，
       那是另一个量级的美术投入，我们的深色极简圆桌也不需要。**只借最轻的一层**：

@@ -13,7 +13,7 @@
    |
    |  只在 /api/* 的入口处做鉴权与扣费，不向下传递任何信息
    v
-UI 层     React 组件 + Jotai            只读 myViewAtom
+UI 层     React 组件 + Jotai            只读 viewAtom
    |
    v
 AI 层     prompt 构建 / provider 调用    唯一允许发网络请求的地方

@@ -23,6 +23,8 @@ import {
   withEvilOption,
   withHumanSeat,
   withPlayerCount,
+  withSeat,
+  withSpectator,
   type SetupDraft,
 } from "./setup-model";
 
@@ -46,7 +48,8 @@ export function SetupScreen() {
   const seated = draft.humanSeat !== null;
 
   /**
-   * 入座。remote 模式下先取一桌真人设，再建局。
+   * 开局。落座与观战走同一条路——差别只有 humanSeat 是不是 null，
+   * 而 aiSeatCount 早就把这件事算对了。remote 模式下先取一桌真人设，再建局。
    *
    * 【异步的只有这一步】createGameAtom 本身是同步的（createGame 是纯函数），
    * store 的注释写着"异步的只有人设生成，那一步在调用方"——就是这里。
@@ -54,7 +57,7 @@ export function SetupScreen() {
    * 【人设失败绝不拦着开局】拿不到就用占位继续，把原因带进 personaNotes 显示出来。
    * 人设是锦上添花，不是开局的必要条件（personas.ts 文件头）。
    */
-  async function takeSeat() {
+  async function start() {
     // 【种子在点击时才取】放进 useState 初值会让 SSR 与 hydration 对不上。
     // 不显式传的话 createConfig 的缺省 seed 是 0，每一局发的牌完全一样。
     // 注意要在 await 之前取好：await 之后 draft 可能已经不是这一份了
@@ -114,6 +117,9 @@ export function SetupScreen() {
         good={preview.split.good}
         evil={preview.split.evil}
         onSeat={(id) => setDraft((d) => withHumanSeat(d, id))}
+        onToggleSpectate={() =>
+          setDraft((d) => (d.humanSeat === null ? withSeat(d) : withSpectator(d)))
+        }
       />
 
       <Field label={msg.setup.freeEvilSlots(preview.freeEvilSlots)}>
@@ -209,18 +215,19 @@ export function SetupScreen() {
             {msg.setup.balanceNote(msg.configIssue[issue.code](issue.params))}
           </Notice>
         ))}
-        {!seated && (
-          <Notice tone="warning">
-            {msg.setup.pickSeatFirst}
-          </Notice>
+        {/* 【观战不是错误，所以不用 error 那一档】它是一种正常的对局形态，
+            红字会让人以为自己配错了什么 */}
+        {!seated && <Notice tone="warning">{msg.setup.spectateHint}</Notice>}
+        {!seated && aiMode === "remote" && (
+          <Notice tone="warning">{msg.setup.spectateCostNote}</Notice>
         )}
         {storeError && <Notice tone="error">{storeError}</Notice>}
 
         <button
           type="button"
-          onClick={() => void takeSeat()}
+          onClick={() => void start()}
           // busy 期间也要禁用：连点两次会发两趟人设请求，还会建两次局
-          disabled={!preview.canStart || !seated || busy}
+          disabled={!preview.canStart || busy}
           aria-busy={busy}
           className={cn(
             "mt-1 w-full rounded-lg px-6 py-3.5 font-display text-lg tracking-[var(--track-3)] transition-colors",
@@ -228,7 +235,9 @@ export function SetupScreen() {
             "disabled:cursor-not-allowed disabled:bg-ink-raised disabled:text-muted",
           )}
         >
-          <span className="-mr-[var(--track-3)]">{busy ? msg.setup.busy : msg.setup.submit}</span>
+          <span className="-mr-[var(--track-3)]">
+            {busy ? msg.setup.busy : seated ? msg.setup.submit : msg.setup.spectate}
+          </span>
         </button>
       </div>
     </main>
@@ -245,13 +254,21 @@ interface RoundTableProps {
   good: number;
   evil: number;
   onSeat: (id: number) => void;
+  onToggleSpectate: () => void;
 }
 
 /**
  * 选座器就是圆桌本身。环的画法在 SeatRing 里，与 RoleCard、SeatTable 共用；
  * 这里只负责把"我的座位"翻译成 self tone，再配一句说明。
  */
-function RoundTable({ playerCount, humanSeat, good, evil, onSeat }: RoundTableProps) {
+function RoundTable({
+  playerCount,
+  humanSeat,
+  good,
+  evil,
+  onSeat,
+  onToggleSpectate,
+}: RoundTableProps) {
   const msg = useMessages();
 
   return (
@@ -278,6 +295,18 @@ function RoundTable({ playerCount, humanSeat, good, evil, onSeat }: RoundTablePr
           ? msg.setup.seatHintIdle
           : msg.setup.seatHintSeated(humanSeat)}
       </p>
+
+      {/* 【起身要有个说得出名字的按钮】「再点一次自己的座位」是既有行为，
+          但只有点过的人才知道，而观战是一种对局形态，不该靠试出来 */}
+      <div className="mt-3 flex justify-center">
+        <button
+          type="button"
+          onClick={onToggleSpectate}
+          className="rounded-lg border border-ink-line bg-ink-raised min-h-11 px-5 py-2 text-xs text-muted transition-colors hover:border-muted hover:text-vellum"
+        >
+          {humanSeat === null ? msg.setup.sitDown : msg.setup.standUp}
+        </button>
+      </div>
     </div>
   );
 }
