@@ -17,6 +17,7 @@ import { MissionTrack } from "./MissionTrack";
 import { SeatTable } from "./SeatTable";
 import { SpectatorBar } from "./SpectatorBar";
 import { SpeechFeed } from "./SpeechFeed";
+import { VoteMatrix } from "./VoteMatrix";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 
 export function SpectatorTable() {
@@ -34,6 +35,7 @@ export function SpectatorTable() {
       </p>
 
       <MissionTrack />
+      <VoteMatrix />
       <SeatTable />
       <IdentityDeck />
       <SpeechFeed />

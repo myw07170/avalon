@@ -60,6 +60,35 @@ async function playOut(seed: number, playerCount = 5): Promise<Finished> {
 }
 
 /**
+ * 0 号是人类的一局。
+ *
+ * 【专为配对算法准备】人类的动作**不进** DecisionRecord（orchestrator 的 takeTurn
+ * 走 onHumanAction 那一支时 record 为 null），所以只有这种局能验出"发言与心证
+ * 会不会错位"。全 AI 局里两者一一对应，错位测不出来。
+ */
+async function playOutSeated(seed: number, playerCount = 5): Promise<Finished> {
+  const rng = createRng(seed);
+  const state = createGame({
+    config: createConfig(playerCount, { seed }),
+    humanSeat: 0,
+    personas: makePlaceholderPersonas(playerCount),
+    rng,
+  });
+
+  const decisions: DecisionRecord[] = [];
+  const final = await runGame({
+    state,
+    client: createMockAiClient(rng),
+    rng,
+    // 只会点面板的玩家：永远选第一个合法动作。发言就是模板里的空串
+    onHumanAction: async (turn) => turn.legalActions[0]!,
+    hooks: { onDecision: (record) => void decisions.push(record) },
+  });
+
+  return { seed, final, view: toPlayerView(final, 0), decisions };
+}
+
+/**
  * 四种 winReason 各找一局。
  *
  * ASSASSINATION_HIT 很稀少（随机刺客只有 1/n 的命中率，见 sim/random.test.ts
@@ -217,25 +246,192 @@ describe("每轮任务的失败票来源", () => {
   });
 });
 
-describe("AI 心证回放", () => {
-  it("按轮次分组，条数与决策记录相等", () => {
-    const game = GAMES[0]!;
-    const replay = describeGameOver(game.view, game.decisions)?.replay ?? [];
-    const total = replay.reduce((sum, round) => sum + round.entries.length, 0);
+describe("每次组队提议的逐人票", () => {
+  it("行数与 proposalHistory 一致，列数与座位一致", () => {
+    for (const game of GAMES) {
+      const brief = describeGameOver(game.view, game.decisions)!;
+      expect(brief.voteMatrix.rows, `seed ${game.seed}`).toHaveLength(
+        game.view.proposalHistory.length,
+      );
+      expect(brief.voteMatrix.seats).toHaveLength(game.view.players.length);
+    }
+  });
 
-    expect(total).toBe(game.decisions.length);
-    // 轮次升序
-    expect(replay.map((r) => r.missionIndex)).toEqual(
-      [...replay.map((r) => r.missionIndex)].sort((a, b) => a - b),
+  it("被否决的提议也在表里——它们没有对应的任务，只有这张表记得住", () => {
+    // 【这是它与 missions 的分工】missions 只有打成了的那几轮；
+    // 「第 1 轮连否三次」这种事只在票型表里看得见
+    const rejected = GAMES.find((g) =>
+      g.view.proposalHistory.some((p) => !p.approved),
     );
+    expect(rejected).toBeDefined();
+
+    const brief = describeGameOver(rejected!.view, rejected!.decisions)!;
+    expect(brief.voteMatrix.rows.length).toBeGreaterThan(brief.missions.length);
+    expect(brief.voteMatrix.rows.some((r) => !r.approved)).toBe(true);
+  });
+
+  it("格子里的票与引擎记录逐条对得上", () => {
+    for (const game of GAMES) {
+      const brief = describeGameOver(game.view, game.decisions)!;
+      brief.voteMatrix.rows.forEach((row, rowIndex) => {
+        const record = game.view.proposalHistory[rowIndex]!;
+        row.cells.forEach((cell, index) => {
+          const seat = brief.voteMatrix.seats[index]!;
+          const vote = record.votes[seat.id];
+          expect(cell.vote).toBe(
+            vote === undefined ? null : vote ? "approve" : "reject",
+          );
+        });
+      });
+    }
+  });
+
+  it("观战局照样有票型表——组队票是全程公开的，不需要「你」", () => {
+    const game = GAMES[0]!;
+    const brief = describeGameOver(toSpectatorView(game.final), game.decisions)!;
+    expect(brief.voteMatrix.rows).toHaveLength(game.view.proposalHistory.length);
+    expect(brief.voteMatrix.seats.every((s) => !s.isSelf)).toBe(true);
+  });
+});
+
+describe("对局回放：完整对话 + 每句话背后的心证", () => {
+  /** 一局的 review，摊平成「挂在发言下的心证」与「收在轮次末尾的心证」两摞 */
+  function minds(game: Finished) {
+    const rounds = describeGameOver(game.view, game.decisions)?.review ?? [];
+    const items = rounds.flatMap((r) => r.items);
+    return {
+      rounds,
+      items,
+      attached: items.flatMap((item) =>
+        item.type === "speech" && item.mind ? [item.mind] : [],
+      ),
+      tail: rounds.flatMap((r) => r.tail),
+    };
+  }
+
+  it("完整对话都在：发言条数与 view.speeches 一致", () => {
+    for (const game of GAMES) {
+      const speeches = minds(game).items.filter((i) => i.type === "speech");
+      expect(speeches, `seed ${game.seed}`).toHaveLength(game.view.speeches.length);
+    }
+  });
+
+  it("一条心证都不丢：挂上的 + 末尾的 = 全部决策记录", () => {
+    // 【这是配对算法的主闸】指针一旦走错，多半表现为某条心证被吃掉
+    for (const game of GAMES) {
+      const { attached, tail } = minds(game);
+      expect(attached.length + tail.length, `seed ${game.seed}`).toBe(
+        game.decisions.length,
+      );
+    }
+  });
+
+  it("一条心证都不重：不会既挂在发言下又收在末尾", () => {
+    for (const game of GAMES) {
+      const { attached, tail } = minds(game);
+      const kinds = [...attached, ...tail].map((e) => `${e.playerId}|${e.kindLabel}`);
+      // 同一手不可能同时属于两摞——两摞按"这个动作产不产生发言"互斥地分过
+      expect(tail.every((e) => !attached.includes(e)), `seed ${game.seed}`).toBe(true);
+      expect(kinds.length).toBe(game.decisions.length);
+    }
+  });
+
+  it("配到的是同一个座位的心证，不是隔壁那位的", () => {
+    for (const game of GAMES) {
+      for (const item of minds(game).items) {
+        if (item.type !== "speech" || !item.mind) continue;
+        expect(item.mind.playerId, `seed ${game.seed}`).toBe(item.entry.playerId);
+      }
+    }
+  });
+
+  it("全 AI 局里每句发言都配得上心证", () => {
+    for (const game of GAMES) {
+      for (const item of minds(game).items) {
+        if (item.type !== "speech") continue;
+        expect(item.mind, `seed ${game.seed} seq ${item.entry.seq}`).not.toBeNull();
+      }
+    }
+  });
+
+  it("有人落座时，他那几句没有心证，而别人的一条都没错位", async () => {
+    // 【这条是"只判顺序"会炸的地方】人类的动作不进 DecisionRecord，
+    // 只按顺序往下配，从他开口那一刻起整条会错位一格——
+    // 症状是把 A 的心证安到 B 的发言底下，比缺一格严重得多
+    const seated = await playOutSeated(3);
+    const rounds = describeGameOver(seated.view, seated.decisions)?.review ?? [];
+    const speeches = rounds.flatMap((r) => r.items).filter((i) => i.type === "speech");
+
+    const mine = speeches.filter((i) => i.entry.playerId === 0);
+    expect(mine.length).toBeGreaterThan(0);
+    for (const item of mine) expect(item.mind).toBeNull();
+
+    for (const item of speeches) {
+      if (item.entry.playerId === 0) continue;
+      expect(item.mind, `seq ${item.entry.seq}`).not.toBeNull();
+      expect(item.mind?.playerId).toBe(item.entry.playerId);
+    }
+  });
+
+  it("发言内容撞车时靠座位号兜住，不会把下一位的心证安到你头上", async () => {
+    /*
+     * 【为什么要手工造这个撞车】随手跑一局是撞不上的：只会点面板的玩家交的是
+     * 空串，而 mock 的 AI 每句都有字，光比内容也不会认错。但"两个人说了
+     * 一模一样的话"本来就是合法状态（引擎不校验发言内容），真撞上的后果是
+     * **从这一句起整条错位**——把 A 的心证挂到 B 的发言底下，比缺一格严重得多。
+     *
+     * 所以这里把人类那句改成与下一位（AI）说的一字不差，直接逼出那个分支。
+     */
+    const seated = await playOutSeated(3);
+    const speeches = seated.view.speeches;
+    const index = speeches.findIndex(
+      (s, i) =>
+        s.playerId === 0 && speeches[i + 1] !== undefined && speeches[i + 1]!.playerId !== 0,
+    );
+    expect(index).toBeGreaterThanOrEqual(0);
+    const next = speeches[index + 1]!;
+
+    const view: PlayerView = {
+      ...seated.view,
+      speeches: speeches.map((s, i) =>
+        i === index ? { ...s, content: next.content } : { ...s },
+      ),
+    };
+
+    const rounds = describeGameOver(view, seated.decisions)?.review ?? [];
+    const items = rounds.flatMap((r) => r.items).filter((i) => i.type === "speech");
+
+    // 撞车的那句仍然是人类说的，没有心证
+    expect(items[index]?.mind).toBeNull();
+    // 下一位的心证还在他自己名下，没有被前一句抢走
+    expect(items[index + 1]?.mind?.playerId).toBe(next.playerId);
+    // 后面全都没错位
+    for (const item of items) {
+      if (item.type !== "speech" || !item.mind) continue;
+      expect(item.mind.playerId).toBe(item.entry.playerId);
+    }
+  });
+
+  it("末尾那摞只装不产生发言的三种决策", () => {
+    const speaking = new Set([zh.gameOver.kind.SPEECH, zh.gameOver.kind.TEAM_PROPOSAL]);
+    for (const game of GAMES) {
+      for (const entry of minds(game).tail) {
+        expect(speaking.has(entry.kindLabel), `seed ${game.seed}`).toBe(false);
+      }
+    }
+  });
+
+  it("轮次按 missionIndex 升序", () => {
+    for (const game of GAMES) {
+      const indexes = minds(game).rounds.map((r) => r.missionIndex);
+      expect(indexes).toEqual([...indexes].sort((a, b) => a - b));
+    }
   });
 
   it("未调用模型的那几手标得出来，且不报耗时", () => {
     const game = GAMES[0]!;
-    const entries = (describeGameOver(game.view, game.decisions)?.replay ?? []).flatMap(
-      (r) => r.entries,
-    );
-    const auto = entries.filter((e) => e.flags.includes("未调用模型"));
+    const { attached, tail } = minds(game);
+    const auto = [...attached, ...tail].filter((e) => e.flags.includes("未调用模型"));
 
     expect(auto.length).toBeGreaterThan(0);
     for (const entry of auto) {
@@ -274,7 +470,18 @@ describe("边界", () => {
   it("没有任何 AI 决策时耗时表整块消失，而不是画一张空表", () => {
     const game = GAMES[0]!;
     expect(describeGameOver(game.view, [])?.timing).toBeNull();
-    expect(describeGameOver(game.view, [])?.replay).toEqual([]);
+  });
+
+  it("没有心证时对话照给——那一块是发言 + 心证，不是只有心证", () => {
+    // 【不能整块返回空】把 decisions 抽掉只该让每条发言的 mind 变成 null，
+    // 完整对话本身来自 view.speeches，跟有没有调用过模型没关系
+    const game = GAMES[0]!;
+    const rounds = describeGameOver(game.view, [])?.review ?? [];
+    const speeches = rounds.flatMap((r) => r.items).filter((i) => i.type === "speech");
+
+    expect(speeches).toHaveLength(game.view.speeches.length);
+    expect(speeches.every((i) => i.mind === null)).toBe(true);
+    expect(rounds.every((r) => r.tail.length === 0)).toBe(true);
   });
 });
 

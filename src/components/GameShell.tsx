@@ -21,6 +21,7 @@ import { errorAtom, isSpectatingAtom, resetGameAtom, runStatusAtom } from "@/sto
 import { ActionPanel } from "./ActionPanel";
 import { GameOverPanel } from "./GameOverPanel";
 import { MissionTrack } from "./MissionTrack";
+import { VoteMatrix } from "./VoteMatrix";
 import { RoleCard } from "./RoleCard";
 import { SeatTable } from "./SeatTable";
 import { SpeechFeed } from "./SpeechFeed";
@@ -82,6 +83,7 @@ function Table() {
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center gap-8 px-5 py-10 sm:py-14">
       <MissionTrack />
+      <VoteMatrix />
       <SeatTable />
       <SpeechFeed />
 

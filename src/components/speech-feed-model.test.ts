@@ -17,6 +17,7 @@ import {
   TYPEWRITER_MIN_STEP_MS,
   TYPEWRITER_TARGET_MS,
   describeFeed as describeFeedRaw,
+  describeTimeline as describeTimelineRaw,
   typewriterStepMs,
 } from "./speech-feed-model";
 
@@ -26,6 +27,7 @@ import {
  * 代价就是这里补一行。下面的断言仍然逐字断言中文，那才是真正在验文案。
  */
 const describeFeed = (view: PlayerView) => describeFeedRaw(view, zh);
+const describeTimeline = (view: PlayerView) => describeTimelineRaw(view, zh);
 
 
 // ---------------------------------------------------------------------------
@@ -215,6 +217,113 @@ describe("分组", () => {
     const empty = views.find((v) => v.speeches.length === 0);
     expect(empty).toBeDefined();
     expect(describeFeed(empty!)).toEqual([]);
+  });
+});
+
+
+describe("describeTimeline", () => {
+  it("发言一条不少，顺序与 describeFeed 完全一致", async () => {
+    for (const view of (await game()).views) {
+      const speeches = describeTimeline(view)
+        .filter((item) => item.type === "speech")
+        .map((item) => item.entry);
+      expect(speeches).toEqual(describeFeed(view));
+    }
+  });
+
+  it("投票卡的条数等于已结算的提议数", async () => {
+    for (const view of (await game()).views) {
+      const votes = describeTimeline(view).filter((item) => item.type === "vote");
+      expect(votes).toHaveLength(view.proposalHistory.length);
+    }
+  });
+
+  it("每张投票卡都排在本组最后一条发言之后、下一组第一条发言之前", async () => {
+    const view = (await game()).final;
+    const items = describeTimeline(view);
+
+    items.forEach((item, index) => {
+      if (item.type !== "vote") return;
+
+      // 前一条必须是本组的发言：同一次提议的完整故事收在这张卡上
+      const before = items[index - 1];
+      expect(before?.type).toBe("speech");
+
+      // 后一条要么是新分组的第一条发言，要么是流的末尾
+      const after = items[index + 1];
+      if (after) expect(after.groupLabel).not.toBeNull();
+    });
+  });
+
+  it("投票卡不带分组标签——那条分隔线已经由本组第一条发言画过了", async () => {
+    const view = (await game()).final;
+    for (const item of describeTimeline(view)) {
+      if (item.type === "vote") expect(item.groupLabel).toBeNull();
+    }
+  });
+
+  it("卡上的票与 proposalHistory 逐条对得上，顺序也一致", async () => {
+    const view = (await game()).final;
+    const tallies = describeTimeline(view)
+      .filter((item) => item.type === "vote")
+      .map((item) => item.tally);
+
+    tallies.forEach((tally, index) => {
+      const record = view.proposalHistory[index]!;
+      expect(tally.missionIndex).toBe(record.missionIndex);
+      expect(tally.attempt).toBe(record.attempt);
+      expect(tally.approved).toBe(record.approved);
+    });
+  });
+
+  it("组队投票进行中，流里没有当前这一次的投票卡", async () => {
+    // 【这是本次改动的核心不变量】未结算的票待在 state.pending.votes 里，
+    // 它进不了视角，所以也进不了时间轴
+    const voting = (await game()).views.filter((v) => v.phase === "TEAM_VOTE");
+    expect(voting.length).toBeGreaterThan(0);
+
+    for (const view of voting) {
+      for (const item of describeTimeline(view)) {
+        if (item.type !== "vote") continue;
+        const isCurrent =
+          item.tally.missionIndex === view.missionIndex &&
+          item.tally.attempt === view.rejectCount;
+        expect(isCurrent).toBe(false);
+      }
+    }
+  });
+
+  it("每个 item 的 missionIndex 与它对应的发言 / 提议记录一致", async () => {
+    // 【终局复盘靠它切段】轮次错一格，整轮的对话会跑到隔壁轮次底下
+    const view = (await game()).final;
+    const items = describeTimeline(view);
+
+    let speechIndex = 0;
+    for (const item of items) {
+      if (item.type === "vote") {
+        expect(item.missionIndex).toBe(item.tally.missionIndex);
+      } else {
+        expect(item.missionIndex).toBe(view.speeches[speechIndex]!.missionIndex);
+        speechIndex += 1;
+      }
+    }
+    expect(speechIndex).toBe(view.speeches.length);
+  });
+
+  it("key 在同一份流里唯一——React 拿它当 key", async () => {
+    for (const view of (await game()).views) {
+      const keys = describeTimeline(view).map((item) => item.key);
+      expect(new Set(keys).size).toBe(keys.length);
+    }
+  });
+
+  it("空流不炸", async () => {
+    const { views } = await game();
+    const empty = views.find(
+      (v) => v.speeches.length === 0 && v.proposalHistory.length === 0,
+    );
+    expect(empty).toBeDefined();
+    expect(describeTimeline(empty!)).toEqual([]);
   });
 });
 

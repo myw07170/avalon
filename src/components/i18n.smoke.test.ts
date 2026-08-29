@@ -1,11 +1,11 @@
 /**
- * 九个 view-model 在英文模式下不许产出汉字。
+ * 十个 view-model 在英文模式下不许产出汉字。
  *
  * 【为什么是这一条，而不是逐条写英文期望】逐条断言英文文案是同义反复：
  * `expect(track.detail).toBe(en.track.fail(2))` 只证明了接线，不证明文案，
  * 而漏改的真实症状永远是**中文漏了出来**（某个 `describeX` 里还留着一句模板字符串、
  * 或者某个分支忘了走目录）。所以直接查那个症状：跑几局真实对局，把每个
- * `PlayerView` 与每一手棋都喂给八个 `describeX`，递归遍历返回值里的每一个字符串。
+ * `PlayerView` 与每一手棋都喂给十一个 `describeX`，递归遍历返回值里的每一个字符串。
  *
  * 这样一份测试覆盖到的分支比手写期望多得多——rejectWarning 只在最后一次机会出现、
  * onlySuccessNote 只在好人打任务票时出现、hiddenAllyHint 的两支要有没有奥伯伦——
@@ -40,11 +40,12 @@ import {
 } from "@/lib/game";
 import { describeTurn, type AssassinationForm } from "./action-panel-model";
 import { describeStrike, strikeLabel } from "./assassination-model";
-import { describeGameOver } from "./game-over-model";
+import { describeGameOver, type ReplayEntry } from "./game-over-model";
 import { describeTrack } from "./mission-track-model";
 import { describeRole } from "./role-card-model";
 import { describeTable } from "./seat-table-model";
-import { describeFeed } from "./speech-feed-model";
+import { describeFeed, describeTimeline } from "./speech-feed-model";
+import { describeVoteMatrix, describeVotes } from "./vote-model";
 import { describeCast, describeMinds } from "./spectator-model";
 
 const CJK = /[　-〿一-鿿＀-￯]/;
@@ -189,6 +190,31 @@ describe("英文模式下 view-model 不产出汉字", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("describeVotes / describeVoteMatrix / describeTimeline", async () => {
+    const { views } = await sample();
+    const offenders: string[] = [];
+
+    for (const view of views) {
+      // 投票这一路全是我们自己拼的标签，没有模型生成的自由文本，可以整个查
+      offenders.push(...offendersIn("describeVotes", describeVotes(view, en)));
+      offenders.push(...offendersIn("describeVoteMatrix", describeVoteMatrix(view, en)));
+      // 时间轴里的发言内容是 mock 造的中文，只查分组标签和投票卡
+      offenders.push(
+        ...offendersIn(
+          "describeTimeline",
+          describeTimeline(view, en).map((item) =>
+            item.type === "vote"
+              ? { groupLabel: item.groupLabel, tally: item.tally }
+              : { groupLabel: item.groupLabel },
+          ),
+        ),
+      );
+      if (offenders.length > 0) break;
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
   it("describeTurn（含五种表单）与 describeStrike / strikeLabel", async () => {
     const { turns } = await sample();
     const offenders: string[] = [];
@@ -222,6 +248,14 @@ describe("英文模式下 view-model 不产出汉字", () => {
     const { finals } = await sample();
     const offenders: string[] = [];
 
+    /** 一条心证里，除 reasoning 之外全是我们自己拼的 */
+    const mindLabels = (entry: ReplayEntry) => ({
+      seatLabel: entry.seatLabel,
+      kindLabel: entry.kindLabel,
+      flags: entry.flags,
+      latencyLabel: entry.latencyLabel,
+    });
+
     for (const { view, decisions } of finals) {
       const brief = describeGameOver(view, decisions, en);
       if (!brief) continue;
@@ -229,14 +263,16 @@ describe("英文模式下 view-model 不产出汉字", () => {
       offenders.push(
         ...offendersIn("describeGameOver", {
           ...brief,
-          replay: brief.replay.map((round) => ({
+          // 回放里的 reasoning 与发言正文同理，只查我们自己拼的那几段
+          review: brief.review.map((round) => ({
             label: round.label,
-            entries: round.entries.map((e) => ({
-              seatLabel: e.seatLabel,
-              kindLabel: e.kindLabel,
-              flags: e.flags,
-              latencyLabel: e.latencyLabel,
+            items: round.items.map((item) => ({
+              groupLabel: item.groupLabel,
+              ...(item.type === "speech"
+                ? { name: item.entry.name, mind: item.mind && mindLabels(item.mind) }
+                : { tally: item.tally }),
             })),
+            tail: round.tail.map(mindLabels),
           })),
           strike: brief.strike && {
             ...brief.strike,

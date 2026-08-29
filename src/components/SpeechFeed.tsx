@@ -1,24 +1,26 @@
 "use client";
 
 /**
- * 发言流，最新一条逐字打出来。
+ * 对局中的时间轴：发言逐字打出来，每次组队投票结算后在同组末尾落一张逐人票的卡。
  *
- * 【只给最新一条打字】更早的发言早就完整显示了。所以"上一条还没打完下一条就到了"
- * 这件事不需要额外处理——那一条不再是最后一条，自然就整条显示出来。
+ * 【只给最新一条发言打字】更早的发言早就完整显示了。所以"上一条还没打完下一条就到了"
+ * 这件事不需要额外处理——那一条不再是最新的，自然就整条显示出来。
  *
- * 推导在 speech-feed-model.ts，这里只管画和计时。
+ * 【投票卡追在最后一条发言后面，打字机不受影响】它盯的是最后一条 **speech**，
+ * 不是最后一个 item。卡片出现时 key 没变，那条发言会继续打完。
+ *
+ * 【三个零件在 TimelineItems.tsx】终局复盘画的是同一批东西，只是不打字、
+ * 每条发言底下多挂一段心证。本文件只剩"直播"独有的那两样：打字机与自动滚动。
+ *
+ * 推导在 speech-feed-model.ts 与 vote-model.ts。
  */
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "framer-motion";
 import { useAtomValue } from "jotai";
 import { useMessages } from "@/i18n/useMessages";
-import { cn } from "@/lib/utils";
 import { viewAtom } from "@/store/game";
-import {
-  describeFeed,
-  typewriterStepMs,
-  type FeedEntry,
-} from "./speech-feed-model";
+import { GroupDivider, SpeechBubble, VoteCard } from "./TimelineItems";
+import { describeTimeline, typewriterStepMs } from "./speech-feed-model";
 
 export function SpeechFeed() {
   const view = useAtomValue(viewAtom);
@@ -26,8 +28,10 @@ export function SpeechFeed() {
   const reduced = useReducedMotion() === true;
   const boxRef = useRef<HTMLDivElement>(null);
 
-  const entries = view ? describeFeed(view, msg) : [];
-  const last = entries.at(-1);
+  const items = view ? describeTimeline(view, msg) : [];
+  // 【要的是最后一条发言，不是最后一个 item】投票卡追在它后面之后，
+  // 这个 key 不变，正在打的那一条会继续打完
+  const last = items.findLast((item) => item.type === "speech")?.entry;
 
   // 自己敲的字不用再演一遍打给自己看
   const typed = useTypewriter(
@@ -36,11 +40,12 @@ export function SpeechFeed() {
     reduced || last?.isSelf === true || last?.isSilent === true,
   );
 
-  // 直接改容器的 scrollTop，不用 scrollIntoView——后者会把整页也带着跳
+  // 直接改容器的 scrollTop，不用 scrollIntoView——后者会把整页也带着跳。
+  // items.length 也要盯着：投票卡出现时 last?.seq 不变，只靠它滚不到底
   useEffect(() => {
     const box = boxRef.current;
     if (box) box.scrollTop = box.scrollHeight;
-  }, [last?.seq, typed]);
+  }, [last?.seq, typed, items.length]);
 
   if (!view) return null;
 
@@ -54,81 +59,27 @@ export function SpeechFeed() {
         ref={boxRef}
         className="max-h-[45dvh] overflow-y-auto rounded-lg border border-ink-line bg-ink-raised px-4 py-3"
       >
-        {entries.length === 0 ? (
+        {items.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">{msg.feed.empty}</p>
         ) : (
           <ol className="space-y-4">
-            {entries.map((entry) => (
-              <Bubble
-                key={entry.seq}
-                entry={entry}
-                content={entry.seq === last?.seq ? typed : entry.content}
-              />
+            {items.map((item) => (
+              <li key={item.key}>
+                {item.groupLabel && <GroupDivider label={item.groupLabel} />}
+                {item.type === "speech" ? (
+                  <SpeechBubble
+                    entry={item.entry}
+                    content={item.entry.seq === last?.seq ? typed : item.entry.content}
+                  />
+                ) : (
+                  <VoteCard tally={item.tally} />
+                )}
+              </li>
             ))}
           </ol>
         )}
       </div>
     </section>
-  );
-}
-
-function Bubble({ entry, content }: { entry: FeedEntry; content: string }) {
-  const msg = useMessages();
-  // 普通发言不加标：三种发言里只有选人说明和刺杀推测需要区分出来
-  const tag = entry.kind === "speech" ? undefined : msg.feed.kind[entry.kind];
-
-  return (
-    <li>
-      {entry.groupLabel && (
-        <div className="mb-3 flex items-center gap-3 pt-1 first:pt-0">
-          <span className="h-px flex-1 bg-ink-line" />
-          <span className="font-display text-[10px] tracking-[var(--track-2)] text-muted">
-            {entry.groupLabel}
-          </span>
-          <span className="h-px flex-1 bg-ink-line" />
-        </div>
-      )}
-
-      <div className="flex gap-3">
-        <span
-          aria-hidden
-          className={cn(
-            "tabular mt-0.5 grid size-7 shrink-0 place-content-center rounded-full border text-xs",
-            entry.isSelf
-              ? "border-brass bg-brass/20 text-vellum"
-              : "border-ink-line text-muted",
-          )}
-        >
-          {entry.playerId}
-        </span>
-
-        <div className="min-w-0 flex-1">
-          <p className="flex flex-wrap items-baseline gap-x-2">
-            <span
-              className={cn("text-xs", entry.isSelf ? "text-brass" : "text-muted")}
-            >
-              {msg.feed.speaker(entry.playerId, entry.isSelf ? msg.seat.you : entry.name)}
-            </span>
-            {tag && (
-              <span className="rounded-sm border border-ink-line px-1.5 py-px text-[10px] text-muted">
-                {tag}
-              </span>
-            )}
-          </p>
-          {entry.isSilent ? (
-            // 引擎允许空发言，如实说"他没说话"，而不是留一个空气泡
-            <p className="mt-1 text-sm italic leading-relaxed text-muted">
-              {msg.feed.silent}
-            </p>
-          ) : (
-            // 换行保留：模型偶尔会分段
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-vellum">
-              {content}
-            </p>
-          )}
-        </div>
-      </div>
-    </li>
   );
 }
 

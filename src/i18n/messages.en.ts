@@ -224,6 +224,29 @@ export const en: Messages = {
     speaker: (id, name) => `Seat ${id} · ${name}`,
   },
 
+  vote: {
+    title: "Team vote",
+    approved: "approved",
+    rejected: "rejected",
+    forcedNote: "last attempt — no vote was held",
+    tally: (approve, reject) => `${approve} approve / ${reject} reject`,
+    approveLabel: "Approve",
+    rejectLabel: "Reject",
+    nobody: "nobody",
+    cardAria: (outcome, detail, approve, reject) =>
+      `Team vote ${outcome}, ${detail}. Approved by: ${approve}. Rejected by: ${reject}.`,
+
+    matrixTitle: "Vote record",
+    resultCol: "Result",
+    matrixHint: "A shaded cell means that seat was on the team; ◆ marks the Leader.",
+    matrixEmpty: "No team vote has been settled yet.",
+    rowLabel: (round, attempt) => `${round}-${attempt}`,
+    rowAria: (label, outcome, detail) => `Proposal ${label}, ${outcome}, ${detail}`,
+    cellAria: (seat, vote, onTeam) =>
+      `${seat} ${vote}${onTeam ? ", was on the team" : ""}`,
+    cellNone: "did not vote",
+  },
+
   turn: {
     joinSeatParts: (parts) => parts.join(", "),
     failsNote: (failsRequired) => `This mission needs ${failCards(failsRequired)} to fail.`,
@@ -377,8 +400,12 @@ export const en: Messages = {
     timingSummary: (asked, total, auto) =>
       `${plural(asked, "1 model call", `${asked} model calls`)}, ${total} in total; ` +
       `another ${auto} had a single legal action and skipped the model.`,
-    replayTitle: "AI reasoning replay",
-    replayCount: (n) => `${plural(n, "1 decision", `${n} decisions`)} · open`,
+    reviewTitle: "Game replay",
+    reviewNote:
+      "Under each line is what that player was actually thinking when they said it. Nobody can see any of this while the game is running.",
+    mindLabel: "Reasoning",
+    tailTitle: "Other reasoning this round (votes / mission cards / assassination)",
+    tailCount: (n) => `${plural(n, "1 decision", `${n} decisions`)} · open`,
   },
 
   actionProblem: {

@@ -10,6 +10,7 @@
  */
 import type { Messages } from "@/i18n/messages";
 import type { AnyView, Phase, PlayerId, Speech } from "@/lib/game";
+import { describeVotes, type VoteTally } from "./vote-model";
 
 export type SpeechKind = "proposal" | "speech" | "opinion";
 
@@ -97,6 +98,108 @@ export function describeFeed(view: AnyView, msg: Messages): FeedEntry[] {
       groupLabel: isNewGroup ? group.label : null,
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// 时间轴：发言 + 组队投票结果
+// ---------------------------------------------------------------------------
+
+/**
+ * 【`describeFeed` 的签名与返回值刻意一个字没动】`assassination-model.ts` 靠
+ * `entry.kind === "opinion"` 从里面捞刺杀推测，把返回值改成联合类型会把那条路
+ * 和它二十来条测试一起带塌。所以时间轴是**新增**的一层，不是改造。
+ */
+export type TimelineItem =
+  | {
+      type: "speech";
+      key: string;
+      groupLabel: string | null;
+      /**
+       * 这一条属于第几轮任务。
+       *
+       * 【为什么放在 item 上而不是 FeedEntry 上】终局复盘要按轮次把时间轴切段，
+       * 而 `FeedEntry` 是 `describeFeed` 的返回值，`assassination-model.ts` 还在用它，
+       * 那条路和它的测试不该被这件事牵动。轮次是"时间轴怎么排"的属性，
+       * 不是"一条发言长什么样"的属性。
+       */
+      missionIndex: number;
+      entry: FeedEntry;
+    }
+  | {
+      type: "vote";
+      key: string;
+      groupLabel: string | null;
+      missionIndex: number;
+      tally: VoteTally;
+    };
+
+/**
+ * 发言流 + 每次组队投票的逐人票。
+ *
+ * 【按分组 flush，不按 seq 排序】复盘讨论的 `Speech.attempt` 记的是该轮**最后一次**
+ * 提议的 attempt，与提议记录撞号；按 `(missionIndex, attempt, seq)` 排序会把复盘发言
+ * 排到本该更早的投票卡前面去。分组 key 是这个文件本来就有的概念，顺着它走不引入
+ * 第二套顺序。
+ *
+ * 【投票卡落在同组最后一条发言之后】一次提议的完整故事是"队长解释名单 → 大家回应
+ * → 票出来了"，卡片就该收在这个故事的末尾。它自然也不带 groupLabel——那条分隔线
+ * 已经由本组第一条发言画过了。
+ */
+export function describeTimeline(view: AnyView, msg: Messages): TimelineItem[] {
+  const entries = describeFeed(view, msg);
+  const unflushed = new Map(describeVotes(view, msg).map((tally) => [tally.key, tally]));
+  const items: TimelineItem[] = [];
+  let currentKey: string | null = null;
+  // 兜底用：speeches 与 entries 一一对应，取不到的那一格沿用上一条的轮次，
+  // 而不是给 0——那会把一条发言悄悄挪到第一轮去
+  let currentMissionIndex = 0;
+
+  const flush = (key: string | null): void => {
+    if (key === null) return;
+    const tally = unflushed.get(key);
+    if (!tally) return;
+    unflushed.delete(key);
+    items.push({
+      type: "vote",
+      key: `vote-${tally.key}`,
+      groupLabel: null,
+      missionIndex: tally.missionIndex,
+      tally,
+    });
+  };
+
+  entries.forEach((entry, index) => {
+    // describeFeed 是 view.speeches 的逐条映射，同序且一一对应
+    const speech = view.speeches[index];
+    const key = speech ? groupOf(speech, msg).key : currentKey;
+    if (speech) currentMissionIndex = speech.missionIndex;
+    if (key !== currentKey) {
+      flush(currentKey);
+      currentKey = key;
+    }
+    items.push({
+      type: "speech",
+      key: `speech-${entry.seq}`,
+      groupLabel: entry.groupLabel,
+      missionIndex: currentMissionIndex,
+      entry,
+    });
+  });
+  flush(currentKey);
+
+  // 兜底：一条发言都没有的提议。理论上不存在——每次提议至少带着队长的选人说明——
+  // 但真出现了也不该把那次投票吞掉，所以补在末尾并自己带上分组标签
+  for (const tally of unflushed.values()) {
+    items.push({
+      type: "vote",
+      key: `vote-${tally.key}`,
+      groupLabel: msg.feed.groupProposal(tally.missionIndex + 1, tally.attempt + 1),
+      missionIndex: tally.missionIndex,
+      tally,
+    });
+  }
+
+  return items;
 }
 
 // ---------------------------------------------------------------------------

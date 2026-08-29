@@ -17,11 +17,14 @@ import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
 import { SeatRing } from "./SeatRing";
 import { MissionTrack } from "./MissionTrack";
+import { VoteMatrix } from "./VoteMatrix";
+import { GroupDivider, SpeechBubble, VoteCard } from "./TimelineItems";
 import {
   describeGameOver,
   type GameOverBrief,
-  type ReplayRound,
+  type ReplayEntry,
   type RevealedMission,
+  type ReviewRound,
   type StrikeOutcome,
   type TimingBrief,
 } from "./game-over-model";
@@ -38,7 +41,9 @@ export function GameOverPanel() {
   );
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center gap-8 px-5 py-10 sm:py-14">
+    // 【比对局中那一屏宽】这一屏的主角是长自由文本——完整对话与心证。
+    // 对局中的 GameShell 仍是 max-w-3xl，那边是圆桌和表单，不需要这个宽度
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center gap-8 px-5 py-10 sm:py-14">
       {brief ? <Result brief={brief} /> : <NoReveal />}
 
       <button
@@ -75,15 +80,21 @@ function Result({ brief }: { brief: GameOverBrief }) {
 
       {brief.strike && <Strike strike={brief.strike} />}
 
-      <MissionTrack />
+      {/* 任务条是 5 个格子的图形，不是文本。在 1024px 里拉满会稀得难看 */}
+      <div className="flex w-full max-w-2xl justify-center">
+        <MissionTrack />
+      </div>
 
       <Identities brief={brief} />
 
       <Missions missions={brief.missions} />
 
+      {/* 复盘时票型是主角，所以这里默认展开；对局中那一份默认收起 */}
+      <VoteMatrix matrix={brief.voteMatrix} defaultOpen />
+
       {brief.timing && <Timing timing={brief.timing} />}
 
-      <Replay rounds={brief.replay} />
+      <Review rounds={brief.review} />
     </>
   );
 }
@@ -138,7 +149,7 @@ function Strike({ strike }: { strike: StrikeOutcome }) {
   return (
     <section
       className={cn(
-        "w-full max-w-md rounded-lg border px-5 py-4",
+        "w-full max-w-2xl rounded-lg border px-5 py-4",
         strike.hit ? "border-mordred bg-mordred/10" : "border-loyal bg-loyal/10",
       )}
     >
@@ -162,7 +173,7 @@ function Strike({ strike }: { strike: StrikeOutcome }) {
         {msg.gameOver.period}
       </p>
 
-      {/* break-words：模型自由文本里可能有一长串不带空格的东西，不加会撑破 max-w-md */}
+      {/* break-words：模型自由文本里可能有一长串不带空格的东西，不加会撑破卡片 */}
       {strike.opinions.length > 0 && (
         <ul className="mt-4 space-y-2 border-t border-ink-line pt-3">
           {strike.opinions.map((opinion, i) => (
@@ -228,7 +239,7 @@ function Missions({ missions }: { missions: RevealedMission[] }) {
   const msg = useMessages();
 
   return (
-    <section className="w-full max-w-md">
+    <section className="w-full max-w-2xl">
       <h2 className="font-display text-sm tracking-[var(--track-1)] text-muted">
         {msg.gameOver.failSourceTitle}
       </h2>
@@ -273,7 +284,7 @@ function Timing({ timing }: { timing: TimingBrief }) {
   const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 
   return (
-    <section className="w-full max-w-md">
+    <section className="w-full max-w-2xl">
       <h2 className="font-display text-sm tracking-[var(--track-1)] text-muted">
         {msg.gameOver.timingTitle}
       </h2>
@@ -303,48 +314,111 @@ function Timing({ timing }: { timing: TimingBrief }) {
   );
 }
 
-/** AI 心证。对局中读到就是开天眼，所以它的闸在 store 的 reviewDecisionsAtom 上 */
-function Replay({ rounds }: { rounds: ReplayRound[] }) {
+/**
+ * 完整对话 + 每句话背后的心证。这一屏最长的一块，所以它占满整个宽度。
+ *
+ * 【心证不折叠】它就是这一块存在的理由，藏进 details 等于没做。真正该折叠的是
+ * 每轮末尾那些没有发言可挂靠的决策（投票 / 任务票 / 刺杀）——摊开会把时间轴冲散。
+ *
+ * 【对局中读到心证就是开天眼】那道闸在 store 的 reviewDecisionsAtom 上
+ * （终局之前恒为空数组），不在这里。
+ */
+function Review({ rounds }: { rounds: ReviewRound[] }) {
   const msg = useMessages();
 
   if (rounds.length === 0) return null;
 
   return (
-    <section className="w-full max-w-md">
+    <section className="w-full">
       <h2 className="font-display text-sm tracking-[var(--track-1)] text-muted">
-        {msg.gameOver.replayTitle}
+        {msg.gameOver.reviewTitle}
       </h2>
+      <p className="mt-1 text-xs leading-relaxed text-muted">{msg.gameOver.reviewNote}</p>
 
-      <div className="mt-3 space-y-4">
+      <div className="mt-3 space-y-6">
         {rounds.map((round) => (
-          <details key={round.missionIndex} className="group">
-            <summary className="tabular flex min-h-11 cursor-pointer list-none items-center rounded-lg border border-ink-line bg-ink-raised px-4 py-2 text-sm text-vellum transition-colors hover:border-muted">
+          <div key={round.missionIndex}>
+            <h3 className="tabular font-display text-xs tracking-[var(--track-2)] text-brass">
               {round.label}
-              <span className="pl-2 text-xs text-muted">
-                {msg.gameOver.replayCount(round.entries.length)}
-              </span>
-            </summary>
+            </h3>
 
-            <ul className="mt-2 space-y-2 pl-1">
-              {round.entries.map((entry, i) => (
-                <li key={i} className="border-l border-ink-line pl-3 text-xs leading-relaxed">
-                  <p className="tabular text-muted">
-                    <span className="text-vellum">{entry.seatLabel}</span>
-                    <span className="pl-2">{entry.kindLabel}</span>
-                    {entry.latencyLabel && <span className="pl-2">{entry.latencyLabel}</span>}
-                    {entry.flags.map((flag) => (
-                      <span key={flag} className="pl-2 text-brass">
-                        [{flag}]
-                      </span>
-                    ))}
-                  </p>
-                  <p className="break-words text-muted">{entry.reasoning}</p>
+            <ol className="mt-2 space-y-4 rounded-lg border border-ink-line bg-ink-raised px-4 py-3">
+              {round.items.map((item) => (
+                <li key={item.key}>
+                  {item.groupLabel && <GroupDivider label={item.groupLabel} />}
+                  {item.type === "speech" ? (
+                    <>
+                      <SpeechBubble entry={item.entry} content={item.entry.content} />
+                      {item.mind && <Mind entry={item.mind} />}
+                    </>
+                  ) : (
+                    <VoteCard tally={item.tally} />
+                  )}
                 </li>
               ))}
-            </ul>
-          </details>
+            </ol>
+
+            {round.tail.length > 0 && (
+              <details className="mt-2">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center rounded-lg border border-ink-line bg-ink-raised px-4 py-2 text-xs text-muted transition-colors hover:border-muted">
+                  {msg.gameOver.tailTitle}
+                  <span className="tabular pl-2">
+                    {msg.gameOver.tailCount(round.tail.length)}
+                  </span>
+                </summary>
+
+                <ul className="mt-2 space-y-2 pl-1">
+                  {round.tail.map((entry, i) => (
+                    <li key={i} className="border-l border-ink-line pl-3">
+                      <MindBody entry={entry} />
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
         ))}
       </div>
     </section>
+  );
+}
+
+/**
+ * 一句发言底下的心证。
+ *
+ * 缩进对齐发言正文（气泡头像是 size-7 + gap-3，合计 pl-10），让"这段是他心里想的"
+ * 在版面上从属于上面那句话，而不是另起一条平级的记录。
+ */
+function Mind({ entry }: { entry: ReplayEntry }) {
+  const msg = useMessages();
+
+  return (
+    <div className="mt-1.5 pl-10">
+      <div className="border-l-2 border-brass/40 pl-3">
+        <p className="text-[10px] tracking-[var(--track-1)] text-brass">
+          {msg.gameOver.mindLabel}
+        </p>
+        <MindBody entry={entry} hideSeat />
+      </div>
+    </div>
+  );
+}
+
+/** 心证正文那两行。挂在发言下面时不必再报一遍座位号 */
+function MindBody({ entry, hideSeat = false }: { entry: ReplayEntry; hideSeat?: boolean }) {
+  return (
+    <div className="text-xs leading-relaxed">
+      <p className="tabular text-muted">
+        {!hideSeat && <span className="text-vellum">{entry.seatLabel}</span>}
+        <span className={hideSeat ? "" : "pl-2"}>{entry.kindLabel}</span>
+        {entry.latencyLabel && <span className="pl-2">{entry.latencyLabel}</span>}
+        {entry.flags.map((flag) => (
+          <span key={flag} className="pl-2 text-brass">
+            [{flag}]
+          </span>
+        ))}
+      </p>
+      <p className="whitespace-pre-wrap break-words text-muted">{entry.reasoning}</p>
+    </div>
   );
 }

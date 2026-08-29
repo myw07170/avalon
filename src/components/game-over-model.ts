@@ -22,6 +22,8 @@ import {
 } from "@/lib/game";
 import type { DecisionRecord } from "@/lib/ai/orchestrator";
 import type { SeatTone } from "./role-card-model";
+import { describeTimeline, type FeedEntry } from "./speech-feed-model";
+import { describeVoteMatrix, type VoteMatrix, type VoteTally } from "./vote-model";
 
 // ---------------------------------------------------------------------------
 // 形状
@@ -75,10 +77,33 @@ export interface ReplayEntry {
   latencyLabel: string | null;
 }
 
-export interface ReplayRound {
+/**
+ * 复盘时间轴上的一格。
+ *
+ * 【speech 这一支带着 mind，是这块的全部意义】"他嘴上说 X"和"他心里想的是 Y"
+ * 挨在一起才有得看。分成两块各自列一遍，玩家要拿座位号在两处来回对，
+ * 而那正是他本来就在费劲做的事。
+ */
+export type ReviewItem =
+  | {
+      type: "speech";
+      key: string;
+      groupLabel: string | null;
+      entry: FeedEntry;
+      /** 他说这句话时的内心分析。人类那几句为 null——人类的动作不进 DecisionRecord */
+      mind: ReplayEntry | null;
+    }
+  | { type: "vote"; key: string; groupLabel: string | null; tally: VoteTally };
+
+export interface ReviewRound {
   missionIndex: number;
   label: string;
-  entries: ReplayEntry[];
+  items: ReviewItem[];
+  /**
+   * 这一轮里**不产生发言**的那些心证：投票、任务票、刺杀。
+   * 它们没有可以挂靠的气泡，只能按轮次收在末尾。
+   */
+  tail: ReplayEntry[];
 }
 
 export interface TimingRow {
@@ -114,7 +139,16 @@ export interface GameOverBrief {
   strike: StrikeOutcome | null;
   seats: RevealedSeat[];
   missions: RevealedMission[];
-  replay: ReplayRound[];
+  /**
+   * 每次组队提议的逐人票。
+   *
+   * 【它和 missions 是两个信息级别，别合并】任务票来源（missions[].failedByLabels）
+   * 走 reveal，**只有终局才公开**；组队票是全程公开的，对局中的发言流里早就画过了。
+   * 混成一块渲染，下一个人会以为组队票也要等终局。
+   */
+  voteMatrix: VoteMatrix;
+  /** 完整对话 + 每句话背后的心证，按轮次分段 */
+  review: ReviewRound[];
   /** 一次模型都没调用过（全 auto）时为 null */
   timing: TimingBrief | null;
 }
@@ -225,37 +259,123 @@ function missionsOf(view: AnyView, msg: Messages): RevealedMission[] {
   });
 }
 
-function replayOf(
+function replayEntryOf(
+  view: AnyView,
+  record: DecisionRecord,
+  msg: Messages,
+): ReplayEntry {
+  return {
+    playerId: record.playerId,
+    seatLabel: seatLabel(view, record.playerId, msg),
+    kindLabel: msg.gameOver.kind[record.kind],
+    reasoning: record.result.payload.reasoning,
+    flags: [
+      record.result.fallback ? msg.gameOver.flagSchema : null,
+      record.rescued ? msg.gameOver.flagRescued : null,
+      record.auto ? msg.gameOver.flagAuto : null,
+    ].filter((flag): flag is string => flag !== null),
+    latencyLabel: record.auto ? null : `${(record.latencyMs / 1000).toFixed(1)}s`,
+  };
+}
+
+/**
+ * 这一手提交上去的公开原文；不产生发言的动作返回 null。
+ *
+ * 【读的是 record.action 而不是 result.payload】action 是**实际交给引擎**的那个
+ * （合法性兜底之后的），而引擎正是拿它记的 Speech。rescued 的那几手里 payload
+ * 还留着模型原本想做的，拿它去配对配不上——那恰恰说明两者不是一回事。
+ */
+function spokenTextOf(action: DecisionRecord["action"]): string | null {
+  switch (action.type) {
+    // 队长的选人说明就是他在提议讨论里的那一次发言（phases/teamBuilding.ts）
+    case "PROPOSE_TEAM":
+      return action.statement;
+    case "SPEAK":
+    case "ASSASSIN_OPINION":
+      return action.content;
+    default:
+      return null;
+  }
+}
+
+/**
+ * 完整对话 + 每句话背后的心证，按轮次分段。
+ *
+ * 【配对是精确的，不是启发式】三条事实凑齐了它：
+ * 1. `runGame` 的主循环里 `onDecision` 恒在对应的 `reduce` 之前调用，并发阶段
+ *    也按座位序逐个走——决策流与 `view.speeches` 是同一条时间线。
+ * 2. `record.action` 带着提交上去的原文，而引擎就是拿它记的 Speech。
+ * 3. 人类那几手 `record` 为 null（`takeTurn` 走 onHumanAction 那一支），
+ *    所以人类的发言本来就配不上心证。
+ *
+ * 【座位号和原文两个条件都要判】只判顺序，人类插在中间时整条会**错位一格**，
+ * 症状是把 A 的心证安到 B 的发言底下——比缺一格严重得多。只判原文，
+ * mock 造得出两条一模一样的空发言，会配错。两条一起判，人类那几句自然被跳过，
+ * 指针停在原地。
+ */
+function reviewOf(
   view: AnyView,
   decisions: readonly DecisionRecord[],
   msg: Messages,
-): ReplayRound[] {
-  const rounds = new Map<number, ReplayEntry[]>();
-
+): ReviewRound[] {
+  // 会变成发言的那些，按原顺序排队；其余的按轮次分桶留给 tail
+  const spoken = decisions.filter((r) => spokenTextOf(r.action) !== null);
+  const tails = new Map<number, ReplayEntry[]>();
   for (const record of decisions) {
-    const entry: ReplayEntry = {
-      playerId: record.playerId,
-      seatLabel: seatLabel(view, record.playerId, msg),
-      kindLabel: msg.gameOver.kind[record.kind],
-      reasoning: record.result.payload.reasoning,
-      flags: [
-        record.result.fallback ? msg.gameOver.flagSchema : null,
-        record.rescued ? msg.gameOver.flagRescued : null,
-        record.auto ? msg.gameOver.flagAuto : null,
-      ].filter((flag): flag is string => flag !== null),
-      latencyLabel: record.auto ? null : `${(record.latencyMs / 1000).toFixed(1)}s`,
-    };
-    const bucket = rounds.get(record.missionIndex);
+    if (spokenTextOf(record.action) !== null) continue;
+    const bucket = tails.get(record.missionIndex);
+    const entry = replayEntryOf(view, record, msg);
     if (bucket) bucket.push(entry);
-    else rounds.set(record.missionIndex, [entry]);
+    else tails.set(record.missionIndex, [entry]);
+  }
+
+  const rounds = new Map<number, ReviewItem[]>();
+  let cursor = 0;
+
+  for (const item of describeTimeline(view, msg)) {
+    let reviewItem: ReviewItem;
+
+    if (item.type === "vote") {
+      reviewItem = {
+        type: "vote",
+        key: item.key,
+        groupLabel: item.groupLabel,
+        tally: item.tally,
+      };
+    } else {
+      const head = spoken[cursor];
+      const matched =
+        head !== undefined &&
+        head.playerId === item.entry.playerId &&
+        spokenTextOf(head.action) === item.entry.content;
+      if (matched) cursor += 1;
+
+      reviewItem = {
+        type: "speech",
+        key: item.key,
+        groupLabel: item.groupLabel,
+        entry: item.entry,
+        mind: matched ? replayEntryOf(view, head, msg) : null,
+      };
+    }
+
+    const bucket = rounds.get(item.missionIndex);
+    if (bucket) bucket.push(reviewItem);
+    else rounds.set(item.missionIndex, [reviewItem]);
+  }
+
+  // 只有 tail、没有任何发言的轮次也要出现，否则那几条心证会凭空消失
+  for (const missionIndex of tails.keys()) {
+    if (!rounds.has(missionIndex)) rounds.set(missionIndex, []);
   }
 
   return [...rounds.entries()]
     .sort(([a], [b]) => a - b)
-    .map(([missionIndex, entries]) => ({
+    .map(([missionIndex, items]) => ({
       missionIndex,
       label: msg.common.round(missionIndex + 1),
-      entries,
+      items,
+      tail: tails.get(missionIndex) ?? [],
     }));
 }
 
@@ -319,7 +439,9 @@ export function describeGameOver(
     strike: strikeOf(view, msg),
     seats: seatsOf(view, msg),
     missions: missionsOf(view, msg),
-    replay: replayOf(view, decisions, msg),
+    // 复用同一份推导，不重写——proposalHistory 在 PublicView 上，不必碰 reveal
+    voteMatrix: describeVoteMatrix(view, msg),
+    review: reviewOf(view, decisions, msg),
     timing: timingOf(decisions, msg),
   };
 }

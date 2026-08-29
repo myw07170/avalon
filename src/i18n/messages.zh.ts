@@ -286,6 +286,43 @@ export const zh = {
     speaker: (id: number, name: string) => `${id} 号 · ${name}`,
   },
 
+  /**
+   * vote-model.ts —— 组队投票的逐人票。
+   *
+   * 【与 feed 分开一个命名空间】投票卡确实画在发言流里，但同一批文案还要给
+   * 票型总表和终局复盘用。塞进 feed 会让"改发言流"和"改票型表"永远撞在一起。
+   */
+  vote: {
+    title: "组队投票",
+    approved: "通过",
+    rejected: "否决",
+    /** 变体强制通过那一次没有人投过票，不能渲染成「0 赞成 / 0 反对却通过了」 */
+    forcedNote: "最后一次机会，未投票",
+    tally: (approve: number, reject: number) => `${approve} 赞成 / ${reject} 反对`,
+    approveLabel: "赞成",
+    rejectLabel: "反对",
+    /** 某一侧一个人都没有 */
+    nobody: "无",
+    /** 投票卡读屏的整句 */
+    cardAria: (outcome: string, detail: string, approve: string, reject: string) =>
+      `组队投票${outcome}，${detail}。赞成：${approve}。反对：${reject}。`,
+
+    // 以下是票型总表 VoteMatrix.tsx 的
+    matrixTitle: "票型",
+    /** 结果那一列的表头 */
+    resultCol: "结果",
+    matrixHint: "带底色的格子表示他当时在队伍里，◆ 是那一次的队长。",
+    matrixEmpty: "还没有结算过的组队投票。",
+    /** 「1-2」= 第 1 轮第 2 次提议。表格里要窄，所以不写成整句 */
+    rowLabel: (round: number, attempt: number) => `${round}-${attempt}`,
+    rowAria: (label: string, outcome: string, detail: string) =>
+      `第 ${label} 次提议，${outcome}，${detail}`,
+    cellAria: (seat: string, vote: string, onTeam: boolean) =>
+      `${seat} ${vote}${onTeam ? "，当时在队伍里" : ""}`,
+    /** 那一行没有人投过票 */
+    cellNone: "没有投票",
+  },
+
   /** action-panel-model.ts */
   turn: {
     /** 读屏那一句：把座位号、名字、队长、身份认知按同一个顺序说出来 */
@@ -444,8 +481,19 @@ export const zh = {
       `${count} 次 · 平均 ${avg} · 最慢 ${max}`,
     timingSummary: (asked: number, total: string, auto: number) =>
       `共调用模型 ${asked} 次，合计 ${total}；另有 ${auto} 次只有一个合法动作，没有调用模型。`,
-    replayTitle: "AI 心证回放",
-    replayCount: (n: number) => `${n} 次决策 · 点开`,
+    /**
+     * 复盘时间轴。
+     *
+     * 【原来叫 replayTitle，只讲心证】那一块现在同时装着完整对话，
+     * 名字跟着改，免得下一个人以为这里只有 AI 的内心分析。
+     */
+    reviewTitle: "对局回放",
+    reviewNote: "每句话底下是他说这句话时的内心分析。对局进行中，任何人都看不到这些。",
+    /** 发言底下那一行心证的前缀 */
+    mindLabel: "心证",
+    /** 不产生发言的那些决策，按轮次收在末尾 */
+    tailTitle: "本轮其余心证（投票 / 任务票 / 刺杀）",
+    tailCount: (n: number) => `${n} 次决策 · 点开`,
   },
 
   /**
