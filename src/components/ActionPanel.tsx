@@ -58,7 +58,7 @@ export function ActionPanel() {
     <section
       ref={ref}
       aria-live="polite"
-      className="w-full scroll-mb-6 rounded-xl border border-brass/60 bg-ink-raised p-5 shadow-[0_0_0_1px_rgba(192,138,62,0.08)]"
+      className="w-full scroll-mb-6 rounded-xl border border-brass/60 bg-ink-raised p-5 shadow-[0_0_0_1px_var(--panel-ring)]"
     >
       <p className="font-display text-[10px] tracking-[var(--track-3)] text-brass">
         <span className="-mr-[var(--track-3)]">{msg.turn.heading}</span>
@@ -302,7 +302,7 @@ function TextBox({
         onKeyDown={(event) => {
           if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) onSubmit();
         }}
-        className="w-full resize-y rounded-lg border border-ink-line bg-ink px-3 py-2.5 text-sm leading-relaxed text-vellum placeholder:text-muted/60"
+        className="w-full resize-y rounded-lg border border-ink-line bg-ink px-3 py-2.5 text-sm leading-relaxed text-vellum placeholder:text-muted/80"
       />
       <div className="mt-1.5 flex items-baseline justify-between gap-3">
         <p className="text-xs leading-relaxed text-muted">{note}</p>
@@ -334,8 +334,8 @@ function PrimaryButton({
         "w-full rounded-lg px-6 py-3 font-display text-base tracking-[var(--track-1)] transition-colors",
         "disabled:cursor-not-allowed disabled:border disabled:border-ink-line disabled:bg-transparent disabled:text-muted",
         tone === "brass"
-          ? "bg-brass text-ink hover:bg-brass/85"
-          : "bg-mordred text-vellum hover:bg-mordred/85",
+          ? "bg-brass text-on-brass hover:bg-brass/85"
+          : "bg-mordred text-on-mordred hover:bg-mordred/85",
       )}
     >
       <span className="-mr-[var(--track-1)]">{children}</span>

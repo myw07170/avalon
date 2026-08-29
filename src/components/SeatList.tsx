@@ -61,7 +61,7 @@ export function SeatList({ count, marks, onSelect, seatLabel }: SeatListProps) {
 
             <span aria-hidden className="flex shrink-0 items-center gap-1.5 text-[10px]">
               {mark.isLeader && (
-                <span className="rounded-sm bg-brass px-1 leading-tight text-ink">
+                <span className="rounded-sm bg-brass px-1 leading-tight text-on-brass">
                   {msg.seat.leader}
                 </span>
               )}
@@ -71,7 +71,7 @@ export function SeatList({ count, marks, onSelect, seatLabel }: SeatListProps) {
                 </span>
               )}
               {mark.status === "done" && (
-                <span className="grid size-4 place-content-center rounded-full bg-loyal leading-none text-ink">
+                <span className="grid size-4 place-content-center rounded-full bg-loyal leading-none text-on-loyal">
                   ✓
                 </span>
               )}

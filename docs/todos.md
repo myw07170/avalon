@@ -1144,8 +1144,10 @@ pnpm vitest run src/lib/ai/real-game.test.ts
         第二个带着 promise 的 `resolve`（拿到就能绕过校验），第三个是中止句柄
 - [x] 组件：
       - [x] 视觉基座（第一块 UI 顺带立起来的，后面 7 个组件都站在上面）
-        - `globals.css`：8 个色 token + 3 个字体角色。**只做深色**，`color-scheme: dark` 固定，
-          不做 `prefers-color-scheme` 切换——对局界面就是夜里的一张圆桌，浅色版本没有意义
+        - `globals.css`：11 个色 token（8 个原有 + 3 个 `on-*` 前景）+ `scrim` + 3 个字体角色。
+          **两套主题**：深色是默认，浅色由 `<html data-theme="light">` 覆盖同一批变量，组件一行不改。
+          不读 `prefers-color-scheme`——想要哪套由右上角那颗按钮说了算（与"默认恒为 zh、
+          不做浏览器探测"同一条理由）。零闪烁靠 `layout.tsx` 的 `<head>` 里那段阻塞脚本
         - 强调色天生有两个（`loyal` 冷钢蓝 / `mordred` 干血红），因为游戏本身是二元的；
           `brass` 只承担交互态（选中 / 焦点 / 主按钮）
         - `--font-display` 是 CJK 衬线栈：Geist 一个汉字都没有，不定 CJK 栈就会各挑各的

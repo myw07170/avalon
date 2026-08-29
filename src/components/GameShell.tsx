@@ -16,6 +16,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { LocaleGate } from "@/i18n/LocaleGate";
 import { useMessages } from "@/i18n/useMessages";
 import { LocaleSwitcher } from "@/i18n/LocaleSwitcher";
+import { ThemeSwitcher } from "@/theme/ThemeSwitcher";
 import { errorAtom, isSpectatingAtom, resetGameAtom, runStatusAtom } from "@/store/game";
 import { ActionPanel } from "./ActionPanel";
 import { GameOverPanel } from "./GameOverPanel";
@@ -29,16 +30,21 @@ import { SpectatorTable } from "./SpectatorTable";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 
 /**
- * 【语言这两样挂在这里，而不是 layout.tsx】layout.tsx 与 page.tsx 都是
+ * 【语言与主题这三样挂在这里，而不是 layout.tsx】layout.tsx 与 page.tsx 都是
  * server component（page.tsx 的文件头明写了"保持 server component"），
- * 而这两个组件都要读 localeAtom。挂在这一层还顺带保证它们活过每一个 runStatus 分支——
+ * 而这三个组件都要读客户端状态（前两个读 localeAtom，ThemeSwitcher 读 <html>
+ * 上的 data-theme）。挂在这一层还顺带保证它们活过每一个 runStatus 分支——
  * 挂进 SetupScreen 的话，开局之后按钮就没了。
+ *
+ * 主题的**零闪烁**不靠这一层：那是 layout.tsx 的 <head> 里那段阻塞脚本干的，
+ * 它早于首次绘制。这里这颗按钮只负责切换。
  */
 export function GameShell() {
   return (
     <>
       <LocaleGate />
       <LocaleSwitcher />
+      <ThemeSwitcher />
       <Screen />
     </>
   );

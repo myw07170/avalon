@@ -231,7 +231,7 @@ export function SetupScreen() {
           aria-busy={busy}
           className={cn(
             "mt-1 w-full rounded-lg px-6 py-3.5 font-display text-lg tracking-[var(--track-3)] transition-colors",
-            "bg-brass text-ink hover:bg-brass/85",
+            "bg-brass text-on-brass hover:bg-brass/85",
             "disabled:cursor-not-allowed disabled:bg-ink-raised disabled:text-muted",
           )}
         >

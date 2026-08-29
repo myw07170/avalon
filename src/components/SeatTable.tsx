@@ -93,7 +93,7 @@ function Legend({ seats }: { seats: SeatState[] }) {
       key: "done",
       label: msg.table.done,
       swatch: (
-        <span className="grid size-3.5 place-content-center rounded-full bg-loyal text-[8px] leading-none text-ink">
+        <span className="grid size-3.5 place-content-center rounded-full bg-loyal text-[8px] leading-none text-on-loyal">
           ✓
         </span>
       ),

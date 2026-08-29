@@ -43,7 +43,8 @@
 
 ## 视觉基座
 
-token 定义在 `src/app/globals.css`，只做深色。
+token 定义在 `src/app/globals.css`。**两套主题**：深色是默认，浅色（暖羊皮纸）由
+`<html data-theme="light">` 覆盖同一批变量——组件从头到尾只认 token 名，一行都不用改。
 
 | token | 用途 |
 | --- | --- |
@@ -51,8 +52,22 @@ token 定义在 `src/app/globals.css`，只做深色。
 | `vellum` / `muted` | 主文字 / 次要文字 |
 | `loyal` / `mordred` | 好人 / 坏人。成对出现，任何角色标签都要一眼分得开阵营 |
 | `brass` | 交互态：选中、焦点、主按钮 |
+| `on-brass` / `on-loyal` / `on-mordred` | **实心**强调色上面那行字 |
+| `scrim` | 刺杀面板的幕布。透明度在 token 里，调用点不写 `/85` |
 | `font-display` | CJK 衬线，标题与区块小标题 |
 | `.tabular` | 等宽 + `tabular-nums`，**所有数字**都走它 |
+
+**`bg-brass` 上的字用 `text-on-brass`，不用 `text-ink`。** `ink` 与 `vellum` 会随主题
+翻转极性（ink 深色下近黑、浅色下近白），拿它们当"强调色上的字"必然在某一套主题下失效。
+半透明填充（`bg-mordred/25` 这类）不在此列——那种底色本来就跟着页面走，配 `text-vellum` 正确。
+
+**加颜色 token 要在两个块里各加一份**，`src/theme/theme.test.ts` 读 `globals.css`
+钉住了这条（漏一个的症状是浅色下某处突然是深色，而且只在某个阶段才看得见）。
+同一个测试还钉住 **`@theme` 不许写成 `@theme inline`**——加上 inline 会把字面值内联进
+每一条 utility，于是整套浅色主题静默失效，页面照常渲染只是永远深色。
+
+主题状态**没有 atom**：它不改变任何 React 渲染出来的内容，只改 `<html>` 上一个属性。
+切换按钮在 `src/theme/ThemeSwitcher.tsx`，零闪烁靠 `layout.tsx` 的 `<head>` 里那段阻塞脚本。
 
 `cn()` 在 `src/lib/utils.ts`。
 

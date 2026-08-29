@@ -70,6 +70,14 @@ export const zh = {
     localeShort: "中",
     /** 切换按钮的 aria-label。同样指向切过去之后的语言 */
     switchTo: "切换到中文",
+    /**
+     * 主题切换按钮的 aria-label。
+     *
+     * 【这一条刻意不指向目标主题】写"切换到浅色"就要先知道现在是深色，
+     * 而那是纯客户端状态，SSR 首帧读不到（见 theme/ThemeSwitcher.tsx）。
+     * 方向由按钮上的日月字形说明。
+     */
+    toggleTheme: "切换主题",
   },
 
   /**

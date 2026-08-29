@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { DEFAULT_THEME, THEME_COLOR, THEME_INIT_SCRIPT } from "@/theme/theme";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -38,7 +39,16 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#0e1418",
+  /*
+   * 【只给深色那一份，浅色由 ThemeSwitcher 在 effect 里改这条 meta】viewport 与
+   * metadata 一样是 server component 的静态对象，读不到 localStorage 里的主题
+   * （和 title 的处境完全一样，见上）。数组 + media 那种写法绑的是
+   * prefers-color-scheme，而这里的主题是用户点出来的，不是系统给的。
+   *
+   * 晚一帧变的是浏览器自己那条状态栏，不是页面内容——不值得为它去动
+   * Next 的 metadata 管线。页面本身的零闪烁由 <head> 里那段脚本负责。
+   */
+  themeColor: THEME_COLOR[DEFAULT_THEME],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -50,8 +60,24 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
      */
     <html
       lang="zh-CN"
+      data-theme={DEFAULT_THEME}
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        {/*
+         * 【阻塞脚本，位置就得在这里】它在浏览器解析 HTML 时同步执行，早于首次
+         * 绘制，所以浅色用户刷新时看不到任何一帧深色底。放进 effect 就晚了——
+         * effect 跑在水合之后、绘制之后。语言那边接受了这一帧闪烁（换的是文字），
+         * 整屏底色翻转不行。
+         *
+         * <html> 上的 suppressHydrationWarning 是配套的：这段脚本会在 React
+         * 水合之前改掉 data-theme，不加的话 React 会把它当成不一致而报错。
+         *
+         * 脚本正文在 @/theme/theme，由 STORAGE_KEY 拼出来——不在这里手写字符串。
+         */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       {/* overflow-x-hidden 是最后一道保险：任何一个组件算错宽度都不该让整页能横着拖 */}
       <body className="flex min-h-full flex-col overflow-x-hidden bg-ink font-sans text-vellum">
         {children}

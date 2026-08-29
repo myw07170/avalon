@@ -85,7 +85,7 @@ export function SpectatorIntro() {
         <button
           type="button"
           onClick={() => startRun()}
-          className="w-full rounded-lg bg-brass px-6 py-3.5 font-display text-lg tracking-[var(--track-3)] text-ink transition-colors hover:bg-brass/85"
+          className="w-full rounded-lg bg-brass px-6 py-3.5 font-display text-lg tracking-[var(--track-3)] text-on-brass transition-colors hover:bg-brass/85"
         >
           <span className="-mr-[var(--track-3)]">{msg.spectator.start}</span>
         </button>

@@ -43,7 +43,7 @@ export function AssassinationModal({ form, view, submit }: AssassinationModalPro
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full rounded-lg bg-mordred px-6 py-3 font-display text-base tracking-[var(--track-1)] text-vellum transition-colors hover:bg-mordred/85"
+        className="w-full rounded-lg bg-mordred px-6 py-3 font-display text-base tracking-[var(--track-1)] text-on-mordred transition-colors hover:bg-mordred/85"
       >
         <span className="-mr-[var(--track-1)]">{msg.strike.openPanel}</span>
       </button>
@@ -53,7 +53,7 @@ export function AssassinationModal({ form, view, submit }: AssassinationModalPro
 
       <Dialog.Root open={open} onOpenChange={setOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="dialog-veil fixed inset-0 z-40 bg-ink/85 backdrop-blur-sm" />
+          <Dialog.Overlay className="dialog-veil fixed inset-0 z-40 bg-scrim backdrop-blur-sm" />
 
           <Dialog.Content
             className={cn(
@@ -119,7 +119,7 @@ export function AssassinationModal({ form, view, submit }: AssassinationModalPro
                 className={cn(
                   "w-full rounded-lg px-6 py-3.5 font-display text-lg tracking-[var(--track-1)] transition-colors",
                   "disabled:cursor-not-allowed disabled:border disabled:border-ink-line disabled:bg-transparent disabled:text-muted",
-                  "bg-mordred text-vellum hover:bg-mordred/85",
+                  "bg-mordred text-on-mordred hover:bg-mordred/85",
                 )}
               >
                 <span className="-mr-[var(--track-1)]">{strikeLabel(target, msg)}</span>

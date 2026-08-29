@@ -47,6 +47,7 @@ export const en: Messages = {
     tagline: "One player. A table of talking AIs.",
     localeShort: "EN",
     switchTo: "Switch to English",
+    toggleTheme: "Toggle theme",
   },
 
   roles: R,

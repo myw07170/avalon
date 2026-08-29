@@ -134,7 +134,7 @@ function Ring({ count, marks, center, onSelect, seatLabel }: SeatRingProps) {
             {mark.isLeader && (
               <span
                 aria-hidden
-                className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-sm bg-brass px-1 text-[9px] leading-tight text-ink"
+                className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-sm bg-brass px-1 text-[9px] leading-tight text-on-brass"
               >
                 {msg.seat.leader}
               </span>
@@ -142,7 +142,7 @@ function Ring({ count, marks, center, onSelect, seatLabel }: SeatRingProps) {
             {mark.status === "done" && (
               <span
                 aria-hidden
-                className="absolute -bottom-0.5 -right-0.5 grid size-4 place-content-center rounded-full border border-ink bg-loyal text-[9px] leading-none text-ink"
+                className="absolute -bottom-0.5 -right-0.5 grid size-4 place-content-center rounded-full border border-ink bg-loyal text-[9px] leading-none text-on-loyal"
               >
                 ✓
               </span>
