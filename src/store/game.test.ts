@@ -10,6 +10,7 @@ import { zh } from "@/i18n/messages.zh";
 import { createConfig } from "@/lib/game/config";
 import { createRng } from "@/lib/game/rng";
 import { createGame, makePlaceholderPersonas } from "@/lib/game/setup";
+import { PREVIEW_AVATAR_SEED } from "@/lib/seat-avatar";
 import { describeTurn } from "@/components/action-panel-model";
 import { describeGameOver } from "@/components/game-over-model";
 import type { GameAction, PlayerId } from "@/lib/game/types";
@@ -35,6 +36,7 @@ import {
   reviewDecisionsAtom,
   runGameAtom,
   runStatusAtom,
+  seatAvatarSeedAtom,
   submitActionAtom,
   teamConstraintAtom,
   toggleSeatAtom,
@@ -49,6 +51,7 @@ import {
 type Store = ReturnType<typeof createStore>;
 
 const SEAT: PlayerId = 0;
+const AVATAR_SEED = 0x51a7;
 
 /** 一个开好局、停在 "ready" 的 store。mock + 零节奏，跑得完且确定 */
 function newStore(playerCount = 5, seed = 42, humanSeat: PlayerId | null = SEAT): Store {
@@ -57,6 +60,7 @@ function newStore(playerCount = 5, seed = 42, humanSeat: PlayerId | null = SEAT)
   store.set(paceMsAtom, 0);
   store.set(createGameAtom, {
     config: createConfig(playerCount, { seed }),
+    avatarSeed: AVATAR_SEED,
     humanSeat,
   });
   return store;
@@ -142,6 +146,20 @@ describe("viewAtom", () => {
 });
 
 describe("建局", () => {
+  it("头像 seed 只随建局与重置变化，阶段推进不会改它", async () => {
+    const empty = createStore();
+    expect(empty.get(seatAvatarSeedAtom)).toBe(PREVIEW_AVATAR_SEED);
+
+    const store = newStore();
+    expect(store.get(seatAvatarSeedAtom)).toBe(AVATAR_SEED);
+
+    await drive(store, store.set(runGameAtom));
+    expect(store.get(seatAvatarSeedAtom)).toBe(AVATAR_SEED);
+
+    store.set(resetGameAtom);
+    expect(store.get(seatAvatarSeedAtom)).toBe(PREVIEW_AVATAR_SEED);
+  });
+
   it("停在 ready，且此时身份与 knowledge 已可读", () => {
     const store = newStore();
 
@@ -171,6 +189,7 @@ describe("建局", () => {
     expect(() =>
       store.set(createGameAtom, {
         config: createConfig(5, { seed: 1 }),
+        avatarSeed: AVATAR_SEED,
         humanSeat: 99,
       }),
     ).not.toThrow();
@@ -429,7 +448,11 @@ describe("中止与重开", () => {
     store.set(resetGameAtom);
     await run;
 
-    store.set(createGameAtom, { config: createConfig(5, { seed: 7 }), humanSeat: SEAT });
+    store.set(createGameAtom, {
+      config: createConfig(5, { seed: 7 }),
+      avatarSeed: AVATAR_SEED + 1,
+      humanSeat: SEAT,
+    });
     expect(store.get(runStatusAtom)).toBe("ready");
 
     await drive(store, store.set(runGameAtom));

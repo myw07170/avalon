@@ -114,6 +114,78 @@ export const zh = {
     restart: "重开",
   },
 
+  /** TutorialModal.tsx。角色逐条说明仍然只来自 roles / describeRole */
+  tutorial: {
+    trigger: "玩法",
+    triggerAria: "打开新手教程",
+    title: "阿瓦隆入门",
+    description: "四步看懂一局如何推进，以及每个身份究竟能看见谁。",
+    stepsLabel: "教程步骤",
+    closeAria: "关闭教程",
+    previous: "上一步",
+    next: "下一步",
+    finish: "看完了",
+    progress: (current: number, total: number) => `${current} / ${total}`,
+    stepAria: (step: number, total: number, title: string) =>
+      `第 ${step} 步，共 ${total} 步：${title}`,
+
+    steps: {
+      goal: {
+        tab: "胜负",
+        eyebrow: "先认清终点",
+        title: "三次任务，只是好人的第一道门",
+        intro: "两边争的不只是任务比分。梅林能否藏到最后，决定好人拿到的三分算不算数。",
+        goodTitle: "好人阵营",
+        goodBody: "先成功完成 3 次任务，再让梅林躲过刺客的最终指认。两件都做到才算赢。",
+        evilTitle: "坏人阵营",
+        evilBody:
+          "破坏 3 次任务、让同一轮的组队否决达到上限，或在终局刺中梅林，任一条都能获胜。",
+        note: "所以好人率先拿到 3 分时，对局不会立刻结束——桌上还剩最后一刀。",
+      },
+
+      proposal: {
+        tab: "组队",
+        eyebrow: "一轮任务的前半程",
+        title: "名单先过全桌这一关",
+        intro: "每轮先决定谁去执行任务。队长能提名单，但不能一个人把名单送上路。",
+        leaderTitle: "队长组队",
+        leaderBody: "队长按本轮人数挑选队员，可以选自己，也可以不选。",
+        discussTitle: "全桌讨论",
+        discussBody: "队长说明为什么这样选，其他人依次表态、质疑或辩护。",
+        voteTitle: "公开表决",
+        voteBody: "所有人同时投同意或反对；同意票必须严格过半，平票也是否决。",
+        note:
+          "无论提议通过与否，队长都会顺位轮转。否决后本轮重新组队；同一轮达到否决上限时坏人直接获胜。",
+      },
+
+      mission: {
+        tab: "任务",
+        eyebrow: "名单通过之后",
+        title: "任务票只公布数量，不公布是谁",
+        intro: "只有上队的人交任务票。结算会公开几张成功、几张失败，但不会公开每张票来自谁。",
+        goodTitle: "好人只能成功",
+        goodBody: "好人的合法选项只有成功；界面不是藏起了另一颗按钮，而是规则根本不允许失败票。",
+        evilTitle: "坏人可以伪装",
+        evilBody: "坏人可以投失败破坏任务，也可以故意投成功隐藏自己。任务成功不等于队伍里没有坏人。",
+        threshold:
+          "通常 1 张失败票就会让任务失败；7 人及以上的第 4 轮需要 2 张。即使只有 1 张而任务成功，那张失败票仍证明车上有坏人。",
+        assassinationTitle: "三次成功之后：刺杀",
+        assassinationBody:
+          "坏人会公开讨论谁最像梅林，最后由刺客指定一人。命中梅林，坏人翻盘；刺错，好人才真正获胜。",
+      },
+
+      roles: {
+        tab: "视野",
+        eyebrow: "角色视野实验台",
+        title: "换一个身份，整张桌子就变了",
+        intro:
+          "选择任意角色，下面直接展示他开局时拿到的真实受限视角。角色能力与逐条说明和正式对局完全共用。",
+        pickerLabel: "选择要查看的角色",
+        sampleNote: "这是独立的十人示例桌，不会读取或改变正在进行的对局。",
+      },
+    },
+  },
+
   /** ThinkingIndicator.tsx。等模型时全屏唯一会动的东西 */
   thinking: {
     kind: {

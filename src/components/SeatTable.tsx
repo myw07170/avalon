@@ -17,12 +17,13 @@ import { useAtomValue } from "jotai";
 import type { Messages } from "@/i18n/messages";
 import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
-import { revealedRolesAtom, viewAtom } from "@/store/game";
+import { revealedRolesAtom, seatAvatarSeedAtom, viewAtom } from "@/store/game";
 import { SeatRing } from "./SeatRing";
 import { describeTable, type SeatState } from "./seat-table-model";
 
 export function SeatTable() {
   const view = useAtomValue(viewAtom);
+  const avatarSeed = useAtomValue(seatAvatarSeedAtom);
   // 落座局恒为 null；观战局只含**已翻开**的座位，过滤在 store 那一层做过了
   const roles = useAtomValue(revealedRolesAtom);
   const msg = useMessages();
@@ -34,6 +35,7 @@ export function SeatTable() {
     <section className="w-full">
       <SeatRing
         count={view.players.length}
+        avatarSeed={avatarSeed}
         marks={table.seats}
         seatLabel={(_id, mark) => seatDescription(table.seats, mark.id, msg)}
         center={

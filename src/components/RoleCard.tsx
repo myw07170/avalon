@@ -13,16 +13,22 @@
 import { useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useAtomValue, useSetAtom } from "jotai";
-import type { PlayerView } from "@/lib/game";
 import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
-import { viewAtom, personaNotesAtom, resetGameAtom, runGameAtom } from "@/store/game";
+import {
+  viewAtom,
+  personaNotesAtom,
+  resetGameAtom,
+  runGameAtom,
+  seatAvatarSeedAtom,
+} from "@/store/game";
 import { FlipCard, TableMotif } from "./FlipCard";
-import { SeatRing } from "./SeatRing";
-import { describeRole, type RoleBrief, type SeatTone } from "./role-card-model";
+import { RoleKnowledge } from "./RoleKnowledge";
+import { describeRole, type RoleBrief } from "./role-card-model";
 
 export function RoleCard() {
   const view = useAtomValue(viewAtom);
+  const avatarSeed = useAtomValue(seatAvatarSeedAtom);
   const msg = useMessages();
   const personaNotes = useAtomValue(personaNotesAtom);
   const startRun = useSetAtom(runGameAtom);
@@ -71,7 +77,7 @@ export function RoleCard() {
             transition={{ duration: reduced ? 0 : 0.28 }}
             className="flex w-full flex-col items-center gap-8"
           >
-            <Knowledge view={view} brief={brief} />
+            <RoleKnowledge view={view} brief={brief} avatarSeed={avatarSeed} />
 
             <div className="flex w-full max-w-sm flex-col items-center gap-3">
               <button
@@ -147,71 +153,6 @@ function RoleFlipCard({ flipped, reduced, onToggle, brief }: RoleFlipCardProps) 
     />
   );
 }
-
-// ---------------------------------------------------------------------------
-// 你知道的
-// ---------------------------------------------------------------------------
-
-function Knowledge({ view, brief }: { view: PlayerView; brief: RoleBrief }) {
-  const msg = useMessages();
-  // 只列这一局真的出现过的 tone：梅林和坏人只会有 evil，派西维尔只会有 unsure，
-  // 全列出来会让玩家以为自己漏看了什么
-  const present = new Set(brief.marks.map((m) => m.tone));
-  const legend = LEGEND.filter((item) => present.has(item.tone));
-
-  return (
-    <section className="w-full">
-      <h3 className="mb-4 text-center font-display text-xs tracking-[var(--track-3)] text-muted">
-        {msg.role.knowledgeTitle}
-      </h3>
-
-      {brief.hasKnownSeats && (
-        <>
-          <SeatRing
-            count={view.players.length}
-            marks={brief.marks}
-            seatLabel={(id, mark) =>
-              msg.turn.joinSeatParts([msg.seat.short(id), msg.role.toneLabel[mark.tone]])
-            }
-          />
-          <ul className="mx-auto mt-4 flex flex-wrap justify-center gap-x-5 gap-y-2">
-            {legend.map((item) => (
-              <li key={item.tone} className="flex items-center gap-2 text-xs text-muted">
-                <span className={cn("size-3 rounded-full border", item.swatch)} />
-                {msg.role.toneLabel[item.tone]}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-
-      <div className="mx-auto mt-6 max-w-md space-y-2 text-center">
-        {brief.lines.map((line) => (
-          <p key={line} className="text-sm leading-relaxed text-vellum">
-            {line}
-          </p>
-        ))}
-        {brief.hiddenEvilHint && (
-          <p className="pt-1 text-xs leading-relaxed text-muted">{brief.hiddenEvilHint}</p>
-        )}
-      </div>
-    </section>
-  );
-}
-
-/**
- * 图例只管"哪一档配哪个色"，文字走 msg.role.toneLabel。
- *
- * 【原来这里另有一套短文案】"你知道是坏人" vs 座位上的"你知道他是坏人"——
- * 同一件事的两份措辞，差一个字，谁也不会记得同步。合成一份。
- */
-const LEGEND: ReadonlyArray<{ tone: SeatTone; swatch: string }> = [
-  { tone: "self", swatch: "border-brass bg-brass/20" },
-  { tone: "evil", swatch: "border-mordred bg-mordred/25" },
-  // 【这一条的两个座位共用同一个样式】派西维尔看到的那一对是引擎刻意抹平过的，
-  // 图例上也不能暗示其中一个更像梅林
-  { tone: "unsure", swatch: "border-brass border-dashed" },
-];
 
 // ---------------------------------------------------------------------------
 // 小件

@@ -11,11 +11,12 @@
  * Server Component 误 import 这里的 atom 会在构建期就炸，而不是在运行时
  * 悄悄把全知状态渲染进 HTML。
  *
- * 本文件私有三样东西，各自堵着一类 bug，**不要导出**：
+ * 本文件的私有 atom 各自堵着一类 bug，**不要导出可写入口**：
  * - `decisionsAtom`   AI 心证，对局中读到就是泄漏（见 reviewDecisionsAtom）
  * - `pendingTurnAtom` 带着 promise 的 resolve，组件拿到就能绕过校验直接放行
  * - `abortAtom`       中止句柄，组件不该有能力单方面掐断循环
  * - `gateAtom`        暂停闸的 resume，拿到就能绕过 pausedAtom 单方面推进循环
+ * - `seatAvatarSeedStateAtom` 头像 seed，只给组件一个只读派生 atom
  */
 import { atom } from "jotai";
 import {
@@ -50,6 +51,7 @@ import {
   type HumanTurn,
 } from "@/lib/ai/orchestrator";
 import { createRemoteAiClient } from "@/lib/ai/remote";
+import { PREVIEW_AVATAR_SEED } from "@/lib/seat-avatar";
 
 // ---------------------------------------------------------------------------
 // 全知状态与视角
@@ -60,6 +62,13 @@ export const gameStateAtom = atom<GameState | null>(null);
 
 /** 人类玩家的座位号，null 表示全 AI 观战局 */
 export const mySeatAtom = atom<PlayerId | null>(null);
+
+/**
+ * 纯 UI 的头像 seed。写入口保持私有，组件只能读；它与决定发牌的 config.seed
+ * 没有任何关系，因此不会成为绕过 PlayerView 重建身份的侧门。
+ */
+const seatAvatarSeedStateAtom = atom(PREVIEW_AVATAR_SEED);
+export const seatAvatarSeedAtom = atom((get) => get(seatAvatarSeedStateAtom));
 
 /**
  * 组件的唯一数据源。
@@ -638,6 +647,8 @@ export const submitActionAtom = atom(null, (get, set, action: GameAction) => {
 
 export interface CreateGameInput {
   config: GameConfig;
+  /** 独立 UI seed，同一局内所有 SeatRing 共用 */
+  avatarSeed: number;
   /** null 表示全 AI 观战局 */
   humanSeat: PlayerId | null;
   /** 缺省时用占位人设。真人设走 /api/personas，由 SetupScreen 取好了传进来 */
@@ -654,7 +665,7 @@ export interface CreateGameInput {
 export const createGameAtom = atom(null, (_get, set, input: CreateGameInput) => {
   set(resetGameAtom);
 
-  const { config, humanSeat } = input;
+  const { config, avatarSeed, humanSeat } = input;
   const rng = createRng(config.seed);
   const aiSeatCount =
     humanSeat === null ? config.playerCount : config.playerCount - 1;
@@ -664,6 +675,7 @@ export const createGameAtom = atom(null, (_get, set, input: CreateGameInput) => 
     const state = createGame({ config, humanSeat, personas, rng });
     set(gameStateAtom, state);
     set(mySeatAtom, humanSeat);
+    set(seatAvatarSeedStateAtom, avatarSeed);
     set(personaNotesAtom, input.personaNotes ?? []);
     set(rngAtom, () => rng);
     set(runStatusAtom, "ready");
@@ -778,6 +790,7 @@ export const resetGameAtom = atom(null, (get, set) => {
   set(revealedSeatsAtom, NO_SEATS);
   set(gameStateAtom, null);
   set(mySeatAtom, null);
+  set(seatAvatarSeedStateAtom, PREVIEW_AVATAR_SEED);
   set(pendingTurnAtom, null);
   set(decisionsAtom, []);
   set(thinkingAtom, null);

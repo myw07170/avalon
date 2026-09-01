@@ -12,7 +12,12 @@
  */
 import { useAtomValue, useSetAtom } from "jotai";
 import { useMemo } from "react";
-import { viewAtom, resetGameAtom, reviewDecisionsAtom } from "@/store/game";
+import {
+  viewAtom,
+  resetGameAtom,
+  reviewDecisionsAtom,
+  seatAvatarSeedAtom,
+} from "@/store/game";
 import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
 import { SeatRing } from "./SeatRing";
@@ -31,6 +36,7 @@ import {
 
 export function GameOverPanel() {
   const view = useAtomValue(viewAtom);
+  const avatarSeed = useAtomValue(seatAvatarSeedAtom);
   const decisions = useAtomValue(reviewDecisionsAtom);
   const reset = useSetAtom(resetGameAtom);
   const msg = useMessages();
@@ -44,7 +50,7 @@ export function GameOverPanel() {
     // 【比对局中那一屏宽】这一屏的主角是长自由文本——完整对话与心证。
     // 对局中的 GameShell 仍是 max-w-3xl，那边是圆桌和表单，不需要这个宽度
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center gap-8 px-5 py-10 sm:py-14">
-      {brief ? <Result brief={brief} /> : <NoReveal />}
+      {brief ? <Result brief={brief} avatarSeed={avatarSeed} /> : <NoReveal />}
 
       <button
         type="button"
@@ -73,7 +79,7 @@ function NoReveal() {
   );
 }
 
-function Result({ brief }: { brief: GameOverBrief }) {
+function Result({ brief, avatarSeed }: { brief: GameOverBrief; avatarSeed: number }) {
   return (
     <>
       <Banner brief={brief} />
@@ -85,7 +91,7 @@ function Result({ brief }: { brief: GameOverBrief }) {
         <MissionTrack />
       </div>
 
-      <Identities brief={brief} />
+      <Identities brief={brief} avatarSeed={avatarSeed} />
 
       <Missions missions={brief.missions} />
 
@@ -188,7 +194,7 @@ function Strike({ strike }: { strike: StrikeOutcome }) {
   );
 }
 
-function Identities({ brief }: { brief: GameOverBrief }) {
+function Identities({ brief, avatarSeed }: { brief: GameOverBrief; avatarSeed: number }) {
   const msg = useMessages();
 
   return (
@@ -199,6 +205,7 @@ function Identities({ brief }: { brief: GameOverBrief }) {
 
       <SeatRing
         count={brief.seats.length}
+        avatarSeed={avatarSeed}
         marks={brief.seats.map((seat) => ({ id: seat.id, tone: seat.tone }))}
         seatLabel={(id) => {
           const seat = brief.seats.find((s) => s.id === id);

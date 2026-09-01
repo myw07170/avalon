@@ -1590,13 +1590,17 @@ wolfcha 的 `components/analysis/` 有 13 个文件，是它投入第二大的�
 
 ### 6.3 体验
 
-- [ ] **新手教程**（对应 `TutorialModal` / `TutorialOverlay` / `how-to-play`）
+- [x] **新手教程**（对应 `TutorialModal` / `TutorialOverlay` / `how-to-play`）
       - 阿瓦隆比狼人杀更需要它：狼人杀的角色能力是"我晚上能做什么"，一句话说得清；
         阿瓦隆的是**谁能看见谁**——派西维尔看到两个人但分不清、莫德雷德对梅林隐身、
         奥伯伦双向盲区。这些光看角色列表学不会
       - **内容不要重写**：`role-card-model.ts` 的 `describeRole(view)` 已经把每个角色
         "你知道什么"讲清楚了，`SeatRing` 已经能把可见关系画出来。教程是这两样东西的
         无对局版本，不是第三份文案
+      - 实现为全程可打开的四步 `TutorialModal`，不自动弹出、不新增路由；流程说明走
+        `messages`，八个角色的能力与已知信息仍只走 `roles` / `describeRole`
+      - `RoleKnowledge` 由正式身份页与教程共用；`tutorial-model.ts` 用两桌固定种子的真实
+        `createGame` → `toPlayerView` 补齐八种角色视角，不读取或改动正在进行的对局
 - [ ] **对局内设置面板**（对应 `SettingsModal`）：`paceMsAtom` / `aiModeAtom` 现在只能在
       `SetupScreen` 设，跑起来就改不了。至少要有：节奏（含"快进"，即 `paceMs = 0`）、
       动画开关、中止本局
@@ -1610,9 +1614,14 @@ wolfcha 的 `components/analysis/` 有 13 个文件，是它投入第二大的�
       玩家只能从 `MissionTrack` 的图形反推。做成可折叠的时间线，与发言流分开
       - 它读的仍然只能是 `viewAtom`——`state.log` 在 `GameState` 上，要先想清楚
         哪些事件是公开的、怎么投影进 `PlayerView`。**这一条有引擎改动，不是纯 UI**
-- [ ] **座位头像**：wolfcha 有立绘、`TalkingAvatar` 口型同步、`GameBackground`，
+- [x] **座位头像**：wolfcha 有立绘、`TalkingAvatar` 口型同步、`GameBackground`，
       那是另一个量级的美术投入，我们的深色极简圆桌也不需要。**只借最轻的一层**：
       从 seed 派生的 identicon，让十个座位一眼分得开，不引入任何美术资源
+      - 5×5 左右对称的内联 SVG，座位号编码进图案，0–9 在任意 seed 下不撞图；颜色继承
+        `tone`，座位号与原有 `aria-label` 继续负责精确识别
+      - 发牌用的 `GameConfig.seed` 绝不出引擎；点击开局另取 UI seed，由只读 atom 贯穿
+        身份页、对局、结算。选座页与独立教程使用固定预览 seed
+      - `SeatRing` 与窄屏 `SeatList` 共用，不新增图片资源、颜色 token、依赖或动效
 - [ ] 音效与转场
 - [ ] **TTS 朗读发言**（可选）：属**表现层**，[architecture.md §4](./architecture.md)
       已经把 wolfcha 的 `MINIMAX_TTS_MODEL` 归过类。要新增一个 provider、一条 `/api/tts`

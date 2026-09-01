@@ -4,7 +4,8 @@
  *
  * **窄屏（< 640px）自动降级成 SeatList 的竖排列表**，见下面 SeatRing 的注释。
  *
- * 坐标来自 seat-ring.ts（纯函数，单独测）。这里只管画。
+ * 坐标来自 seat-ring.ts，头像来自 lib/seat-avatar.ts（都是纯函数，单独测）。这里只管画。
+ * identicon 是座位身份，不承载局势：同一局不变，颜色仍完全由 tone 决定。
  *
  * 【四层信息各占一条视觉通道】一个座位可能同时是队长、在队伍里、还没投票、
  * 而且你知道他是坏人。压进一个颜色会互相盖掉，所以分开：
@@ -20,6 +21,7 @@ import type { PlayerId } from "@/lib/game";
 import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
 import type { SeatTone } from "./role-card-model";
+import { SeatAvatar } from "./SeatAvatar";
 import type { SeatStatus } from "./seat-table-model";
 import { seatRingPositions } from "./seat-ring";
 import { SeatList } from "./SeatList";
@@ -35,6 +37,8 @@ export interface SeatRingMark {
 
 export interface SeatRingProps {
   count: number;
+  /** 独立的 UI seed；绝不能传决定发牌的 GameConfig.seed */
+  avatarSeed: number;
   /** 缺席的座位按 plain / idle 处理 */
   marks?: SeatRingMark[];
   /** 环心内容。SetupScreen 放阵营分配，对局里放阶段与进度 */
@@ -80,13 +84,19 @@ const DEFAULT_MARK: SeatRingMark = { id: -1, tone: "plain" };
  * 因此一行都不用改，"圆桌只有一份"这条约定继续成立。
  */
 export function SeatRing(props: SeatRingProps) {
-  const { count, marks, center, onSelect, seatLabel } = props;
+  const { count, avatarSeed, marks, center, onSelect, seatLabel } = props;
 
   return (
     <>
       <div className="w-full sm:hidden">
         {center && <div className="mb-3 text-center">{center}</div>}
-        <SeatList count={count} marks={marks} onSelect={onSelect} seatLabel={seatLabel} />
+        <SeatList
+          count={count}
+          avatarSeed={avatarSeed}
+          marks={marks}
+          onSelect={onSelect}
+          seatLabel={seatLabel}
+        />
       </div>
 
       <div className="hidden sm:block">
@@ -96,7 +106,7 @@ export function SeatRing(props: SeatRingProps) {
   );
 }
 
-function Ring({ count, marks, center, onSelect, seatLabel }: SeatRingProps) {
+function Ring({ count, avatarSeed, marks, center, onSelect, seatLabel }: SeatRingProps) {
   const msg = useMessages();
   const markOf = new Map(marks?.map((m) => [m.id, m]));
 
@@ -122,7 +132,7 @@ function Ring({ count, marks, center, onSelect, seatLabel }: SeatRingProps) {
           mark.onTeam && "ring-2 ring-brass ring-offset-2 ring-offset-ink",
         );
         const node = cn(
-          "tabular grid size-11 place-content-center rounded-full border text-sm",
+          "relative flex size-11 flex-col items-center justify-center gap-0.5 rounded-full border",
           "transition-[background-color,border-color,color] duration-300",
           SEAT_TONE_CLASS[mark.tone],
           mark.status === "acting" && "animate-pulse",
@@ -161,7 +171,14 @@ function Ring({ count, marks, center, onSelect, seatLabel }: SeatRingProps) {
             style={style}
             className={wrapper}
           >
-            <span className={node}>{point.id}</span>
+            <span className={node}>
+              <SeatAvatar
+                seed={avatarSeed}
+                id={point.id}
+                className="size-5 shrink-0 fill-current opacity-75"
+              />
+              <span className="tabular text-[10px] leading-none">{point.id}</span>
+            </span>
             {badges}
           </button>
         ) : (
@@ -173,7 +190,12 @@ function Ring({ count, marks, center, onSelect, seatLabel }: SeatRingProps) {
             className={wrapper}
           >
             <span aria-hidden className={node}>
-              {point.id}
+              <SeatAvatar
+                seed={avatarSeed}
+                id={point.id}
+                className="size-5 shrink-0 fill-current opacity-75"
+              />
+              <span className="tabular text-[10px] leading-none">{point.id}</span>
             </span>
             {badges}
           </div>

@@ -13,6 +13,7 @@ import { useLocale, useMessages } from "@/i18n/useMessages";
 import { MAX_PLAYERS, MIN_PLAYERS, type MissionConfig } from "@/lib/game";
 import { cn } from "@/lib/utils";
 import { fetchPersonas } from "@/lib/ai/remote";
+import { createSeatAvatarSeed, PREVIEW_AVATAR_SEED } from "@/lib/seat-avatar";
 import { aiModeAtom, createGameAtom, errorAtom } from "@/store/game";
 import { SeatRing } from "./SeatRing";
 import {
@@ -62,11 +63,13 @@ export function SetupScreen() {
     // 不显式传的话 createConfig 的缺省 seed 是 0，每一局发的牌完全一样。
     // 注意要在 await 之前取好：await 之后 draft 可能已经不是这一份了
     const config = finalizeConfig(draft, Date.now() >>> 0);
+    // 与发牌 seed 完全独立；同样在 await 前锁住，避免人设请求期间换成另一套脸
+    const avatarSeed = createSeatAvatarSeed();
     const humanSeat = draft.humanSeat;
 
     // mock 模式根本不碰 LLM，发这一趟就是白等
     if (aiMode !== "remote") {
-      createGame({ config, humanSeat });
+      createGame({ config, avatarSeed, humanSeat });
       return;
     }
 
@@ -77,6 +80,7 @@ export function SetupScreen() {
       const { personas, notes } = await fetchPersonas(aiSeatCount, locale);
       createGame({
         config,
+        avatarSeed,
         humanSeat,
         // null 时不传，createGameAtom 自己回退 makePlaceholderPersonas
         ...(personas ? { personas } : {}),
@@ -275,6 +279,7 @@ function RoundTable({
     <div>
       <SeatRing
         count={playerCount}
+        avatarSeed={PREVIEW_AVATAR_SEED}
         marks={humanSeat === null ? [] : [{ id: humanSeat, tone: "self" }]}
         onSelect={onSeat}
         seatLabel={(id, mark) =>

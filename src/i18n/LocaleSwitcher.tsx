@@ -23,7 +23,7 @@ export function LocaleSwitcher() {
       type="button"
       onClick={() => setLocale(next)}
       aria-label={MESSAGES[next].app.switchTo}
-      className="fixed right-3 top-3 z-50 min-h-11 min-w-11 rounded-lg border border-ink-line bg-ink-raised px-3 text-xs text-muted transition-colors hover:border-muted hover:text-vellum"
+      className="min-h-11 min-w-11 rounded-lg border border-ink-line bg-ink-raised px-3 text-xs text-muted transition-colors hover:border-muted hover:text-vellum"
     >
       {MESSAGES[next].app.localeShort}
     </button>

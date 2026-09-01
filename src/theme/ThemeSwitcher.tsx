@@ -78,7 +78,7 @@ export function ThemeSwitcher() {
       type="button"
       onClick={toggle}
       aria-label={msg.app.toggleTheme}
-      className="fixed right-16 top-3 z-50 min-h-11 min-w-11 rounded-lg border border-ink-line bg-ink-raised px-3 text-xs text-muted transition-colors hover:border-muted hover:text-vellum"
+      className="min-h-11 min-w-11 rounded-lg border border-ink-line bg-ink-raised px-3 text-xs text-muted transition-colors hover:border-muted hover:text-vellum"
     >
       {/* U+FE0E 强制文本呈现——不加的话某些平台会把 ☀ 画成彩色 emoji */}
       <span aria-hidden data-theme-glyph="dark">

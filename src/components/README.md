@@ -10,6 +10,7 @@
 | atom | 给的是什么 |
 | --- | --- |
 | `viewAtom` | `AnyView`，绝大多数组件只需要它。落座给 `PlayerView`，观战给 `SpectatorView` |
+| `seatAvatarSeedAtom` | 本局 identicon 的只读 UI seed；与发牌 seed 完全独立 |
 | `humanTurnAtom` / `isMyTurnAtom` | 轮到你时的 `view` + `legalActions` |
 | `teamConstraintAtom` | 组队的 `{ teamSize, candidateIds }` |
 | `revealAtom` | 终局公开面，非 `GAME_OVER` 恒为 `null` |
@@ -27,6 +28,11 @@
 **`gameStateAtom` 是全知视角，组件读它一律算 bug。** 需要的东西如果只在 `GameState` 上
 （比如 `getLegalActions` 和 `getTeamConstraint` 都要 `GameState`），正确做法是让 `store/game.ts`
 从 `PlayerView` 里重推一份派生 atom，而不是把全知状态漏到组件层。
+
+**唯一的离线例外是新手教程夹具。** `tutorial-model.ts` 在局部创建两桌固定种子的示例局，
+并立刻把每个身份投影成 `PlayerView`；`TutorialModal` 只拿这些受限视角，不读 store，
+也不持有正在进行的对局。它存在是为了让教程与 `visibility.ts` 共用同一套可见性规则，
+不能把这条例外扩成真实对局组件读取引擎全知状态的通道。
 
 观战也不例外：它要的全场身份走的是引擎里另一份投影 `toSpectatorView(state)`，
 **不是** `gameStateAtom`。`leak.test.ts` 的三条源码断言因此一个字都没改。
@@ -77,6 +83,11 @@ token 定义在 `src/app/globals.css`。**两套主题**：深色是默认，浅
 `SetupScreen` 的选座器、`RoleCard` 的已知座位、对局中的 `SeatTable`、以及结算的
 全身份公开共用这一份——玩家从头到尾看到的是同一张桌子。给了 `onSelect` 才渲染成按钮，
 不给就是只读展示环。
+
+每座的 identicon 由 `lib/seat-avatar.ts` 根据「独立 UI seed + 座位号」生成 5×5 对称纹章，
+不读 `GameConfig.seed`——后者能重建角色分配，进入组件层就是泄漏。选座与教程使用固定预览
+seed；正式建局在点击时用 `crypto.getRandomValues` 取新 seed，并由只读 atom 贯穿身份页、
+对局和结算。SVG 只继承当前 tone 的 `currentColor`，不新增图片、颜色 token 或信息通道。
 
 **窄屏（< 640px）自动降级成 `SeatList` 的竖排列表。** 圆桌容器是
 `clamp(15rem, 78vw, 24rem)` 而座位节点固定 44px，所以屏幕越窄节点越挤：

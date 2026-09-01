@@ -6,12 +6,12 @@
  * 邻居 16px 左右，队长徽标和「在队伍里」的光环还都往节点外面伸。
  * 这正是 SeatGrid 文件头那句话的另一半——**圆桌是"看"的，窄屏上要能看清才行**。
  *
- * 【吃的是和圆桌完全一样的 SeatRingMark】所以四处调用方
- * （选座 / 身份卡 / 对局中 / 结算）一行都不用改，"圆桌只有一份"这条约定继续成立。
+ * 【吃的是和圆桌完全一样的 SeatRingMark + avatarSeed】所以选座、身份卡、对局中、
+ * 结算不会各画一套，"圆桌只有一份"这条约定继续成立。
  *
  * 【四层信息在这里摊成四列】圆桌上它们靠配色、光环、徽标、角标区分；
  * 列表里有横向空间，直接写成字，反而比圆桌更好读：
- *   座位号 · 身份认知（tone 的文案）· 队长 · 在队伍里 · 已提交
+ *   identicon + 座位号 · 身份认知（tone 的文案）· 队长 · 在队伍里 · 已提交
  *
  * 本文件没有 "use client"：它只被客户端组件渲染，指令由那些文件带。
  */
@@ -19,9 +19,11 @@ import type { PlayerId } from "@/lib/game";
 import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
 import { SEAT_TONE_CLASS, type SeatRingMark } from "./SeatRing";
+import { SeatAvatar } from "./SeatAvatar";
 
 export interface SeatListProps {
   count: number;
+  avatarSeed: number;
   marks?: SeatRingMark[];
   /** 给了才渲染成按钮。不给就是只读列表 */
   onSelect?: (id: PlayerId) => void;
@@ -30,7 +32,7 @@ export interface SeatListProps {
 
 const DEFAULT_MARK: SeatRingMark = { id: -1, tone: "plain" };
 
-export function SeatList({ count, marks, onSelect, seatLabel }: SeatListProps) {
+export function SeatList({ count, avatarSeed, marks, onSelect, seatLabel }: SeatListProps) {
   const msg = useMessages();
   const markOf = new Map(marks?.map((m) => [m.id, m]));
 
@@ -51,6 +53,12 @@ export function SeatList({ count, marks, onSelect, seatLabel }: SeatListProps) {
 
         const inner = (
           <>
+            <SeatAvatar
+              seed={avatarSeed}
+              id={id}
+              className="size-7 shrink-0 fill-current opacity-75"
+            />
+
             <span aria-hidden className="tabular w-6 shrink-0 text-center">
               {id}
             </span>

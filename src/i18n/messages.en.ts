@@ -72,6 +72,87 @@ export const en: Messages = {
     restart: "Restart",
   },
 
+  tutorial: {
+    trigger: "Guide",
+    triggerAria: "Open the beginner guide",
+    title: "Avalon, from the table up",
+    description: "Four steps through the game flow and what each role can actually see.",
+    stepsLabel: "Guide steps",
+    closeAria: "Close the guide",
+    previous: "Previous",
+    next: "Next",
+    finish: "Done",
+    progress: (current, total) => `${current} / ${total}`,
+    stepAria: (step, total, title) => `Step ${step} of ${total}: ${title}`,
+
+    steps: {
+      goal: {
+        tab: "Winning",
+        eyebrow: "Start at the finish",
+        title: "Three missions are only Good's first gate",
+        intro:
+          "The mission score is not the whole game. Whether Merlin stays hidden to the end decides if Good's three points count.",
+        goodTitle: "Good",
+        goodBody:
+          "Complete 3 missions, then keep Merlin out of the Assassin's final pick. Good must do both to win.",
+        evilTitle: "Evil",
+        evilBody:
+          "Sabotage 3 missions, hit the rejection limit in one mission round, or name Merlin at the end. Any one route wins.",
+        note:
+          "So when Good reaches 3 points first, the game does not end — one final strike is still on the table.",
+      },
+
+      proposal: {
+        tab: "Teams",
+        eyebrow: "The first half of a mission round",
+        title: "The whole table must clear the team",
+        intro:
+          "Every round begins by deciding who goes on the mission. The Leader names a team, but cannot send it alone.",
+        leaderTitle: "The Leader picks",
+        leaderBody:
+          "Pick the required number of players. The Leader may include themselves or stay off the team.",
+        discussTitle: "The table talks",
+        discussBody:
+          "The Leader explains the team, then everyone else gets a turn to support it, challenge it, or defend themselves.",
+        voteTitle: "Everyone votes in public",
+        voteBody:
+          "All players approve or reject at the same time. Approval must be a strict majority; a tie rejects.",
+        note:
+          "Leadership advances after every proposal, passed or not. A rejection restarts team building for the same mission; reaching that round's rejection limit gives Evil the game.",
+      },
+
+      mission: {
+        tab: "Mission",
+        eyebrow: "After a team passes",
+        title: "Mission cards reveal a count, never a name",
+        intro:
+          "Only team members submit mission cards. The result shows how many succeeded and failed, but never who played each card.",
+        goodTitle: "Good can only succeed",
+        goodBody:
+          "Success is Good's only legal choice. The interface is not hiding another button; the rules do not allow a fail card.",
+        evilTitle: "Evil can blend in",
+        evilBody:
+          "Evil may fail the mission or play success to stay hidden. A successful mission does not prove the team was all Good.",
+        threshold:
+          "Usually 1 fail card defeats a mission. With 7 or more players, Mission 4 needs 2. A single fail there still proves at least one Evil player was on the team, even if the mission succeeds.",
+        assassinationTitle: "After three successes: assassination",
+        assassinationBody:
+          "Evil discusses who looks like Merlin, then the Assassin names one player. A hit steals the game; a miss finally gives Good the win.",
+      },
+
+      roles: {
+        tab: "Sight",
+        eyebrow: "Role sight lab",
+        title: "Change roles and the whole table changes",
+        intro:
+          "Choose any role below to see the real restricted view they receive at the start. The ability and every knowledge line are shared with the live game.",
+        pickerLabel: "Choose a role to inspect",
+        sampleNote:
+          "This is a separate ten-player sample table. It never reads or changes the game in progress.",
+      },
+    },
+  },
+
   thinking: {
     // 接在座位名后面：「Seat 3 (Ann) is picking a team…」
     kind: {
