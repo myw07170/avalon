@@ -1460,10 +1460,11 @@ pnpm vitest run src/lib/ai/real-game.test.ts
 | `Dockerfile` / `CHANGELOG` / `CONTRIBUTING` / `SECURITY` / `README.en` | 只有一份 1.4KB 的 README | 借 → 6.4 |
 | `/api/vote-batch`（把并发的多次调用批成一次） | 并发阶段是 n 次独立 fetch | 可选优化 → 6.4，收益有限 |
 | `/api/ai-log` | 只有 Node 侧的 `transcripts/` | 借 → 并进 6.2 的对局导出，不单开一条 |
-| `/api/validate-key` `/api/check-config` `/api/demo-config`（自带 key） | 无 | **借 → 7.0**，它能让阶段 7 的大部分不必做 |
-| `guest/migrate` / `credits/*` / `stripe/*` / `auth/watcha` | 已在阶段 7 计划里 | 借做法 → 排在 7.0 之后 |
+| `/api/validate-key` `/api/check-config` `/api/demo-config`（自带 key） | 无 | **不借**；阶段 7 已确定为账号额度制，不走 BYOK |
+| `guest/migrate` / `auth/watcha` | 无 | **不借**；首版只做邮箱密码，不做游客与社交登录 |
+| `credits/*` / `game-sessions` / `stripe/*` | 阶段 7 要做额度与支付 | 借分层与幂等边界；支付保持 provider-neutral，不照抄 Stripe |
 | prompt 放在 `src/i18n/messages/zh.json` | prompt 在 `prompt.ts`，有三份快照 | **不借**，理由见 6.3 的 i18n 那条 |
-| 19 个 SEO `guides/` 落地页 + `sitemap.ts` + `JsonLd` | 无 | **不借进主线**，理由见阶段 7 |
+| 19 个 SEO `guides/` 落地页 + `sitemap.ts` + `JsonLd` | 无 | **不借进阶段 7**；获客另立增长阶段 |
 | `PhaseManager` 命令式阶段机 | 纯函数 reducer | 早就不借（见本文开头） |
 
 **盘点顺手核出来的一件事**，得单独说，因为它是本项目自己的老毛病复发：
@@ -1670,7 +1671,7 @@ wolfcha 的 `components/analysis/` 有 13 个文件，是它投入第二大的�
       - 真跑之前，`prompt-copy.en.ts` 只能算"结构对、约束一条不少"，
         不能算"在英文里复现了中文那边的每一条实验结论"。直译不保证这一点
 
-### 6.4 工程与开源卫生
+### 6.4 工程与仓库卫生
 
 - [ ] **Dev 控制台**（对应 `DevTools/DevConsole`）：对局中直接看引擎状态、跳阶段、手搓动作
       - **必须放在 `components/` 之外**（建议 `src/app/dev/`），且只在
@@ -1682,9 +1683,10 @@ wolfcha 的 `components/analysis/` 有 13 个文件，是它投入第二大的�
 - [ ] ~~**多模型对战**：不同座位配不同 provider，统计各模型胜率。
       现在 `resolveAiClient` 给的是全局单例，要改成按座位取 client。
       **统计跑完即看，不落库**（[architecture.md §5](./architecture.md) 明写了这一条）~~
-- [x] **开源卫生四件套**：`CHANGELOG.md` / `CONTRIBUTING.md` / `SECURITY.md` / `README.en.md`
+- [x] **仓库卫生四件套**：`CHANGELOG.md` / `CONTRIBUTING.md` / `SECURITY.md` / `README.en.md`
       （wolfcha 四份都有）。现在的 `README.md` 只有 1.4KB，讲不清这个项目最值钱的两样东西——
-      **引擎的确定性**和**信息隔离的测试体系**。`docs/` 里三份文档已经写透了，README 缺的是入口
+      **引擎的确定性**和**信息隔离的测试体系**。`docs/` 里三份文档已经写透了，README 缺的是入口。
+      这些文件对私有商业仓库同样有用，不代表项目要公开源代码
 - [x] **`Dockerfile`**：本项目没有数据库、没有后台任务，一个标准的 Next standalone 镜像就够
 - [ ] （可选，收益有限）**批量调用**：wolfcha 的 `/api/vote-batch` 把多个投票请求合成一次。
       我们的并发阶段（投票 / 任务票 / 确认身份）现在是 n 次独立 fetch，10 人局就是 10 趟。
@@ -1693,95 +1695,334 @@ wolfcha 的 `components/analysis/` 有 13 个文件，是它投入第二大的�
 
 ---
 
-## 阶段 7：账号与运营（部署前）
+## 阶段 7：账号、额度、支付与双阶段上线（部署前）
 
-**只在要公开部署时才做，不阻塞前六个阶段。** 前六个阶段做完就是一个完整可玩的单机游戏。
+**最终定位仍然是公开运营的商业产品，但当前部署不是商业生产。** 前六个阶段做完，依然是一款
+完整可玩的本地单机游戏；阶段 7 先支持个人免费资源上的受邀小范围测试，再迁移到团队和付费资源，
+完成商业 Production。两个里程碑不能混写：受邀测试可以验证真实账号与额度链路，但不能收款、公开营销、
+开放公众注册，或者被描述成正式上线。
 
-**目标**：公开部署后，`/api/ai` 不会被陌生人刷爆你的 LLM 预算。
+**目标**：只有完成邮箱验证且拥有有效对局额度的账号，才能调用任何会花费 LLM 预算的接口；
+每一局的扣费、调用上限、退款和购买记录都可审计、可对账、不会因并发或重试多算一次。
 
-**但达成这个目标有两条路，先走便宜的那条。**
-原来这一节直接从「认证」开始写，隐含假设是"公开部署 ⇒ 要有账号体系"。
-盘 wolfcha 的时候发现它其实有两套并存：`auth/watcha` + `credits/*` + `stripe/*` 是一套，
-`validate-key` / `check-config` / `demo-config` 是另一套——**后者让玩家用自己的 key**，
-不需要账号、不需要数据库、不需要支付。7.0 就是这条路，7.1 起才是原来那套。
+参考项目 [oil-oil/wolfcha](https://github.com/oil-oil/wolfcha) 的价值只在于它把认证、额度、
+`game-sessions` 与支付路由分开了。**只借这个分层，不照搬它的 BYOK、游客迁移、第三方 OAuth、
+每日奖励、邀请码和 SEO 页面。** 本项目的产品决策已经不同。
 
-### 7.0 自带 key（BYOK）：让阶段 7 的大部分不必做
+### 7.0 两个运行阶段：免费受邀测试 -> 商业公开上线
 
-- [ ] `SettingsModal`（见 6.3）里加一个 key 输入框，key 存 `localStorage`，
-      每次请求经 header 传给 `/api/ai`；服务端没配 key 时才要求它
-- [ ] `/api/validate-key`：填完当场验一次（发一个最小的 chat 请求）。
-      **不验的话，玩家要等到第一次决策失败才知道填错了**，而那时已经开局
-- [ ] `/api/check-config`：告诉前端服务端有没有配 key，决定要不要弹那个输入框
-- [ ] demo 额度（对应 `demo-config`）：不填 key 也能试一局，用**你自己的** key + 一个很小的上限。
-      **这一步才需要计数，但 IP + 内存计数器就够**——重启清零是可接受的，
-      它挡的是随手点进来的人，不是决心刷你的人。仍然不需要数据库
+| 项目 | 免费受邀测试（当前） | 商业生产（未来） |
+| --- | --- | --- |
+| GitHub | 个人账号下的 Private Repo | GitHub Organization 下的 Private Repo |
+| Vercel | Hobby；只分享受保护的 Preview | Pro Team；公开 Production，Preview 继续受保护 |
+| Supabase | Free staging；测试数据可丢弃 | 新建 Pro production；只从 migration 初始化 |
+| 用户 | 通过 Vercel 访问控制受邀；应用内仍走邮箱注册 | 开放公众邮箱注册 |
+| 支付 | 购买 UI 隐藏；只允许 mock / sandbox | 至少一个真实 provider，开放固定额度包购买 |
+| 数据 | 测试账号、额度、订单都不迁移 | 从干净账本开始，不继承 staging 业务数据 |
 
-**安全边界（这条路唯一的风险都在这里）**：
+Vercel Hobby 只允许个人、非商业用途。**任何真实收款、公开营销、公众注册或其他以盈利为目的的运营，
+都必须先通过 7.6B，不能拿“还在测试”绕过套餐边界。** 参考
+[Vercel Fair Use Guidelines](https://vercel.com/docs/limits/fair-use-guidelines)。
 
-| 要求 | 现状 |
+跨两个阶段都不变的产品规则：
+
+| 项目 | 决定 |
 | --- | --- |
-| key 只走请求头，不进 URL、不进 body 的日志字段 | 要新写 |
-| 服务端**不落盘、不打日志**，`console` 一个字都不许印 | 要新写 |
-| 抛出的错误里不含 key | **已经有了**——`client.test.ts` 那条「抛出的错误里不含 apiKey，也不含上游原始响应体」正好罩住，扩到 route 层即可 |
-| 对局导出（6.2）里不含 key | 要在导出前查一次 |
+| 账号 | Supabase Auth；邮箱 + 密码；强制确认邮箱；支持忘记与重置密码 |
+| 免费额度 | 每个 `auth.users.id` 只赠送 1 局；未确认邮箱不能使用 |
+| 付费形态 | 商业生产购买固定额度包；首版不做订阅 |
+| 一局的定义 | 落座局与全 AI 观战局都算 1 局；本地 mock 不算 |
+| 数据库 | Supabase Postgres，只存账号、额度、支付与对局授权，不存对局内容 |
+| 支付渠道 | 先固定 provider-neutral 契约；首个真实适配器与价格在商业上线前单独确定 |
 
-**判定：先做 7.0，再看要不要做 7.1。** 下面那一整套（OAuth + 额度 + Stripe + 数据库）
-是给"做一个商业产品"准备的，和"想让朋友玩一局"是两件事，成本差两个数量级。
+**不做 BYOK。** 浏览器里没有玩家自己的 LLM key，`localStorage`、请求头、导出文件和日志里
+都不新增任何 key 处理路径。服务端只使用项目自己的 provider key，预算边界统一由账号额度与
+对局会话控制。
 
-### 7.1 账号与计费（只在真的要运营时才做）
+**Private Repo 保护的是 Git 源文件访问，不是应用安全边界。** 浏览器 bundle、公开 API 路径、
+请求格式和全部 `NEXT_PUBLIC_*` 都按公开信息设计；价格、额度、权限判断、支付验签和所有 secret
+只能由服务端掌握，不能靠隐藏文件名、压缩或混淆保护。
 
-这是**唯一需要数据库的一层**。为什么前面都不需要，见 [architecture.md](./architecture.md)。
+### 7.1 Supabase 邮箱认证
 
-- [ ] 认证：邮箱注册 + Google OAuth
-- [ ] **游客模式 + 迁移**（对应 wolfcha 的 `guest/migrate`）：先玩后注册。
-      **这条要和认证一起设计，不能后补**——等到有了账号体系再想"那些没登录就玩过的人怎么办"，
-      就得为迁移单独造一套临时身份
-- [ ] 额度：每账号 1 局免费，可付费购买
-- [ ] 数据表：`users` / `credits` / `transactions`——**不存对局数据**
-- [ ] `/api/ai` 加鉴权与扣费
-- [ ] 支付接入（Stripe 等）
-- [ ] 拉新三件套（对应 `credits/daily-bonus` / `referral` / `redeem`）：
-      **只在真的运营时才有意义**，做早了就是给自己加维护面
-- [ ] `.env.local.example` 把占位块里的变量取消注释并补齐
+- [ ] 固定并安装 `@supabase/supabase-js` 与 `@supabase/ssr`，提交 lockfile；不使用已经淘汰的
+      `@supabase/auth-helpers-*`
+- [ ] 建浏览器 client、服务端 client 和 admin client 三个明确入口：
+      - 浏览器 client 只拿 `NEXT_PUBLIC_SUPABASE_URL` + publishable key
+      - 服务端会话 client 按 `@supabase/ssr` 的约定读写会话 Cookie，用于验证当前请求的用户
+      - admin client 只在 Route Handler 中使用 `SUPABASE_SECRET_KEY`，绝不进入客户端模块
+- [ ] 按 Next.js 16 的约定新增 `src/proxy.ts`，只负责刷新 Supabase 会话 Cookie；
+      **Proxy 不是授权边界**，每个 Route Handler 仍须独立验证用户
+- [ ] 账号流程齐全：注册、确认邮箱回跳、登录、退出、忘记密码、设置新密码；
+      注册成功但未确认时明确显示“去邮箱确认”，不能伪装成已经登录
+- [ ] 免费受邀测试不另造邀请码或游客身份：谁能打开站点由 Vercel Preview 访问控制决定，
+      打开之后仍走和未来 Production 相同的 Supabase 邮箱账号流程
+- [ ] 服务端授权只信经过验证的 Supabase session/user；不信请求体里的 `userId`、email、
+      `user_metadata` 或客户端传来的“已登录”布尔值
+- [ ] 认证失败统一返回稳定的机器码，例如 `AUTH_REQUIRED` / `EMAIL_UNVERIFIED`；
+      UI 按 code 翻译，错误体和日志都不含 access token、refresh token 或 Cookie
+- [ ] 注册、登录和重置密码表单接 Supabase 支持的 CAPTCHA；受邀 staging 与商业 production
+      都强制开启邮箱确认，SMTP 与邮件模板分别留到 7.6A / 7.6B 的门禁验收
 
-### 明确不做：SEO 落地页矩阵
+参考当前官方约定：[@supabase/ssr 的 Cookie client](https://supabase.com/docs/guides/auth/server-side/creating-a-client?framework=nextjs)、
+[邮箱密码认证](https://supabase.com/docs/guides/auth/passwords)。
 
-wolfcha 有 19 个 `guides/` 页 + `roles/[role]` + `models/[model]` + `landing/` + `sitemap.ts`
-+ `JsonLd`，是一整套获客投入。**不借进主线**，两个理由：
+### 7.2 额度数据库：余额是缓存，流水才是账本
 
-1. 本项目的定位是"一个完整可玩的单机游戏"，不是一个要买流量的产品。
-   没有获客目标时，19 个落地页只是 19 个会过期的文件
-2. 真要做，也该是**独立的静态站**，不要把 marketing 页混进 `src/app/`——
-   wolfcha 的 `src/app/` 里对局路由和落地页是平级的，找起来很费劲
+身份的唯一来源是 Supabase 自带的 `auth.users`。**不再造一张内容重复的 `users` 表**；
+以后真有昵称、头像等消费者时再加 `profiles`，现在没有消费者就不加。
 
-### 两个容易做错的设计点
+| 表 | 关键字段与不变量 | 消费者 |
+| --- | --- | --- |
+| `credit_accounts` | `user_id` 主键；`balance >= 0`；新账号初始 1 | 余额展示、开局扣费 |
+| `credit_transactions` | append-only；`delta`、`kind`、`idempotency_key`、关联 session/order；幂等键唯一 | 对账、交易记录、退款审计 |
+| `game_sessions` | `user_id`、`request_id`、状态、请求计数、成功计数、上限、过期时间、是否退款 | 所有付费 LLM 路由的授权 |
+| `payment_orders` | `product_code`、provider、外部订单号、金额、币种、额度数、状态 | 结账、客服、对账 |
+| `payment_events` | provider + 外部 event id 唯一；标准化事件类型与处理结果 | Webhook 去重与追查 |
 
-**1. 额度按「局」算，不是按「调用」算。**
+- [ ] 用 migration 建表、check/unique/foreign-key 约束和 `timestamptz` 时间字段；
+      给全部 `user_id` 外键、会话状态/过期查询、外部订单号和幂等键建索引
+- [ ] 在 `auth.users` 新增账号时，由数据库一次性创建 `credit_accounts(balance = 1)` 与
+      `credit_transactions(kind = 'signup_grant', delta = 1)`；函数必须幂等，重复事件不能再送一局
+- [ ] 所有业务表启用 RLS，并把 grants 与 RLS 分开审计：`anon` 没有任何业务表权限；
+      首版 `authenticated` 也不直连业务表，余额和流水都走本项目 Route Handler
+- [ ] 原子扣费、调用占位、退款和支付入账函数优先 `SECURITY INVOKER`，只授权服务端角色执行；
+      新账号 trigger 等确实需要 `SECURITY DEFINER` 的函数放在非暴露 schema，固定
+      `search_path = ''` 并撤销 `PUBLIC` / `anon` / `authenticated` 的直接执行权
+- [ ] 每次 schema 变更后运行 migration 验证与 Supabase database/security advisors；
+      生成并提交 TypeScript 数据库类型，禁止业务代码到处手写一份“差不多”的行类型
 
-一局有 60–80 次 LLM 调用（见阶段 4 的成本估算）。每次调用都扣的话，1 局免费额度撑不过第一轮组队。正确做法是引入一个「对局会话」：
+这里的核心不是表名，而是三条不变量：**余额永不为负、同一个业务事件只入账一次、
+任何余额变化都有一条不可变流水。** [Supabase RLS 指南](https://supabase.com/docs/guides/database/postgres/row-level-security)。
+
+### 7.3 按局扣费：一个额度换一个有上限的对局会话
+
+一局有 60–80 次常规 LLM 决策，10 人观战局的峰值约 150 次，所以额度仍然按「局」扣，
+不按每次请求扣。调用次数只是一局内部的防刷保险丝。
 
 ```
-开局  -> 校验余额 -> 扣 1 额度 -> 签发 session token
-对局中 -> /api/ai 凭 token 放行，不再扣费
+点击开局
+  -> POST /api/game-sessions（验证账号 + 幂等扣 1 额度 + 创建 session）
+  -> /api/personas 带 X-Game-Session-Id
+  -> 本地 createGame
+  -> /api/ai 全程带同一个 X-Game-Session-Id
+  -> 终局或重开时关闭 session
 ```
 
-**2. session token 必须有调用次数上限。**
+**必须先创建 session，再请求人设。** 现有流程是 `/api/personas` 在本地 `createGame` 之前调用；
+它同样会花 LLM 预算。只保护 `/api/ai` 会留下一个不登录也能刷的洞。
 
-只在开局扣费、后续不设限的话，拿到一个 token 就能无限调用 `/api/ai`——等于没扣费。token 要记录已用调用数，超过上限即失效。上限取一个比正常对局峰值宽裕的数（10 人局的峰值约 150 次，取 250 比较安全）。
+- [ ] `POST /api/game-sessions`
+      - 请求只收一次点击期间稳定不变的 `requestId`，不收 `userId`
+      - 在一个短事务里锁定余额行，检查 `balance > 0`，扣 1、写 debit 流水、建 session
+      - `(user_id, request_id)` 唯一；网络重试返回原 session，不能重复扣费
+      - 返回 `{ sessionId, remainingCredits, maxAiRequests, expiresAt }`
+- [ ] `GET /api/credits`：从已验证 session 取用户，返回当前余额与必要的交易摘要；
+      绝不按 query/body 里的用户标识查账
+- [ ] `/api/personas`、`/api/ai` 和以后新增的赛后点评等付费 LLM 路由共用同一 guard：
+      - 先验登录、session 所属账号、状态和过期时间，再验各自请求 schema
+      - 全部通过后，在调用 provider **之前**用单条原子更新增加请求计数
+      - `used < limit` 必须写进更新条件；10 个并发决策也不能一起穿过第 250 次
+      - provider 返回可用结果后再增加成功计数；校验失败不能占调用数
+- [ ] 默认 `MAX_AI_REQUESTS_PER_GAME=250`、`GAME_SESSION_TTL_HOURS=6`；计数单位是受保护的
+      HTTP 路由请求，provider 内部重试仍受现有 `LLM_MAX_RETRIES` 的服务端上限约束；
+      最坏成本按 `MAX_AI_REQUESTS_PER_GAME * (1 + LLM_MAX_RETRIES)` 估算，不能把 250
+      误当成真实上游尝试次数上限
+- [ ] `DELETE /api/game-sessions/[id]`：关闭本人 session。只有 `successful_requests = 0`
+      且尚未退过款时，才在一个事务里写 refund 流水并加回 1；同一 session 最多退一次
+- [ ] 过期 session 不再放行；没有任何成功 LLM 结果的过期 session 在下次账号操作时
+      幂等清理并退款，避免依赖 Vercel 进程内定时器
+- [ ] session id 只放运营层的私有状态或请求 header，不放进 `GameState` / `PlayerView`，
+      不作为对局导出的一部分
 
-> **这个设计不是我们凭空想的，wolfcha 也是这么做的**：它有一条 `/api/game-sessions`，
-> 而 `credits/consume` 与对局中的调用是分开的两条路由。两个项目独立走到同一处，
-> 说明这确实是这类游戏的必经之路，不是过度设计。
+错误边界固定为：未登录 `401 AUTH_REQUIRED`，余额不足 `402 CREDIT_EXHAUSTED`，
+不存在或不属于本人的 session 统一按不存在处理，过期 `410 GAME_SESSION_EXPIRED`，
+达到上限 `429 GAME_SESSION_LIMIT`。所有分支都要断言 **provider 调用次数为 0**。
+
+### 7.4 账号、余额与开局 UI
+
+- [ ] 增加认证界面：注册 / 登录、待确认邮箱、忘记密码、设置新密码；受邀 Preview 与商业 Production
+      都必须登录后才能开局
+- [ ] `GameShell` 的全生命周期保留账号入口，显示已验证邮箱、当前额度、交易记录与退出；
+      购买额度只在 commercial 阶段显示。余额在开局扣费、退款和支付成功后立即重新取，
+      不靠前端自己做 `balance - 1`
+- [ ] 用服务端 `APP_DEPLOYMENT_STAGE=invited|commercial` 控制商业能力：`invited` 时完全隐藏购买入口，
+      `POST /api/payments/checkout` 也必须在调用 provider 前返回 `403 COMMERCE_DISABLED`；
+      不能只靠“没有支付 key”或客户端隐藏按钮来关停收款
+- [ ] 改写 `SetupScreen.start()` 的顺序：remote 模式先取 game session，拿到后再 `fetchPersonas`；
+      任一步失败都恢复按钮状态并按稳定错误码给出下一步操作
+- [ ] 一次开局点击只生成一个 `requestId`，直到请求成功或明确取消前都复用它；
+      不能因为 React StrictMode、连点或网络重试生成多个扣费请求
+- [ ] 生产构建不显示 mock/remote 单选项，固定使用 remote；mock 只在本地开发、单测和明确的
+      非生产构建中可用，而且完全不触发登录、额度或 Supabase 请求
+- [ ] 落座与全 AI 观战走同一套 session 流程、都扣 1 局；重开视为新局，已有成功调用就不退款
+
+### 7.5 支付层：先固定契约，再选首个 provider
+
+首版卖的是**一次性额度包**，不是订阅。支付渠道尚未决定，所以先固定服务端契约。
+免费受邀阶段只验收 mock / sandbox 订单和 Webhook；“选定并实现至少一个真实 provider +
+确定额度包价格”是 7.6B 商业公开上线之前的硬阻塞项。
+
+```ts
+interface PaymentProvider {
+  createCheckout(input: CheckoutInput): Promise<{ checkoutUrl: string; externalOrderId: string }>;
+  parseWebhook(body: ArrayBuffer, headers: Headers): Promise<NormalizedPaymentEvent>;
+}
+```
+
+- [ ] 商品目录只存在于服务端：`productCode -> 额度数 + 金额 + 币种 + provider price id`；
+      客户端只提交 `productCode`，不能提交“买几局”“付多少钱”让服务端相信
+- [ ] `POST /api/payments/checkout`：验证账号和商品，先创建 pending `payment_orders`，
+      再调用 provider；外部网络请求不得包在持有数据库锁的事务里
+- [ ] `POST /api/payments/webhooks/[provider]`：读取**原始 body**、验签、标准化事件；
+      只有服务端确认的 paid 事件能加额度，success redirect 绝不负责入账
+- [ ] 在一个短事务里写 `payment_events`、把 order 从 pending 改为 paid、写 credit 流水并加余额；
+      provider event id 与外部订单号双重幂等，Webhook 重放只能得到同一结果
+- [ ] pending / paid / failed / refunded 状态转换写成白名单；金额、币种、商品与订单不一致时
+      记录安全事件并拒绝入账，不做“尽量猜一个能对上的订单”
+- [ ] 首个 provider 选定后再补它自己的环境变量、adapter、沙盒测试、Webhook 地址和对账手册；
+      现在不在文档里假造 Stripe 专属字段
+
+### 7.6A 免费受邀测试门禁
+
+这一步是**非商业的受邀 Preview**，不是“先用免费套餐偷偷跑生产”。任何一项不满足，就继续本地测试，
+不把链接发给外部测试者。
+
+- [ ] `.env.local.example` 改用当前 Supabase key 命名并写清公开/私密边界：
+
+  ```dotenv
+  NEXT_PUBLIC_SUPABASE_URL=
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+  SUPABASE_SECRET_KEY=
+
+  APP_DEPLOYMENT_STAGE=invited
+  FREE_GAMES_PER_ACCOUNT=1
+  MAX_AI_REQUESTS_PER_GAME=250
+  GAME_SESSION_TTL_HOURS=6
+  PAYMENT_PROVIDER=
+  ```
+
+  legacy `ANON_KEY` / `SERVICE_ROLE_KEY` 只用于迁移旧项目，不作为新实现的变量名。
+  参考 [Supabase API key 指南](https://supabase.com/docs/guides/getting-started/api-keys)。
+- [ ] GitHub 仓库保持个人账号下的 Private Repo；Vercel GitHub App 只授权这一座仓库，
+      GitHub、Vercel、Supabase 三个管理账号都启用 passkey、安全密钥或 TOTP 2FA
+- [ ] Vercel Hobby 只生成并分享 Preview：不 promote 到 Production、不绑定正式商业域名；
+      启用 Vercel Authentication + Standard Protection，只通过可撤销的 Shareable Link 邀请测试者：
+      [Deployment Protection](https://vercel.com/docs/deployment-protection)
+- [ ] Supabase Free 只作 staging；接受低活跃 7 天后可能暂停、没有可下载自动备份的限制。
+      重要 migration 前先按当时 CLI 的 `supabase db dump --help` 确认参数，再做离线逻辑备份；
+      测试账号和额度即使丢失也不能影响任何生产账本：
+      [Free 项目暂停与备份限制](https://supabase.com/docs/guides/deployment/going-into-prod)
+- [ ] staging Auth 配 Preview Site URL、确认邮箱与密码重置 Redirect URL。新建 Free 项目使用默认 SMTP 时
+      接受官方模板和速率限制；需要自定义模板就接自有 SMTP，不能假设 Free 默认邮件服务支持定制：
+      [Supabase breaking changes](https://supabase.com/changelog?types=breaking-change)
+- [ ] 测试邮件、LLM、Supabase 与支付全部使用 staging / sandbox 凭据；`APP_DEPLOYMENT_STAGE=invited`
+      在 UI 和 Route Handler 双层关闭真实 checkout，不能连接 live payment key
+- [ ] sandbox Webhook 使用 Preview 专用的 Vercel Automation Bypass secret；不能设 header 的 provider
+      把它放在 `x-vercel-protection-bypass` query 参数中。Vercel 放行后仍须做应用层 provider 验签；
+      日志不得记录这个 query 参数，测试结束后轮换或撤销 secret：
+      [Protection Bypass for Automation](https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation)
+- [ ] `next.config.ts` 显式保持 `productionBrowserSourceMaps: false`；部署后确认公共静态资源没有 `.map`，
+      客户端 bundle 不含 Supabase secret、LLM key、支付 secret 或构建时注入的 secret canary
+- [ ] Vercel 固定 Node.js 22+；复核 `/api/ai`、`/api/personas` 和 sandbox Webhook 的 runtime、
+      `maxDuration` 与缓存行为，所有带用户 Cookie 的响应都不得进入共享缓存
+- [ ] 发邀请前跑 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build`，再在受保护 Preview 验收：
+      注册邮件、确认回跳、密码重置、恰好 1 局免费额度、开局扣费、退款、sandbox Webhook 与终局
+- [ ] 在文档和测试数据里标记 `staging-only`；7.6B 只迁移 schema/migration，**测试用户、额度、
+      session、订单和 Webhook 事件一条都不迁移**
+
+### 7.6B 商业公开上线门禁
+
+在任何真实收款、公开营销或公众注册之前，先完成托管主体、套餐和生产数据面的迁移：
+
+- [ ] 把个人仓库转移到 GitHub Organization；把 Vercel 项目迁移到 Pro Team，重新连接并审计
+      Vercel GitHub App，只允许它访问目标私有仓库
+- [ ] `main` 是唯一 Production Branch；启用私有仓库分支保护，禁止删除和 force-push，要求 PR、
+      至少一次独立审批，以及 `lint` / `typecheck` / `test` / `build` 全部通过；管理员不作日常绕过
+- [ ] 新建 Supabase Pro production 项目并只通过已审核 migration 初始化。Free staging 保留为非生产环境；
+      不复制 `auth.users`、额度、session、订单或支付事件。Supabase Pro 是生产最低档，避免低活跃暂停并
+      获得每日备份；只有需要 SSO、合规或更细团队权限时才考虑 Supabase Team：
+      [Supabase Pricing](https://supabase.com/pricing)
+- [ ] Production 使用正式域名、自有 SMTP、DKIM/SPF/DMARC、邮件模板、CAPTCHA、LLM production key、
+      payment live key 和独立 Automation Bypass secret；Preview 与 Production 的用户、数据库、
+      邮件、支付、LLM、URL、publishable key 和所有 secret 完全隔离
+- [ ] 选定并实现至少一个真实 `PaymentProvider`，确定服务端商品目录与价格；
+      `APP_DEPLOYMENT_STAGE=commercial` 只在真实 provider 的沙盒、Webhook 幂等和对账全部通过后设置
+- [ ] 部署顺序固定为：备份/检查 production → 应用 migration → 跑 database/security advisors →
+      部署 Vercel → 跑生产冒烟。migration 失败时不得继续发布一个期待新 schema 的应用版本
+- [ ] 日志只记 request id、匿名化 user/session id、错误 code、耗时和计数；不记 URL query、
+      Cookie、token、Supabase secret、支付签名、完整 Webhook、prompt、reasoning 或上游原始响应体
+- [ ] 开 LLM provider 预算上限与告警、Vercel 用量/花费告警、Supabase Auth/数据库告警；
+      对注册与创建 game session 做账号/IP 速率限制，和“每账号 1 局”一起挡批量薅免费额度
+- [ ] 正式发布前再次跑 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build`，再用真实域名验收：
+      公众注册、确认回跳、密码重置、余额、开局扣费、退款、真实 checkout、Webhook、对账与终局；
+      全部通过后才开放公众注册和购买入口
+
+### 阶段 7 验收矩阵
+
+账号、额度和支付核心不变量在两个部署阶段都必须成立：
+
+| 场景 | 必须断言 |
+| --- | --- |
+| 未登录调用 `/api/personas` 或 `/api/ai` | 401，provider 0 次 |
+| 未确认邮箱尝试开局 | 拒绝，不扣额度，不建 session |
+| 新确认账号 | 恰好 1 局；重复触发初始化仍是 1 局 |
+| 同一 `requestId` 并发开局 | 只扣 1 次，只返回 1 个 session |
+| 余额为 0 | 402，不出现负余额，不调用 provider |
+| 拿别人的 session id | 不可区分地按不存在处理，provider 0 次 |
+| 10 个并发请求撞上限 | 最多放行到 250，第 251 次在 provider 前被拒绝 |
+| 人设请求 | 和 `/api/ai` 使用同一 session、同一计数器，不能匿名调用 |
+| 零成功调用后关闭/过期 | 只退 1 次，并有 refund 流水 |
+| 已有一次成功调用后退出 | 不退款；重开需要新额度 |
+| 同一支付 Webhook 重放 | order 只变 paid 一次，额度只增加一次 |
+| 客户端篡改金额或额度数 | 服务端商品目录覆盖/拒绝，绝不按客户端值入账 |
+| 源码边界 | `src/lib/game/**` 不认识 Supabase、账号、额度、session 或支付 |
+
+7.6A 免费受邀测试验收：
+
+| 场景 | 必须断言 |
+| --- | --- |
+| 未获得 Preview 访问权 | 在 Vercel 层被拒绝，应用与 LLM provider 都收不到请求 |
+| 受邀测试站点 | 只存在受保护 Preview；没有可用的商业 Production 或正式域名 |
+| staging 账号与账本 | 只写 Supabase Free staging，并明确不会迁移到 production |
+| 购买入口与 checkout | UI 不可见；直调接口返回 `403 COMMERCE_DISABLED`，支付 provider 0 次 |
+| sandbox Webhook | 正确 bypass + 正确 provider 签名才入账；缺任一项都失败，重放仍只加一次 |
+| 客户端产物 | `.map` 不可公开下载；bundle 不含任何 server secret 或 secret canary |
+
+7.6B 商业公开上线验收：
+
+| 场景 | 必须断言 |
+| --- | --- |
+| 托管主体与套餐 | GitHub Organization Private Repo、Vercel Pro Team、Supabase Pro production 均就绪 |
+| Production 与 Preview | 正式域名公开、Preview 继续受保护；用户、账本、订单和 secret 完全隔离 |
+| Production Branch | 只有受保护的 `main` 能发布；缺审批或任一必需检查失败都不能部署 |
+| production 初始化 | 只应用 migration；staging 的用户、额度、session、订单、事件均为 0 条迁入 |
+| 商业闭环 | 公众注册邮件、确认回跳、密码重置、真实 checkout、Webhook 入账和对账全部通过 |
+
+### 明确不做
+
+- BYOK、`validate-key`、`check-config`、无账号 demo 额度
+- 游客模式与迁移、Google/Watcha 等社交登录
+- 每日奖励、推荐返利、兑换码、签到等增长系统
+- 对局云存档、跨设备续局、排行榜与长期对局分析
+- SEO 落地页矩阵和 marketing 页面；商业化首先解决付费闭环与预算安全，获客另立阶段
 
 ### 硬约束
 
-**这一层绝不能碰引擎。** 引擎依然是纯函数，不知道账号的存在：
+**运营层依然绝不能碰引擎。** 数据库存在的唯一理由是账号、额度、支付与 LLM 预算授权：
 
-- `GameState` / `PlayerView` 里不出现任何账号字段
-- `src/lib/game/**` 不 import 任何认证或数据库模块
-- 运营层只挂在 `/api/ai` 的入口处，和游戏逻辑之间只隔着一次鉴权
+- `GameState` / `PlayerView` 里不出现 `userId`、额度、game session 或订单字段
+- `src/lib/game/**` 不 import Supabase、认证、数据库、额度或支付模块
+- 鉴权守卫挂在所有会花钱的 Route Handler 入口，不改变 `buildPrompt(PlayerView, ...)` 的签名
+- session id、支付订单和账号状态不进入 prompt、对局导出或 replay 数据
+- 浏览器永远拿不到 `SUPABASE_SECRET_KEY`、provider key 或支付 Webhook secret
+- GitHub Private Repo 不改变威胁模型：浏览器 bundle、API 路径、请求 schema、publishable key
+  全部视为攻击者已知，任何安全判断都不能依赖“源码没人看得到”
+- `next.config.ts` 保持 `productionBrowserSourceMaps: false`；以后接错误监控时也不得为了方便
+  把原始客户端 source map 发布到公共静态目录
 
-如果发现引擎代码里开始出现 `userId`，说明这条界限已经被破坏了，退回去重做。
+如果为了扣费而让引擎认识 `userId`，或者为了省一次验证而只在 `src/proxy.ts` 里鉴权，
+都说明边界已经被破坏，退回去重做。
 
 ---
 
@@ -1798,11 +2039,19 @@ wolfcha 有 19 个 `guides/` 页 + `roles/[role]` + `models/[model]` + `landing/
 | 组队票非同时公开 | AI 全场一边倒跟票 | `pending.votes` 结算前不进 view |
 | 好人投失败 | 好人莫名其妙输 | `getLegalActions` 不给选项 + reducer 抛 `GOOD_CANNOT_FAIL`，双保险 |
 | LLM 输出不合 schema | 运行时崩，或静默拿到错的动作 | zod 校验 + 重试 + 合法动作随机兜底 |
-| token 成本失控 | 调试几天烧掉预算 | mock 模式默认开启 |
-| 公开部署后 `/api/ai` 被刷 | LLM 账单异常增长，可能几天内烧光预算 | 阶段 7 的鉴权 + 按局扣额度 + session 调用上限；**阶段 7 完成前不要公开部署** |
+| token 成本失控 | 调试几天烧掉预算 | mock 模式默认开启，生产构建不暴露 mock 切换 |
+| 受邀或公开部署后 LLM 路由被刷 | `/api/personas` 或 `/api/ai` 账单异常增长 | 两条路由共用账号鉴权、按局扣费、session 上限；7.6A 前不发邀请，7.6B 前不公开 Production |
+| 把 Private Repo 当安全边界 | secret 或商业规则被打进客户端，只因“仓库私有”就误判安全 | 浏览器与 API 全部按攻击者可见设计；server-only 边界、bundle canary 与 `.map` 检查 |
+| 受邀 Preview 意外变成公开 Production | 未受邀者能打开测试站点，或测试版本被搜索/传播 | Hobby 阶段只分享受保护 Preview，不 promote、不绑正式域名；逐项验收 Deployment Protection |
+| staging 数据或 secret 进入 production | 测试账号出现在正式站、sandbox/live 互串 | production 新项目只跑 migration；所有环境变量逐项隔离，断言业务数据 0 条迁入 |
+| 在 Vercel Hobby 提前启用商业功能 | 免费部署出现购买、营销或公众注册，违反套餐用途边界 | `APP_DEPLOYMENT_STAGE=invited` 双层禁用 checkout；完成 Organization / Pro 迁移后才切 `commercial` |
+| Supabase secret 泄漏 | 任意账号的余额与订单可被读取或改写 | secret 只在服务端；客户端只用 publishable key；日志与 bundle 扫描 |
+| 并发重复扣费或余额变负 | 连点一次少两局，或出现负数余额 | `(user_id, request_id)` 唯一 + 短事务锁行 + `balance >= 0` 约束 + 流水对账 |
+| Webhook 重放重复加额度 | 同一笔付款到账多次 | 验签 + provider event id / 外部订单号唯一 + 原子入账 |
+| 对局 session 被无限复用 | 一个额度持续调用几千次 | 账号归属检查 + 6 小时过期 + 原子 250 次上限 |
+| 批量注册薅免费局 | 免费账号数和 LLM 成本同步暴涨 | 邮箱确认 + CAPTCHA + Auth/开局速率限制 + provider 预算告警 |
 | **AI 笔记本变成泄漏后门**（阶段 6.1） | 回喂的历史里混进别人的 `reasoning`——那是 prompt 里明写"其他玩家看不到"的内心分析 | 只按 `playerId` 取自己那些；一条断言钉住"喂进去的每条记录的 `playerId` 都等于当前决策者" |
 | **赛后点评复用 `buildPrompt`**（阶段 6.2） | 为一个终局功能把 `GameState` 引进 `prompt.ts`，主防线从此失效，且不会有任何报错 | 单独的构建函数 + 单独的调用点；`buildPrompt` 的签名一个字不改 |
-| **玩家自带的 key 泄漏**（阶段 7.0） | 别人的 key 出现在服务端日志、错误消息或对局导出里 | 服务端不落盘不打日志；`client.test.ts` 的"错误里不含 apiKey"扩到 route；导出前查一次 |
 | **新字段又是只写不读**（第四次复发） | 认真生成、认真存下，然后没有任何消费者——`suspicions` 已经这样白填了整个阶段 4 和 5 | 加字段时先指出消费者是谁；指不出来就先别加 |
 
 ---
@@ -1814,9 +2063,19 @@ wolfcha 有 19 个 `guides/` 页 + `roles/[role]` + `models/[model]` + `landing/
    └─ 阶段 1 配置与发牌
          ├─ 阶段 2 可见性 ──┐
          └─ 阶段 3 状态机 ──┴─ 阶段 4 AI 层 ─ 阶段 5 UI ─ 阶段 6 打磨
-
-阶段 7.0 自带 key   ← 想让别人也能玩，走这条就够了
-阶段 7.1 账号与运营 ← 不在主线上，只在要做成商业产品时才做
+                                                                    │
+                                                                    v
+阶段 7.1 邮箱认证 -> 7.2 额度数据库 -> 7.3 对局授权 -> 7.4 账号 UI
+                                                        └-> 7.6A Free 受邀测试
+                                                                         │
+                                                                         v
+                                                             7.5 真实支付适配器
+                                                                         │
+                                                                         v
+                                                   7.6B 迁移 Organization / Pro
+                                                                         │
+                                                                         v
+                                                        商业 Production 公开上线
 ```
 
 阶段 2 和阶段 3 可以并行，但两者都完成且测试全绿之前不要碰阶段 4。
@@ -1824,4 +2083,7 @@ wolfcha 有 19 个 `guides/` 页 + `roles/[role]` + `models/[model]` + `landing/
 阶段 6 的四组之间没有依赖，可以任选顺序；**但 6.1 是唯一一组做完之后对局本身会变好的**，
 其余三组都是围着对局转的。
 
-阶段 7 刻意画在主线之外：前六个阶段做完就是一个完整可玩的单机游戏，阶段 7 解决的是"公开给陌生人玩"带来的运营问题，与游戏本身无关。**7.0 和 7.1 是两条独立的路，不是两个步骤**——自带 key 那条不需要数据库、不需要支付，做完就能把链接发给朋友；7.1 解决的是另一个问题（你替陌生人付钱），只有真要做产品时才值得。
+阶段 6 完成代表“游戏本身完整”。阶段 7.1–7.4 与 7.6A 完成，只代表可以在个人免费资源上做
+**非商业受邀测试**；它不是公开上线，也不能启用真实支付。阶段 7.5 与 7.6B 全部完成，才代表
+“商业产品可以公开上线”。阶段 7 不改游戏规则，但认证、额度、所有付费 LLM 路由的 session 防线、
+真实支付 adapter、Organization / Pro 迁移和生产冒烟少一项，商业 Production 就不能开放。
