@@ -1523,9 +1523,6 @@ pnpm vitest run src/lib/ai/real-game.test.ts
       切太狠的症状是 JSON 被截断 → 重试，**fallback 率会立刻反映**，所以这是个可测的旋钮
       - 另一个可选项：wolfcha 的普通局发言 prompt **完全不限长度**（见 [rules.md §6](./rules.md)）。
         "干脆不限"也是一种答案，前提是接受更长的发言
-- [ ] **中英混杂**（52848 局的"能 tell us（告知我们）更多"）：一条 prompt 规则 +
-      transcript 里加个粗略检测。检测照搬自曝检测的两档做法——专有名词和模型名不算，
-      句子中间嵌英文短语才算
 - [ ] **`提名踩雷 x/y` 的分子分母不同口径**（阶段 4 的第六个缺陷，写了修法一直没做）
       - `transcript.ts:268` 现在是 `misses.length / final.proposalHistory.length`：分子按
         **提议 × 证据**产出条目（一次提议同时踩中两条证据就算两遍），分母是提议数
@@ -1543,11 +1540,11 @@ wolfcha 的 `components/analysis/` 有 13 个文件，是它投入第二大的�
 我们的 `GameOverPanel` 已经覆盖了最要紧的部分（全身份、任务票来源、AI 心证、耗时），
 差的是**时间轴**和**带得走**。
 
-- [ ] 复盘面板：逐轮回放，显示每次任务的失败票来自谁、每个 AI 当时的 `reasoning` 和 `suspicions`
+- [x] 复盘面板：逐轮回放，显示每次任务的失败票来自谁、每个 AI 当时的 `reasoning` 和 `suspicions`
       （对应 `TimelineReview`。数据全在 `revealAtom` + `reviewDecisionsAtom` 里，不用新增任何采集）
-- [ ] `suspicions` 可视化成怀疑度热力图（对应 `IdentityDashboard`）。
+- [ ] ~~`suspicions` 可视化成怀疑度热力图（对应 `IdentityDashboard`）。
       **横轴是轮次不是座位**——一张静态的怀疑矩阵只能看出"谁被怀疑"，
-      而这个字段唯一有意思的地方是**怀疑链怎么演变的**
+      而这个字段唯一有意思的地方是**怀疑链怎么演变的**~~
 - [x] 观战模式：全 AI 对局，人类只看
       - **定下来的答案：引擎给上帝视角，界面默认全部盖着，观战者逐座翻牌。**
         两条理由各管一层——
@@ -1682,13 +1679,13 @@ wolfcha 的 `components/analysis/` 有 13 个文件，是它投入第二大的�
         `components/leak.test.ts` 的三条源码断言**（没有组件 import `gameStateAtom`、
         没有组件认识 `GameState`、三个私有 atom 没被导出）。而正确的修法**不是给它开白名单**——
         那三条断言的价值就在于它们钝（阶段 5 原话）。换个目录，断言一个字不用改
-- [ ] **多模型对战**：不同座位配不同 provider，统计各模型胜率。
+- [ ] ~~**多模型对战**：不同座位配不同 provider，统计各模型胜率。
       现在 `resolveAiClient` 给的是全局单例，要改成按座位取 client。
-      **统计跑完即看，不落库**（[architecture.md §5](./architecture.md) 明写了这一条）
-- [ ] **开源卫生四件套**：`CHANGELOG.md` / `CONTRIBUTING.md` / `SECURITY.md` / `README.en.md`
+      **统计跑完即看，不落库**（[architecture.md §5](./architecture.md) 明写了这一条）~~
+- [x] **开源卫生四件套**：`CHANGELOG.md` / `CONTRIBUTING.md` / `SECURITY.md` / `README.en.md`
       （wolfcha 四份都有）。现在的 `README.md` 只有 1.4KB，讲不清这个项目最值钱的两样东西——
       **引擎的确定性**和**信息隔离的测试体系**。`docs/` 里三份文档已经写透了，README 缺的是入口
-- [ ] **`Dockerfile`**：本项目没有数据库、没有后台任务，一个标准的 Next standalone 镜像就够
+- [x] **`Dockerfile`**：本项目没有数据库、没有后台任务，一个标准的 Next standalone 镜像就够
 - [ ] （可选，收益有限）**批量调用**：wolfcha 的 `/api/vote-batch` 把多个投票请求合成一次。
       我们的并发阶段（投票 / 任务票 / 确认身份）现在是 n 次独立 fetch，10 人局就是 10 趟。
       **但服务端本来就并发处理，省的只是 HTTP 往返**，而瓶颈是模型延迟不是往返。
