@@ -8,13 +8,11 @@
  * "模型说了胡话"这一种情况，把网络故障也算进 fallback 率，那个指标就废了。
  */
 import { AiError, type AiErrorCode } from "./errors";
-import { PROMPT_COPY } from "./prompt-copy";
 import type {
   AiClient,
   AiDecisionKind,
   AiDecisionRequest,
   AiDecisionResult,
-  Persona,
 } from "../game/types";
 
 /** 与 client.ts 里同名类型的用意一致：只取实际用到的那一种调用形态 */
@@ -116,79 +114,4 @@ async function readError(
   }
 
   return { code, detail };
-}
-
-// ---------------------------------------------------------------------------
-// 人设
-// ---------------------------------------------------------------------------
-
-export interface PersonaFetchResult {
-  /** 拿不到就是 null，调用方回退 makePlaceholderPersonas */
-  personas: Persona[] | null;
-  /** 服务端的打点，或这一趟失败的原因。要显示给玩家看，不能吞 */
-  notes: string[];
-}
-
-export interface FetchPersonasOptions {
-  /** 默认 /api/personas */
-  endpoint?: string;
-  fetchFn?: FetchFn;
-  signal?: AbortSignal;
-}
-
-/**
- * 开局前取一桌人设。
- *
- * 【这个函数不抛】与 decide 正好相反。理由在 personas.ts 的文件头：
- * 人设是锦上添花，不是开局的必要条件——为它中断开局是本末倒置。
- * 失败的原因走 notes 交给界面，**绝不静默**（rules.md §6）。
- */
-export async function fetchPersonas(
-  count: number,
-  locale: "zh" | "en",
-  options: FetchPersonasOptions = {},
-): Promise<PersonaFetchResult> {
-  const endpoint = options.endpoint ?? "/api/personas";
-  const fetchFn = options.fetchFn ?? (globalThis.fetch as FetchFn);
-
-  let response: Response;
-  try {
-    response = await fetchFn(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ count, locale }),
-      ...(options.signal ? { signal: options.signal } : {}),
-    });
-  } catch (cause) {
-    return {
-      personas: null,
-      notes: [
-        PROMPT_COPY[locale].personaGen.noteFallback(
-          cause instanceof Error ? cause.message : PROMPT_COPY[locale].personaGen.unknownReason,
-        ),
-      ],
-    };
-  }
-
-  if (!response.ok) {
-    // 服务端已经保证这段文本里不含 key（见 api/personas/route.ts 的 503 分支）
-    return {
-      personas: null,
-      notes: [
-        PROMPT_COPY[locale].personaGen.noteFallback(
-          `HTTP ${response.status}: ${(await readError(response)).detail}`,
-        ),
-      ],
-    };
-  }
-
-  try {
-    const body = (await response.json()) as PersonaFetchResult;
-    return { personas: body.personas ?? null, notes: body.notes ?? [] };
-  } catch {
-    return {
-      personas: null,
-      notes: [PROMPT_COPY[locale].personaGen.noteFallback(PROMPT_COPY[locale].personaGen.badJson(""))],
-    };
-  }
 }

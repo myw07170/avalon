@@ -13,13 +13,12 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/lib/game";
-import { errorAtom, personaNotesAtom, resetGameAtom, runGameAtom, viewAtom } from "@/store/game";
+import { errorAtom, resetGameAtom, runGameAtom, viewAtom } from "@/store/game";
 import { IdentityDeck } from "./IdentityDeck";
 import { tallyRoles } from "./setup-model";
 
 export function SpectatorIntro() {
   const view = useAtomValue(viewAtom);
-  const personaNotes = useAtomValue(personaNotesAtom);
   const error = useAtomValue(errorAtom);
   const startRun = useSetAtom(runGameAtom);
   const reset = useSetAtom(resetGameAtom);
@@ -62,18 +61,6 @@ export function SpectatorIntro() {
       </ul>
 
       <IdentityDeck />
-
-      {/* 【回退绝不静默】人设生成失败会让一桌 AI 说话雷同，而观战局全桌都是 AI，
-          这一行在这里比在 RoleCard 上更要紧 */}
-      {personaNotes.length > 0 && (
-        <ul className="w-full max-w-md space-y-1.5">
-          {personaNotes.map((note) => (
-            <li key={note} className="text-xs leading-relaxed text-brass">
-              {note}
-            </li>
-          ))}
-        </ul>
-      )}
 
       {error && (
         <p role="alert" className="max-w-md text-center text-sm text-mordred">

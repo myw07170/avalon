@@ -33,7 +33,7 @@ AI 层     prompt 构建 / provider 调用    唯一允许发网络请求的地�
 
 **引擎是纯函数 reducer。** 见 [state-machine.md §3](./state-machine.md)：不发网络请求，不调 LLM，不读时间戳，随机源作为参数注入。它没有任何需要外部存储的状态——`reduce(state, action, rng)` 的输出完全由输入决定。
 
-**服务端代码全都是无状态的。** 一共两个 Route Handler——`/api/ai`（对局中的每次决策）与 `/api/personas`（开局生成一桌人设），存在的理由完全相同：别让 LLM 的 API key 进浏览器。两个都只转发一次请求、返回一次结果，不记录任何东西。
+**服务端代码全都是无状态的。** 运行期只有 `/api/ai` 这个 LLM Route Handler，负责转发对局中的决策请求，避免 API key 进入浏览器；它不记录对局状态。人设是随仓库发布的 30 项双语静态目录，只有开发者显式执行 `pnpm personas:generate` 时才会直接调用 provider，游戏开局不经过服务端生成人设。
 
 **一整局 = `seed + action[]`，几百字节。** 因为引擎确定性，同一个种子加同一串动作必然重放出同一局。存档不需要数据库，一个 JSON 文件就够。这正是 [todos.md](./todos.md) 阶段 6「对局导出，导入可完整重放」那条的底气——它是文件级的，本来就与数据库无关。
 

@@ -18,10 +18,9 @@ import { useMessages } from "@/i18n/useMessages";
 import { LocaleSwitcher } from "@/i18n/LocaleSwitcher";
 import { ThemeSwitcher } from "@/theme/ThemeSwitcher";
 import { errorAtom, isSpectatingAtom, resetGameAtom, runStatusAtom } from "@/store/game";
-import { ActionPanel } from "./ActionPanel";
 import { GameOverPanel } from "./GameOverPanel";
+import { InGameLayout } from "./InGameLayout";
 import { MissionTrack } from "./MissionTrack";
-import { VoteMatrix } from "./VoteMatrix";
 import { RoleCard } from "./RoleCard";
 import { SeatTable } from "./SeatTable";
 import { SpeechFeed } from "./SpeechFeed";
@@ -30,6 +29,8 @@ import { SpectatorIntro } from "./SpectatorIntro";
 import { SpectatorTable } from "./SpectatorTable";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { TutorialModal } from "./TutorialModal";
+import { TeamDraftProvider } from "./TeamDraftContext";
+import { VoteMatrix } from "./VoteMatrix";
 
 /**
  * 【语言与主题这三样挂在这里，而不是 layout.tsx】layout.tsx 与 page.tsx 都是
@@ -81,32 +82,39 @@ function Screen() {
   }
 }
 
-/** 对局中。轮到你时 ActionPanel 自己会出现，没轮到就什么都不画 */
+/** 对局中。圆桌与右下操作台共享组队草稿，其余人类操作也统一从右栏进入。 */
 function Table() {
   const error = useAtomValue(errorAtom);
   const reset = useSetAtom(resetGameAtom);
   const msg = useMessages();
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center gap-8 px-5 py-10 sm:py-14">
-      <MissionTrack />
-      <VoteMatrix />
-      <SeatTable />
-      <SpeechFeed />
+    <TeamDraftProvider>
+      <InGameLayout
+        overview={
+          <>
+            <SeatTable />
+            <MissionTrack />
+            <VoteMatrix />
+          </>
+        }
+        conversation={<SpeechFeed enableActions />}
+        controls={
+          <>
+            {/* 没轮到你时这里是全屏唯一会动的东西——不给的话，慢和卡死长得一样 */}
+            <ThinkingIndicator />
 
-      {/* 没轮到你时这里是全屏唯一会动的东西——不给的话，慢和卡死长得一样 */}
-      <ThinkingIndicator />
+            {error && (
+              <p role="alert" className="max-w-md text-center text-sm text-mordred">
+                {error}
+              </p>
+            )}
 
-      <ActionPanel />
-
-      {error && (
-        <p role="alert" className="max-w-md text-center text-sm text-mordred">
-          {error}
-        </p>
-      )}
-
-      <SecondaryButton onClick={() => reset()}>{msg.shell.restart}</SecondaryButton>
-    </main>
+            <SecondaryButton onClick={() => reset()}>{msg.shell.restart}</SecondaryButton>
+          </>
+        }
+      />
+    </TeamDraftProvider>
   );
 }
 

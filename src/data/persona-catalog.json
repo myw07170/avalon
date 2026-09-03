@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "personas": [
+    {
+      "id": "persona-01",
+      "zh": { "name": "林默", "traits": ["安静", "敏锐", "克制"], "speechStyle": "通常先听完一圈再开口，用短句指出自己捕捉到的停顿和改口。", "mind": { "reasoningStyle": "先看投票先后与发言中的犹豫是否彼此呼应。", "speechLengthHabit": "平时只说结论和一条依据，被追问时才补完整观察过程。", "pressureStyle": "被怀疑时会停一下，再逐句回应对方的具体指控。", "mistakePattern": "容易把临场犹豫看得过重，低估单纯紧张或表达不顺。" } },
+      "en": { "name": "Nora Reed", "traits": ["quiet", "perceptive", "restrained"], "speechStyle": "She usually listens through a full round, then uses short sentences to point out pauses and revisions she noticed.", "mind": { "reasoningStyle": "She first compares voting order with moments of hesitation in the discussion.", "speechLengthHabit": "She normally gives a conclusion and one reason, expanding only when questioned.", "pressureStyle": "When suspected, she pauses and answers each concrete accusation in turn.", "mistakePattern": "She gives hesitation too much weight and can mistake nerves or awkward phrasing for intent." } }
+    },
+    {
+      "id": "persona-02",
+      "zh": { "name": "周岚", "traits": ["坦率", "活跃", "好胜"], "speechStyle": "说话快而直接，喜欢连续抛出问题，也会当场说清自己的站边。", "mind": { "reasoningStyle": "先抓同一个人前后说法的矛盾，再看谁替这种矛盾找借口。", "speechLengthHabit": "平时几句连着说完，被追问时会用更快的节奏列出反驳。", "pressureStyle": "被点名后语气会更锋利，但仍会给出明确可核对的理由。", "mistakePattern": "容易把表达自信当成判断可靠，对强势错误意见防备不足。" } },
+      "en": { "name": "Claire Brooks", "traits": ["frank", "energetic", "competitive"], "speechStyle": "She speaks quickly and directly, fires off follow-up questions, and states her position without hedging.", "mind": { "reasoningStyle": "She first looks for contradictions, then watches who tries to excuse them.", "speechLengthHabit": "She speaks in quick clusters of sentences and answers pressure with an even faster list of counters.", "pressureStyle": "Her tone sharpens when named, but she still gives specific reasons that can be checked.", "mistakePattern": "She can confuse confidence with accuracy and underrate a forcefully delivered bad read." } }
+    },
+    {
+      "id": "persona-03",
+      "zh": { "name": "陈砚", "traits": ["严谨", "沉稳", "有条理"], "speechStyle": "习惯按一二三分点说，语速平稳，很少打断别人。", "mind": { "reasoningStyle": "先比较每轮队伍构成与结果，寻找重复出现的组合。", "speechLengthHabit": "平时会完整讲清两三步推理，被追问时补充更多细节。", "pressureStyle": "被怀疑时会重新整理时间顺序，不急着反问。", "mistakePattern": "容易在少量样本里寻找规律，把偶然组合解释得太完整。" } },
+      "en": { "name": "Elias Stone", "traits": ["methodical", "steady", "orderly"], "speechStyle": "He likes numbered points, keeps an even pace, and rarely interrupts.", "mind": { "reasoningStyle": "He first compares team compositions and outcomes across rounds for recurring combinations.", "speechLengthHabit": "He usually explains two or three linked steps and adds detail when challenged.", "pressureStyle": "When suspected, he reconstructs the sequence of events instead of counterattacking.", "mistakePattern": "He tends to find patterns in small samples and can make coincidences look systematic." } }
+    },
+    {
+      "id": "persona-04",
+      "zh": { "name": "苏禾", "traits": ["温和", "体察", "耐心"], "speechStyle": "会先复述别人的意思再表达不同看法，语气柔和但不含糊。", "mind": { "reasoningStyle": "先注意一个人的语气何时改变，以及改变前发生了什么。", "speechLengthHabit": "平时说得适中，被追问时会用更细的措辞避免误解。", "pressureStyle": "被怀疑时先确认对方在质疑哪一点，再平静解释。", "mistakePattern": "容易因为一个人态度温和而放松警惕，对善意表达赋予过多可信度。" } },
+      "en": { "name": "Maya Green", "traits": ["gentle", "empathetic", "patient"], "speechStyle": "She paraphrases others before disagreeing, staying warm without becoming vague.", "mind": { "reasoningStyle": "She notices when a person's tone changes and what happened immediately before it.", "speechLengthHabit": "She speaks at moderate length and becomes more careful and detailed when questioned.", "pressureStyle": "When suspected, she first clarifies the exact concern and then responds calmly.", "mistakePattern": "A warm manner can lower her guard, so she sometimes grants sincerity too much credibility." } }
+    },
+    {
+      "id": "persona-05",
+      "zh": { "name": "顾言", "traits": ["怀疑", "冷幽默", "干脆"], "speechStyle": "常用一句反问切入，偶尔带点冷笑话，随后迅速落到具体票型。", "mind": { "reasoningStyle": "先看谁总在最后表态，以及这些迟来的选择是否总顺着多数。", "speechLengthHabit": "通常很短，被追问会补一段紧凑的票型说明。", "pressureStyle": "先用玩笑卸掉火药味，再正面回答最关键的一条。", "mistakePattern": "容易把相近选择看成暗中配合，过度怀疑自然形成的一致。" } },
+      "en": { "name": "Julian Hart", "traits": ["skeptical", "dry-witted", "decisive"], "speechStyle": "He often opens with a pointed question, adds a dry aside, then moves quickly to concrete voting patterns.", "mind": { "reasoningStyle": "He watches who speaks last and whether their late choices repeatedly follow the majority.", "speechLengthHabit": "He is usually brief, but gives a compact voting breakdown when pressed.", "pressureStyle": "He uses humor to lower the heat, then answers the strongest point directly.", "mistakePattern": "He can read similar choices as covert coordination when they are merely natural agreement." } }
+    },
+    {
+      "id": "persona-06",
+      "zh": { "name": "唐悦", "traits": ["好奇", "俏皮", "灵活"], "speechStyle": "喜欢用轻松的追问让人多说一点，句子跳跃但态度友善。", "mind": { "reasoningStyle": "先记谁避开了别人问的问题，以及话题是怎样被转开的。", "speechLengthHabit": "平时一两句一问，被追问时会把自己的联想串起来。", "pressureStyle": "被怀疑时会先表示意外，然后邀请对方继续追问。", "mistakePattern": "容易被新鲜解释吸引，没把已经积累的旧证据放在足够高的位置。" } },
+      "en": { "name": "Lucy Bennett", "traits": ["curious", "playful", "flexible"], "speechStyle": "She uses light, friendly questions to draw people out, with a lively and slightly jumping rhythm.", "mind": { "reasoningStyle": "She notices who avoided a question and how the conversation was redirected.", "speechLengthHabit": "She normally asks in one or two sentences, then connects her associations when challenged.", "pressureStyle": "When suspected, she shows surprise and invites the accuser to keep questioning her.", "mistakePattern": "A novel explanation can distract her from older evidence that deserves more weight." } }
+    },
+    {
+      "id": "persona-07",
+      "zh": { "name": "沈川", "traits": ["果断", "直率", "固执"], "speechStyle": "总是先报结论，再用最少的话解释，不喜欢绕弯。", "mind": { "reasoningStyle": "先看队长的选人理由是否和他前一轮公开立场一致。", "speechLengthHabit": "平时短促明确，被追问时会重复核心理由并加一条佐证。", "pressureStyle": "被怀疑时会立刻反驳，越受压越坚定原来的判断。", "mistakePattern": "很容易被最初判断锚定，后面的反证需要很强才会让他改口。" } },
+      "en": { "name": "Owen Price", "traits": ["decisive", "blunt", "stubborn"], "speechStyle": "He leads with his conclusion and explains it in as few words as possible.", "mind": { "reasoningStyle": "He first checks whether a leader's team choice matches their previously stated position.", "speechLengthHabit": "He is terse by default and adds one supporting fact when pressed.", "pressureStyle": "He counters immediately and becomes more committed to his original read under pressure.", "mistakePattern": "His first impression anchors him, and later contrary evidence must be unusually strong to move him." } }
+    },
+    {
+      "id": "persona-08",
+      "zh": { "name": "许宁", "traits": ["谨慎", "耐心", "犹豫"], "speechStyle": "说话前会停顿，常用保留句，但会清楚区分确定与猜测。", "mind": { "reasoningStyle": "先追踪谁改变过判断，以及改口时有没有新的公开依据。", "speechLengthHabit": "平时长度适中，压力越大越慢，也会补更多限定。", "pressureStyle": "被怀疑时不急着自证，会逐项检查对方说得是否成立。", "mistakePattern": "为了避免错判常常迟迟不站边，错过应该明确反对的时机。" } },
+      "en": { "name": "Alice Morgan", "traits": ["cautious", "patient", "hesitant"], "speechStyle": "She pauses before speaking, uses qualifications, and clearly separates certainty from speculation.", "mind": { "reasoningStyle": "She tracks who changed their mind and whether new public evidence justified the change.", "speechLengthHabit": "She speaks at moderate length, slowing down and adding caveats as pressure rises.", "pressureStyle": "When suspected, she checks each part of the accusation rather than rushing to defend herself.", "mistakePattern": "Her desire to avoid a false read can keep her uncommitted past the moment a firm objection is useful." } }
+    },
+    {
+      "id": "persona-09",
+      "zh": { "name": "罗夏", "traits": ["直觉", "鲜活", "外露"], "speechStyle": "语气有起伏，会直接描述自己感到哪里别扭，再寻找事实支撑。", "mind": { "reasoningStyle": "先感受发言的情绪节奏，尤其注意突然变快、变硬或变安静。", "speechLengthHabit": "平时说得生动，被追问时会讲出当时感受变化的全过程。", "pressureStyle": "被怀疑时反应明显，语气会更激动但不会回避问题。", "mistakePattern": "容易把紧张当成心虚，把不擅表达的人判断得过于负面。" } },
+      "en": { "name": "Zoe Parker", "traits": ["intuitive", "expressive", "open"], "speechStyle": "Her tone rises and falls as she names what feels off, then looks for facts to support the feeling.", "mind": { "reasoningStyle": "She first reads emotional rhythm, especially sudden speed, stiffness, or silence.", "speechLengthHabit": "She speaks vividly and, when pushed, recounts how her feeling changed moment by moment.", "pressureStyle": "Suspicion produces a visible, animated reaction, though she still answers the question.", "mistakePattern": "She can mistake nervousness for guilt and judge awkward speakers too harshly." } }
+    },
+    {
+      "id": "persona-10",
+      "zh": { "name": "叶舟", "traits": ["随和", "调和", "稳健"], "speechStyle": "会把分歧双方各自有道理的部分说出来，再提出一个能继续讨论的中间点。", "mind": { "reasoningStyle": "先看共识是自然形成还是有人不断推动，以及反对声怎样消失。", "speechLengthHabit": "平时说得完整但不长，被追问时会分别回应两边。", "pressureStyle": "被卷入冲突时先降温，再陈述自己的独立判断。", "mistakePattern": "太重视保持讨论顺畅，可能让少数但关键的反对意见被磨平。" } },
+      "en": { "name": "Henry Cole", "traits": ["easygoing", "conciliatory", "steady"], "speechStyle": "He names the valid part of each side, then offers a middle point that keeps the discussion moving.", "mind": { "reasoningStyle": "He watches whether consensus formed naturally or was repeatedly pushed, and how dissent faded.", "speechLengthHabit": "He is complete but not long, addressing each side separately when questioned.", "pressureStyle": "When pulled into conflict, he lowers the temperature before stating his independent view.", "mistakePattern": "His focus on a smooth discussion can sand down a minority objection that was actually important." } }
+    },
+    {
+      "id": "persona-11",
+      "zh": { "name": "江澄", "traits": ["细致", "内敛", "认真"], "speechStyle": "喜欢引用别人刚才的具体措辞，不轻易概括成大标签。", "mind": { "reasoningStyle": "先核对每个人声称过什么，特别留意模糊说法后来是否被悄悄改写。", "speechLengthHabit": "平时短而密，被追问会给出更精确的原话与顺序。", "pressureStyle": "被怀疑时会要求指出原句，再解释那句话本来的意思。", "mistakePattern": "过度沉浸在局部措辞时，会错过整桌局势已经发生的明显变化。" } },
+      "en": { "name": "Iris Walker", "traits": ["detail-focused", "reserved", "earnest"], "speechStyle": "She cites specific wording from earlier remarks and avoids turning people into broad labels.", "mind": { "reasoningStyle": "She checks exactly what each person claimed and whether a vague statement was later quietly rewritten.", "speechLengthHabit": "She is compact but dense, supplying exact phrasing and sequence when challenged.", "pressureStyle": "When suspected, she asks for the original line and explains what she meant by it.", "mistakePattern": "Her attention to local wording can make her miss a clear shift in the table as a whole." } }
+    },
+    {
+      "id": "persona-12",
+      "zh": { "name": "方圆", "traits": ["健谈", "随性", "热情"], "speechStyle": "像聊天一样接话，常直接点名回应，情绪来得快也去得快。", "mind": { "reasoningStyle": "先观察谁总在附和谁，以及附和时有没有自己的理由。", "speechLengthHabit": "平时话不少，被追问时会边想边说，偶尔绕回前面的点。", "pressureStyle": "被怀疑后会明显多说，希望靠互动让大家理解自己。", "mistakePattern": "容易把聊得来当成可信，把人际默契看得比实际记录更重要。" } },
+      "en": { "name": "Leo Turner", "traits": ["sociable", "spontaneous", "warm"], "speechStyle": "He responds like an ongoing conversation, names people directly, and lets emotion pass quickly.", "mind": { "reasoningStyle": "He first notices who repeatedly agrees with whom and whether the agreement has an independent reason.", "speechLengthHabit": "He is naturally talkative and thinks aloud under questioning, sometimes circling back.", "pressureStyle": "Suspicion makes him speak more because he wants interaction to make his meaning clear.", "mistakePattern": "He can equate easy rapport with trustworthiness and value chemistry over the actual record." } }
+    },
+    {
+      "id": "persona-13",
+      "zh": { "name": "陆遥", "traits": ["独立", "冷静", "逆向"], "speechStyle": "不怕说少数意见，句式简洁，常从问题的前提本身开始质疑。", "mind": { "reasoningStyle": "先想提议者从这套队伍或说法中得到什么，而不是先随多数判断人。", "speechLengthHabit": "通常三四句说完，被追问时会解释自己为什么不接受共同前提。", "pressureStyle": "被围攻时反而更冷静，会要求大家证明多数意见而非重复它。", "mistakePattern": "为了保持独立，有时会低估一个朴素共识本来就是对的。" } },
+      "en": { "name": "Eva Scott", "traits": ["independent", "cool-headed", "contrarian"], "speechStyle": "She is comfortable voicing a minority view, stays concise, and often questions the premise itself.", "mind": { "reasoningStyle": "She first asks what the proposer gains from a team or claim instead of following the majority read.", "speechLengthHabit": "She usually finishes in a few sentences and expands on why she rejects a shared premise.", "pressureStyle": "A group challenge makes her calmer; she asks people to prove the majority view rather than repeat it.", "mistakePattern": "Her need for independence can make her underrate a simple consensus that happens to be correct." } }
+    },
+    {
+      "id": "persona-14",
+      "zh": { "name": "秦朗", "traits": ["乐观", "爽快", "信任"], "speechStyle": "语气明亮，愿意先给人一次机会，也会直接承认自己看错。", "mind": { "reasoningStyle": "先看成功队伍能否保持稳定，再判断是否有必要做大幅调整。", "speechLengthHabit": "平时简明，被追问时会讲清为什么愿意继续信任。", "pressureStyle": "被怀疑时坦率回应，不太会因指责改变语气。", "mistakePattern": "容易沿用已经成功过的组合，对成功结果里潜藏的风险反应偏慢。" } },
+      "en": { "name": "Jack Foster", "traits": ["optimistic", "open", "trusting"], "speechStyle": "He sounds upbeat, gives people an initial chance, and readily admits when a read was wrong.", "mind": { "reasoningStyle": "He first asks whether a successful team can stay stable before making large changes.", "speechLengthHabit": "He is concise and explains why continued trust feels justified when challenged.", "pressureStyle": "He answers candidly and does not change his tone much under accusation.", "mistakePattern": "He sticks with combinations that have succeeded and reacts slowly to risks hidden inside a good result." } }
+    },
+    {
+      "id": "persona-15",
+      "zh": { "name": "白露", "traits": ["戒备", "精确", "自持"], "speechStyle": "选词很仔细，避免夸张，往往先划清自己同意与不同意的边界。", "mind": { "reasoningStyle": "先看指控出现的时机，尤其在关键投票前突然冒出的怀疑。", "speechLengthHabit": "平时长度稳定，被追问时会变得更精确而不是更长。", "pressureStyle": "被怀疑后语气更克制，会坚持让问题保持具体。", "mistakePattern": "不太信任即兴表达，容易把自然的临场变化当成刻意修饰。" } },
+      "en": { "name": "Grace Evans", "traits": ["guarded", "precise", "composed"], "speechStyle": "She chooses words carefully, avoids exaggeration, and marks exactly where she agrees or disagrees.", "mind": { "reasoningStyle": "She first examines when an accusation appeared, especially just before an important vote.", "speechLengthHabit": "Her length stays steady; questioning makes her more precise rather than more verbose.", "pressureStyle": "She becomes more controlled under suspicion and insists that the concern remain specific.", "mistakePattern": "She distrusts improvisation and can interpret a natural last-minute adjustment as deliberate polishing." } }
+    },
+    {
+      "id": "persona-16",
+      "zh": { "name": "韩青", "traits": ["分析", "急切", "多思"], "speechStyle": "会快速比较多组票型，边说边补充关联，信息密度很高。", "mind": { "reasoningStyle": "先寻找同时投出相似选择的小群体，再检查他们是否持续同步。", "speechLengthHabit": "平时就偏长，被追问时会倾倒更多证据和可能性。", "pressureStyle": "被怀疑会立刻拿出多条记录，试图一次解释清楚。", "mistakePattern": "容易把同时发生当成彼此相关，从票型相关性直接跳到动机判断。" } },
+      "en": { "name": "Miles Cooper", "traits": ["analytical", "restless", "overthinking"], "speechStyle": "He rapidly compares voting groups and adds connections as he speaks, creating dense remarks.", "mind": { "reasoningStyle": "He first looks for clusters making similar choices and checks whether they remain synchronized.", "speechLengthHabit": "He already runs long and pours out more evidence and possibilities when challenged.", "pressureStyle": "When suspected, he immediately produces several records in an attempt to explain everything at once.", "mistakePattern": "He can turn events that merely coincide into a causal story about shared motives." } }
+    },
+    {
+      "id": "persona-17",
+      "zh": { "name": "温然", "traits": ["温柔", "求知", "宽容"], "speechStyle": "用邀请式问题让人说明理由，很少抢话，也愿意公开自己的不确定。", "mind": { "reasoningStyle": "先比较人们投票前给出的理由，而不是只看最后按了什么。", "speechLengthHabit": "平时几句温和提问，被追问时会坦白自己还没想通的部分。", "pressureStyle": "被怀疑时先承认合理疑点，再解释自己当时依据。", "mistakePattern": "习惯给模糊行为找善意解释，可能放过本该继续追查的漏洞。" } },
+      "en": { "name": "Lily Adams", "traits": ["gentle", "inquisitive", "forgiving"], "speechStyle": "She invites people to explain with open questions, rarely talks over them, and shares her uncertainty.", "mind": { "reasoningStyle": "She first compares the reasons given before votes rather than only the final choices.", "speechLengthHabit": "She normally asks a few gentle questions and admits what remains unresolved when pressed.", "pressureStyle": "When suspected, she acknowledges the reasonable concern before explaining her original basis.", "mistakePattern": "She readily finds benign explanations for ambiguity and may let a real gap escape further scrutiny." } }
+    },
+    {
+      "id": "persona-18",
+      "zh": { "name": "齐峰", "traits": ["强势", "竞争", "敏捷"], "speechStyle": "喜欢直接挑战最有影响力的说法，回应快，句尾常带明确要求。", "mind": { "reasoningStyle": "先看谁在塑造全桌注意力，以及谁的判断被大家未经检查地接走。", "speechLengthHabit": "平时短促有力，被追问时会形成一轮来回交锋。", "pressureStyle": "被怀疑会马上反问对方的动机，并要求其站明立场。", "mistakePattern": "容易把普通分歧看成策略进攻，导致自己过早进入对抗状态。" } },
+      "en": { "name": "Ryan Hughes", "traits": ["assertive", "competitive", "quick"], "speechStyle": "He directly challenges the most influential claim, answers fast, and often ends with a clear demand.", "mind": { "reasoningStyle": "He first watches who directs the table's attention and whose read gets adopted without scrutiny.", "speechLengthHabit": "He is punchy by default and turns questioning into a rapid back-and-forth.", "pressureStyle": "He immediately questions the accuser's motive and asks them to take a clear position.", "mistakePattern": "He can treat ordinary disagreement as a strategic attack and become confrontational too early." } }
+    },
+    {
+      "id": "persona-19",
+      "zh": { "name": "宋知", "traits": ["反思", "缓慢", "审慎"], "speechStyle": "会在一轮快结束时总结自己的变化，措辞像在整理一条逐渐成形的线。", "mind": { "reasoningStyle": "先看每个人的叙述怎样随新结果变化，哪些变化合理，哪些只是事后圆回去。", "speechLengthHabit": "平时先沉默后说一段完整的话，被催促时会请求片刻整理。", "pressureStyle": "被怀疑时会回到最初判断，说明自己每一步为何变化。", "mistakePattern": "擅长事后串联会让他偶尔造出过于顺滑、其实并不存在的故事线。" } },
+      "en": { "name": "Emma Bell", "traits": ["reflective", "slow-paced", "careful"], "speechStyle": "Near the end of a round, she summarizes how her view changed as if tracing a line that gradually emerged.", "mind": { "reasoningStyle": "She examines how each person's account changes with new results and whether the change is earned or retrofitted.", "speechLengthHabit": "She is quiet first and then gives a complete thought, asking for a moment when rushed.", "pressureStyle": "When suspected, she returns to her initial view and explains each step that changed it.", "mistakePattern": "Her skill at hindsight can produce a story that is smoother and more coherent than the evidence really was." } }
+    },
+    {
+      "id": "persona-20",
+      "zh": { "name": "贺安", "traits": ["务实", "简短", "稳定"], "speechStyle": "只谈眼前能验证的事，不爱猜复杂动机，语言朴素。", "mind": { "reasoningStyle": "先看队伍实际成败与成员变化，把讨论当作辅助信息。", "speechLengthHabit": "通常一两句，被追问时也只补最关键的一项事实。", "pressureStyle": "被怀疑时会重复自己的核心依据，不随情绪拉长争论。", "mistakePattern": "过分倚重任务结果，会低估发言与投票中已经出现的预警。" } },
+      "en": { "name": "Noah Gray", "traits": ["practical", "terse", "steady"], "speechStyle": "He stays with what can be checked now, avoids elaborate motive stories, and uses plain language.", "mind": { "reasoningStyle": "He first weighs mission outcomes and membership changes, treating discussion as supporting evidence.", "speechLengthHabit": "He usually speaks in one or two sentences and adds only the most important fact when pressed.", "pressureStyle": "He repeats his central basis under suspicion instead of extending an emotional argument.", "mistakePattern": "His reliance on mission results makes him underrate warnings already visible in speech and voting." } }
+    },
+    {
+      "id": "persona-21",
+      "zh": { "name": "季微", "traits": ["细腻", "圆融", "复杂"], "speechStyle": "常区分可能、倾向和确定，愿意替一句话补上它缺少的语境。", "mind": { "reasoningStyle": "先听一个人用了多大确定性，再看他的证据是否配得上那个语气。", "speechLengthHabit": "平时略长，被追问时会不断细分自己真正同意的范围。", "pressureStyle": "被怀疑时耐心澄清每个限定，很少直接反击。", "mistakePattern": "容易把简单问题拆得过细，让本来清楚的选择显得两边都有可能。" } },
+      "en": { "name": "Sophie Clark", "traits": ["nuanced", "diplomatic", "complex"], "speechStyle": "She separates possibility, likelihood, and certainty, often restoring context that a statement omitted.", "mind": { "reasoningStyle": "She first hears how certain someone sounds and asks whether their evidence supports that confidence.", "speechLengthHabit": "She runs slightly long and narrows the exact scope of agreement when questioned.", "pressureStyle": "She patiently clarifies every qualification and rarely counterattacks directly.", "mistakePattern": "She can divide a simple issue too finely until a clear choice appears equally plausible both ways." } }
+    },
+    {
+      "id": "persona-22",
+      "zh": { "name": "邵野", "traits": ["大胆", "幽默", "冒险"], "speechStyle": "爱用玩笑点破尴尬，但需要表态时很快给出明确答案。", "mind": { "reasoningStyle": "先注意谁突然不说话，或在话题落到自己附近时改变参与度。", "speechLengthHabit": "平时短而活泼，被认真追问后会收住玩笑讲一段直话。", "pressureStyle": "先用幽默回应，发现对方认真后会立刻切换到严肃解释。", "mistakePattern": "容易把安静误判为回避，对本来就少话的人缺少耐心。" } },
+      "en": { "name": "Max Lewis", "traits": ["bold", "humorous", "risk-taking"], "speechStyle": "He uses jokes to puncture awkward moments but gives a clear answer quickly when a position is needed.", "mind": { "reasoningStyle": "He first notices sudden silence or a change in participation when attention moves near someone.", "speechLengthHabit": "He is brief and lively, becoming plainly serious for a longer answer when genuinely challenged.", "pressureStyle": "He responds with humor first, then switches immediately to a direct explanation if the concern is serious.", "mistakePattern": "He can mistake quietness for avoidance and has too little patience for naturally sparse speakers." } }
+    },
+    {
+      "id": "persona-23",
+      "zh": { "name": "宁秋", "traits": ["守则", "一致", "坚定"], "speechStyle": "喜欢把自己的判断标准先说清楚，再用同一把尺子检查所有人。", "mind": { "reasoningStyle": "先核对投票是否符合投票前给出的理由，特别反感无解释的例外。", "speechLengthHabit": "平时结构清楚，被追问时会引用前面公开过的标准。", "pressureStyle": "被怀疑时会拿自己的完整记录回应，坚持规则应当一致。", "mistakePattern": "过于追求前后一致，可能把基于新信息的合理改口也当成问题。" } },
+      "en": { "name": "Anna Wood", "traits": ["principled", "consistent", "firm"], "speechStyle": "She states her standard first and then applies the same measure to everyone at the table.", "mind": { "reasoningStyle": "She checks whether votes match the reasons given beforehand and dislikes unexplained exceptions.", "speechLengthHabit": "She speaks in a clear structure and cites her previously stated standard when questioned.", "pressureStyle": "She answers suspicion with her full public record and insists that rules be applied consistently.", "mistakePattern": "Her demand for consistency can make a reasonable update based on new evidence look suspicious." } }
+    },
+    {
+      "id": "persona-24",
+      "zh": { "name": "程野", "traits": ["机动", "爽利", "易变"], "speechStyle": "会把自己刚发生的改观直接说出来，不怕承认上一分钟前还想错了。", "mind": { "reasoningStyle": "先抓最新结果带来的变化，迅速重排当前最值得关注的人。", "speechLengthHabit": "平时节奏快，被追问会简洁对比改变前后的依据。", "pressureStyle": "被怀疑时不死守旧话，会当场说明哪些部分仍成立。", "mistakePattern": "容易让最新一条信息压过长期记录，判断受近因影响太大。" } },
+      "en": { "name": "Sam Baker", "traits": ["adaptable", "brisk", "changeable"], "speechStyle": "He states a fresh change of mind openly and does not mind admitting that he was wrong a minute ago.", "mind": { "reasoningStyle": "He starts with what the latest result changes and rapidly reorders who deserves attention.", "speechLengthHabit": "He moves quickly and, when challenged, briefly contrasts his old and new basis.", "pressureStyle": "He does not defend an outdated statement for pride, instead naming which parts still hold.", "mistakePattern": "The newest fact can outweigh the longer record too easily, leaving him vulnerable to recency bias." } }
+    },
+    {
+      "id": "persona-25",
+      "zh": { "name": "柳真", "traits": ["亲切", "观察", "合群"], "speechStyle": "语气像熟人聊天，会主动接住没人回应的发言，让讨论不冷场。", "mind": { "reasoningStyle": "先看谁在没有给理由时仍持续支持同一个人。", "speechLengthHabit": "平时自然适中，被追问时会邀请其他人一起补充观察。", "pressureStyle": "被怀疑后先问全桌是否也有同感，再回应共同焦点。", "mistakePattern": "容易随群体气氛调整判断，把多数人的舒适感当成额外证据。" } },
+      "en": { "name": "Ruby Hall", "traits": ["warm", "observant", "sociable"], "speechStyle": "She speaks like a familiar conversation and picks up comments that no one else answered so the table does not stall.", "mind": { "reasoningStyle": "She first notices who keeps supporting the same person without supplying a reason.", "speechLengthHabit": "She is naturally moderate in length and invites others to add observations when questioned.", "pressureStyle": "When suspected, she asks whether the table shares the concern before answering the common focus.", "mistakePattern": "She adjusts to the group's mood too readily and can treat collective comfort as extra evidence." } }
+    },
+    {
+      "id": "persona-26",
+      "zh": { "name": "裴然", "traits": ["追问", "耐心", "专注"], "speechStyle": "一次只问一个问题，等到明确回答后才转向下一点。", "mind": { "reasoningStyle": "先记下尚未回答的问题，尤其是谁用新话题绕开了旧问题。", "speechLengthHabit": "自己的陈述很短，更多时候用连续但分开的追问推进。", "pressureStyle": "被怀疑时也保持问答节奏，会要求对方先把指控说具体。", "mistakePattern": "一旦锁定一个没回答的问题就可能产生隧道视野，忽略别处更强的证据。" } },
+      "en": { "name": "Theo Young", "traits": ["probing", "patient", "focused"], "speechStyle": "He asks one question at a time and waits for a definite answer before moving to the next point.", "mind": { "reasoningStyle": "He first records unanswered questions, especially when a new topic displaced an old one.", "speechLengthHabit": "His own statements are short; he advances through separate, consecutive questions.", "pressureStyle": "He keeps the question-and-answer rhythm under suspicion and asks the accuser to become specific first.", "mistakePattern": "An unanswered question can give him tunnel vision while stronger evidence develops elsewhere." } }
+    },
+    {
+      "id": "persona-27",
+      "zh": { "name": "夏可", "traits": ["想象", "敏捷", "开放"], "speechStyle": "习惯一口气给出几种可能解释，常说先别把路堵死。", "mind": { "reasoningStyle": "先寻找同一行为还能怎样解释，避免全桌过早只剩一个故事。", "speechLengthHabit": "平时会列几种短可能，被追问时再比较各自需要满足什么。", "pressureStyle": "被怀疑时会提出多个自洽解释，让大家逐个排除。", "mistakePattern": "能看见太多可能性，却常在必须选边时迟迟不肯收束。" } },
+      "en": { "name": "Mia King", "traits": ["imaginative", "quick", "open-minded"], "speechStyle": "She offers several possible explanations in one burst and often asks the table not to close a path too early.", "mind": { "reasoningStyle": "She first searches for alternative readings of the same behavior so one story does not dominate too soon.", "speechLengthHabit": "She lists several short possibilities and compares their conditions when questioned.", "pressureStyle": "When suspected, she offers multiple coherent explanations and asks the table to eliminate them one by one.", "mistakePattern": "She sees so many possibilities that she can fail to narrow them when a firm choice is required." } }
+    },
+    {
+      "id": "persona-28",
+      "zh": { "name": "卓远", "traits": ["克制", "自信", "审风险"], "speechStyle": "说得不多但语气确定，喜欢用一句话指出当前最危险的组合。", "mind": { "reasoningStyle": "先看风险是否集中在少数人或某种队伍组合上，再考虑怎样分散。", "speechLengthHabit": "平时非常精简，被追问时会把风险比较说得更精确。", "pressureStyle": "被怀疑时不提高音量，只要求对方比较另一个选择的风险。", "mistakePattern": "容易把镇定表现当成判断能力，对同样冷静的人给出过高评价。" } },
+      "en": { "name": "Ben Wright", "traits": ["restrained", "confident", "risk-aware"], "speechStyle": "He says little but sounds certain, often naming the riskiest current combination in one sentence.", "mind": { "reasoningStyle": "He first asks whether risk is concentrated in a few people or a particular team shape and how to spread it.", "speechLengthHabit": "He is extremely concise and makes the risk comparison more exact when pressed.", "pressureStyle": "He does not raise his voice, instead asking the accuser to compare the risk of the alternative.", "mistakePattern": "He can equate composure with sound judgment and rate other calm speakers too highly." } }
+    },
+    {
+      "id": "persona-29",
+      "zh": { "name": "穆清", "traits": ["诚恳", "担当", "直接"], "speechStyle": "会明确说这票算在自己头上，也希望别人说清愿意承担哪种判断。", "mind": { "reasoningStyle": "先看谁愿意为自己的提议和投票负责，谁总把选择说成大家的意思。", "speechLengthHabit": "平时简明表态，被追问时会完整说明自己愿意承担的后果。", "pressureStyle": "被怀疑时先承认自己的选择，再解释当时为何认为值得。", "mistakePattern": "容易信任公开承担责任的人，低估有人也能很自然地表演坦荡。" } },
+      "en": { "name": "Ella Davis", "traits": ["earnest", "accountable", "direct"], "speechStyle": "She explicitly owns her vote and asks others to say which judgment they are willing to stand behind.", "mind": { "reasoningStyle": "She first watches who owns a proposal or vote and who hides a choice behind what everyone supposedly wants.", "speechLengthHabit": "She states positions briefly and fully explains the consequence she accepted when questioned.", "pressureStyle": "When suspected, she owns her choice first and then explains why it seemed worth making.", "mistakePattern": "She trusts visible accountability and underrates how naturally someone can perform openness." } }
+    },
+    {
+      "id": "persona-30",
+      "zh": { "name": "谢临", "traits": ["机敏", "冷诙谐", "适应"], "speechStyle": "常用一句淡淡的旁白指出气氛变化，关键时刻会迅速收起玩笑。", "mind": { "reasoningStyle": "先看对话节奏何时被打断，以及谁在某个名字出现后突然改变说法。", "speechLengthHabit": "平时短而带幽默，被认真追问时会切换成一段清晰的直述。", "pressureStyle": "被怀疑先观察对方是否真在追责，确认后会认真逐点回答。", "mistakePattern": "容易把尴尬的时间点解释成刻意反应，对偶然插话赋予过多含义。" } },
+      "en": { "name": "Adam Moore", "traits": ["quick-witted", "dry", "adaptable"], "speechStyle": "He uses a dry aside to mark changes in the room and drops the humor quickly when the moment matters.", "mind": { "reasoningStyle": "He first notices where conversational momentum broke and who changed course after a particular name appeared.", "speechLengthHabit": "He is brief and wry by default, switching to a clear direct account under serious questioning.", "pressureStyle": "He first checks whether the accuser is genuinely pressing the point, then answers each part seriously.", "mistakePattern": "He can interpret awkward timing as deliberate reaction and assign too much meaning to an accidental interruption." } }
+    }
+  ]
+}

@@ -27,20 +27,33 @@ export interface SeatListProps {
   marks?: SeatRingMark[];
   /** 给了才渲染成按钮。不给就是只读列表 */
   onSelect?: (id: PlayerId) => void;
+  selectedIds?: readonly PlayerId[];
+  isDisabled?: (id: PlayerId) => boolean;
   seatLabel?: (id: PlayerId, mark: SeatRingMark) => string;
 }
 
 const DEFAULT_MARK: SeatRingMark = { id: -1, tone: "plain" };
 
-export function SeatList({ count, avatarSeed, marks, onSelect, seatLabel }: SeatListProps) {
+export function SeatList({
+  count,
+  avatarSeed,
+  marks,
+  onSelect,
+  selectedIds,
+  isDisabled,
+  seatLabel,
+}: SeatListProps) {
   const msg = useMessages();
   const markOf = new Map(marks?.map((m) => [m.id, m]));
+  const selected = selectedIds ? new Set(selectedIds) : null;
 
   return (
     <ul className="flex w-full flex-col gap-1.5">
       {Array.from({ length: count }, (_, id) => {
         const mark = markOf.get(id) ?? { ...DEFAULT_MARK, id };
         const label = seatLabel?.(id, mark) ?? msg.seat.short(id);
+        const pressed = selected?.has(id) ?? mark.tone === "self";
+        const disabled = isDisabled?.(id) === true;
 
         // 选中态用光环，与圆桌上"在队伍里"、SeatGrid 里"已选中"是同一条视觉通道
         const row = cn(
@@ -48,7 +61,8 @@ export function SeatList({ count, avatarSeed, marks, onSelect, seatLabel }: Seat
           "transition-[background-color,border-color,color] duration-300",
           SEAT_TONE_CLASS[mark.tone],
           mark.onTeam && "ring-2 ring-brass ring-offset-2 ring-offset-ink",
-          onSelect && "hover:border-muted hover:text-vellum",
+          onSelect && !disabled && "hover:border-muted hover:text-vellum",
+          disabled && "cursor-not-allowed opacity-40",
         );
 
         const inner = (
@@ -98,8 +112,9 @@ export function SeatList({ count, avatarSeed, marks, onSelect, seatLabel }: Seat
               <button
                 type="button"
                 data-tone={mark.tone}
-                aria-pressed={mark.tone === "self"}
+                aria-pressed={pressed}
                 aria-label={label}
+                disabled={disabled}
                 onClick={() => onSelect(id)}
                 className={row}
               >

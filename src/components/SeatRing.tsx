@@ -45,6 +45,10 @@ export interface SeatRingProps {
   center?: React.ReactNode;
   /** 给了才渲染成按钮。不给就是只读的展示环 */
   onSelect?: (id: PlayerId) => void;
+  /** 交互模式下真正的选中项；不传时沿用选座页的 self tone 兼容语义。 */
+  selectedIds?: readonly PlayerId[];
+  /** 返回 true 的座位不能再选；已选座位仍应保持可取消。 */
+  isDisabled?: (id: PlayerId) => boolean;
   seatLabel?: (id: PlayerId, mark: SeatRingMark) => string;
 }
 
@@ -84,7 +88,8 @@ const DEFAULT_MARK: SeatRingMark = { id: -1, tone: "plain" };
  * 因此一行都不用改，"圆桌只有一份"这条约定继续成立。
  */
 export function SeatRing(props: SeatRingProps) {
-  const { count, avatarSeed, marks, center, onSelect, seatLabel } = props;
+  const { count, avatarSeed, marks, center, onSelect, selectedIds, isDisabled, seatLabel } =
+    props;
 
   return (
     <>
@@ -95,6 +100,8 @@ export function SeatRing(props: SeatRingProps) {
           avatarSeed={avatarSeed}
           marks={marks}
           onSelect={onSelect}
+          selectedIds={selectedIds}
+          isDisabled={isDisabled}
           seatLabel={seatLabel}
         />
       </div>
@@ -106,9 +113,19 @@ export function SeatRing(props: SeatRingProps) {
   );
 }
 
-function Ring({ count, avatarSeed, marks, center, onSelect, seatLabel }: SeatRingProps) {
+function Ring({
+  count,
+  avatarSeed,
+  marks,
+  center,
+  onSelect,
+  selectedIds,
+  isDisabled,
+  seatLabel,
+}: SeatRingProps) {
   const msg = useMessages();
   const markOf = new Map(marks?.map((m) => [m.id, m]));
+  const selected = selectedIds ? new Set(selectedIds) : null;
 
   return (
     <div className="relative mx-auto aspect-square w-[clamp(15rem,78vw,24rem)]">
@@ -124,6 +141,8 @@ function Ring({ count, avatarSeed, marks, center, onSelect, seatLabel }: SeatRin
       {seatRingPositions(count).map((point) => {
         const mark = markOf.get(point.id) ?? { ...DEFAULT_MARK, id: point.id };
         const label = seatLabel?.(point.id, mark) ?? msg.seat.short(point.id);
+        const pressed = selected?.has(point.id) ?? mark.tone === "self";
+        const disabled = isDisabled?.(point.id) === true;
 
         // 光环画在外层：节点自己的 border 归 tone 用，两者不打架
         const wrapper = cn(
@@ -136,7 +155,7 @@ function Ring({ count, avatarSeed, marks, center, onSelect, seatLabel }: SeatRin
           "transition-[background-color,border-color,color] duration-300",
           SEAT_TONE_CLASS[mark.tone],
           mark.status === "acting" && "animate-pulse",
-          onSelect && INTERACTIVE_CLASS,
+          onSelect && !disabled && INTERACTIVE_CLASS,
         );
         const style = { left: `${point.leftPercent}%`, top: `${point.topPercent}%` };
         const badges = (
@@ -165,11 +184,12 @@ function Ring({ count, avatarSeed, marks, center, onSelect, seatLabel }: SeatRin
             key={point.id}
             type="button"
             data-tone={mark.tone}
-            aria-pressed={mark.tone === "self"}
+            aria-pressed={pressed}
             aria-label={label}
+            disabled={disabled}
             onClick={() => onSelect(point.id)}
             style={style}
-            className={wrapper}
+            className={cn(wrapper, disabled && "cursor-not-allowed opacity-40")}
           >
             <span className={node}>
               <SeatAvatar

@@ -30,15 +30,14 @@ export interface CreateGameOptions {
 /**
  * 占位人设，给引擎测试和随机模拟用。
  *
- * 【不要删掉它】阶段 4 确实加了真人设（`ai/personas.ts` 开局用 LLM 生成一桌），
- * 但那条路要发网络。这个函数是全部引擎测试与 1000 局模拟的确定性来源，
- * 也是人设生成失败时的回退。两者各司其职，谁也替代不了谁。
+ * 【不要删掉它】正常 UI 开局使用仓库里的静态双语人设库；这个函数仍是全部
+ * 引擎单测与随机模拟的轻量、确定性测试夹具，不参与正常开局。
  */
 export function makePlaceholderPersonas(count: number): Persona[] {
   return Array.from({ length: count }, (_, i) => ({
     name: `AI-${i + 1}`,
     traits: ["占位"],
-    speechStyle: "占位人设，阶段 4 替换",
+    speechStyle: "引擎测试用占位人设",
   }));
 }
 

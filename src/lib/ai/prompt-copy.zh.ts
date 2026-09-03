@@ -460,58 +460,6 @@ export const zhPrompt = {
   noJsonObject: "响应里找不到合法的 JSON 对象",
 
   // -------------------------------------------------------------------------
-  // 人设生成（personas.ts 用）
-  // -------------------------------------------------------------------------
-
-  /**
-   * 【三条约束直接抄自 wolfcha 的 characterGenerator.fullPersonasPrompt】它们都是踩出来的：
-   * - 不写 high/low/aggressive 这类标签：标签会让模型演一个标签，而不是演一个人
-   * - **不写字数区间**：与 rules.md §6 同源，中文模型对字数的感知很差
-   * - 说话风格里不许有职业类比和行业术语：否则人设本身就会把"里程碑/分工"那套话
-   *   带进牌桌，而那正是 publicSpeechRules 刚刚禁掉的东西
-   */
-  personaGen: {
-    prompt: (count: number) =>
-      [
-        `你在为一局阿瓦隆桌游生成 ${count} 位 AI 玩家的人设。他们是"来玩阿瓦隆的普通人"，不是剧本杀角色。`,
-        "",
-        "【目标】一桌真实玩家：有人大胆有人谨慎，有人记票型有人记语气，",
-        "有人一两句带过、有人被追问就展开。彼此要明显不同，但每个人都得能正常参与讨论。",
-        "",
-        "【每个人要有】",
-        "- name：中文名，2-3 个字，互不相同",
-        "- traits：2-3 个性格词",
-        "- speechStyle：说话的语气、节奏和句式习惯",
-        "- mind.reasoningStyle：看局势时最先注意什么（票型、语气、上过几次车、位置关系……）",
-        "- mind.speechLengthHabit：平时、被追问、被指认时话的长短怎么变",
-        "- mind.pressureStyle：被点名或被怀疑时会怎么反应",
-        "- mind.mistakePattern：他常犯的判断错误——**每个人都要有缺陷**，完美的人不像真人",
-        "",
-        "【硬约束】",
-        "- 全部写成自然语言描述，不要写 high/low/aggressive/新手/高手 这类标签",
-        "- **不要出现任何字数区间**（不要写「30-50 字」这种）",
-        "- speechStyle 与 mind 里不许出现职业类比、行业术语、职场黑话——这是牌桌，不是周会",
-        "- 不要写和阿瓦隆无关的身世剧情",
-        "",
-        "【输出格式】",
-        "只输出一个 JSON 对象，不要解释文字，不要 markdown 代码块：",
-        '{"personas":[{"name":"…","traits":["…"],"speechStyle":"…",' +
-          '"mind":{"reasoningStyle":"…","speechLengthHabit":"…","pressureStyle":"…","mistakePattern":"…"}}]}',
-        `personas 数组必须恰好 ${count} 个元素。`,
-      ].join("\n"),
-
-    /** 【回退绝不静默】rules.md §6：悄悄换成占位人设会让你去改 prompt 而不是看这一行 */
-    noteFallback: (reason: string) => `人设生成失败（${reason}），回退到占位人设`,
-    noteGenerated: (count: number, names: readonly string[]) =>
-      `已生成 ${count} 份人设：${names.join("、")}`,
-    unknownReason: "未知原因",
-    badJson: (detail: string) => `返回的 JSON 不合格式：${detail}`,
-    unknownDetail: "未知",
-    tooFew: (got: number, need: number) => `只给了 ${got} 份，需要 ${need} 份`,
-    duplicateNames: "有重名的人设",
-  },
-
-  // -------------------------------------------------------------------------
   // mock（dev 用，但会渲染进 SpeechFeed）
   // -------------------------------------------------------------------------
 

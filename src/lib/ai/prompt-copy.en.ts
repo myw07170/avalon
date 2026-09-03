@@ -357,56 +357,6 @@ export const enPrompt: PromptCopy = {
     `Your last output was rejected: ${detail}. Output a single JSON object again, exactly as described in ${outputRef}, with no explanation.`,
   noJsonObject: "no valid JSON object found in the response",
 
-  /**
-   * 【三条约束与中文那份逐条同源】不写标签、不写字数区间、说话风格里不许有行业术语。
-   *
-   * 【多一条：明写西方名字】参考项目 wolfcha 的做法是在 prompt 里写死
-   * "Use native Western English names (e.g. James Miller), NOT Asian-style names"，
-   * 而不是在 TS 里按 locale 分支。照抄这一条：人设生成是纯 prompt 工程，
-   * 加一个 if 只会让"名字为什么是中文的"这件事散到两个文件里。
-   */
-  personaGen: {
-    prompt: (count) =>
-      [
-        `You are creating ${count} AI player characters for a game of Avalon. They are ordinary people who came to play Avalon, not characters from a murder-mystery script.`,
-        "",
-        "GOAL: a believable table. Some bold, some cautious; some track voting patterns, some track tone;",
-        "some say a sentence and stop, some open up when pushed. Clearly different from one another, but every one of them able to hold a normal discussion.",
-        "",
-        "EACH PERSON NEEDS:",
-        "- name: a native Western English given name and surname (e.g. James Miller, Sarah Johnson). No Asian-style names, no Chinese characters. All different from each other",
-        "- traits: 2-3 words for temperament",
-        "- speechStyle: their tone, rhythm and sentence habits",
-        "- mind.reasoningStyle: what they notice first when reading the table (voting patterns, tone, who has been on missions, seat positions...)",
-        "- mind.speechLengthHabit: how their length changes normally, when pushed, and when accused",
-        "- mind.pressureStyle: how they react to being named or suspected",
-        "- mind.mistakePattern: the judgement error they habitually make. **Everyone must have a flaw** — a flawless player does not read as a person",
-        "",
-        "HARD CONSTRAINTS:",
-        "- Write everything as natural description. No labels like high/low/aggressive/beginner/expert",
-        "- **Never give a word or character count** (nothing like \"30-50 words\")",
-        "- No professional analogies, no industry jargon, no boardroom vocabulary anywhere in speechStyle or mind — this is a card table, not a status meeting",
-        "- No backstory unrelated to playing Avalon",
-        "- Use English only. Do not use Chinese characters anywhere in the output",
-        "",
-        "OUTPUT FORMAT:",
-        "Output a single JSON object. No explanation, no markdown code fence:",
-        '{"personas":[{"name":"...","traits":["..."],"speechStyle":"...",' +
-          '"mind":{"reasoningStyle":"...","speechLengthHabit":"...","pressureStyle":"...","mistakePattern":"..."}}]}',
-        `The personas array must contain exactly ${count} elements.`,
-      ].join("\n"),
-
-    noteFallback: (reason) =>
-      `Character generation failed (${reason}); fell back to placeholder characters`,
-    noteGenerated: (count, names) =>
-      `Generated ${count} characters: ${names.join(", ")}`,
-    unknownReason: "unknown reason",
-    badJson: (detail) => `The returned JSON did not match the expected shape: ${detail}`,
-    unknownDetail: "unknown",
-    tooFew: (got, need) => `only ${got} returned, ${need} needed`,
-    duplicateNames: "two characters share a name",
-  },
-
   mock: {
     text: (
       name: string,

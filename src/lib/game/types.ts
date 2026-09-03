@@ -237,7 +237,7 @@ export interface Persona {
   speechStyle: string;
   /** 头像标识，UI 用 */
   avatar?: string;
-  /** 打牌时的隐藏画像。占位人设没有，真实对局由 ai/personas.ts 生成 */
+  /** 打牌时的隐藏画像。占位测试人设可以没有，正常 UI 对局来自静态人设库 */
   mind?: PersonaMind;
 }
 

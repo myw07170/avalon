@@ -317,7 +317,7 @@ export interface ChatMessage {
  *
  * 抛出的消息里绝不带 apiKey，也不原样回传 provider 的响应体。
  */
-/** personas.ts 也要用这条链路，所以导出。它不认识对局，只负责把 messages 发出去 */
+/** 开发期静态目录生成器也用这条链路，所以导出。它不认识对局，只负责发送 messages */
 export async function callProvider(
   config: LlmProviderConfig,
   messages: ChatMessage[],

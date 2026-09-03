@@ -133,8 +133,8 @@ src/
           再由 `START_GAME` 转入 `ROLE_REVEAL`。这里若直接给 `ROLE_REVEAL`，
           SETUP 阶段和 `START_GAME` 动作就成了死代码
       - `makePlaceholderPersonas(n)`：占位人设，供测试和阶段 3 的随机模拟用。
-        **阶段 4 加了真人设之后它仍然保留**——真人设要发网络，而这个函数是全部引擎测试与
-        1000 局模拟的确定性来源，也是人设生成失败时的回退
+        **正常 UI 改用静态人设库之后它仍然保留**——这个函数是全部引擎测试与
+        1000 局模拟的轻量确定性来源，不参与正常开局
 
 **完成标准**
 
@@ -767,7 +767,7 @@ pnpm vitest run src/lib/ai/real-game.test.ts
 | 底线规则三条 | 禁场外话术直接掐掉"里程碑/分工/时间线"那套周会黑话——模型不知道自己在牌桌上就会退回最熟的语域；禁编造治"引用一句没人说过的话"；立场连贯让整局推理能累积 |
 | 发言位次感 | 不给位次，第一个发言的人会凭空引用"前面几位提到"，最后一个会说"再看看 X 号怎么说"，而 X 号已经说完了 |
 | 事实类视角提示 | 差异不是靠"请说得有个性"要来的，是靠**每个人处境本来就不同**：被点名的人急着自辩，刚上过失败车的人先撇清 |
-| 真人设（LLM 生成） | 形容词改变不了模型关注什么，"最先看票型"和"最先看谁说话急"才会；人设里还要有**缺陷**，完美的人不像真人 |
+| 完整人设（现由静态库提供） | 形容词改变不了模型关注什么，"最先看票型"和"最先看谁说话急"才会；人设里还要有**缺陷**，完美的人不像真人 |
 
 **wolfcha 有一条注释值得原样引在这里** —— 他们踩过和我们上一轮完全相同的坑：
 
@@ -787,11 +787,11 @@ pnpm vitest run src/lib/ai/real-game.test.ts
   提议讨论的游标本来就从 1 起步（队长的选人说明占了 `speakingOrder[0]`），照实渲染就对了——
   有一条用例专门钉住"第一个讨论发言者显示第 2 个、已发言名单含队长"，
   防止后人"修正"成第 1 个而与【全场发言】里已有队长那条自相矛盾。
-- **人设一次调用出齐全部**，不是每人一次：一次出齐才谈得上互相错开，分人生成必然撞名撞风格，
-  还贵 n 倍。`makePlaceholderPersonas` 原样保留——它是全部引擎测试与 1000 局模拟的确定性来源，
-  不能引入网络依赖。
-- 人设生成**只做了 Node 侧**（`real-game.test.ts` 本来就跑在 Node 里）。
-  浏览器要用的 `/api/personas` 留到阶段 5，理由与 remote.ts 同源：key 不进浏览器。
+- **静态人设库由一次手动调用出齐 30 个双语逻辑人物**，不是每人一次：一次出齐才谈得上
+  互相错开，分人生成必然撞名撞风格，还贵 n 倍。`makePlaceholderPersonas` 原样保留——
+  它只服务引擎测试与随机模拟，正常 UI 从静态库取人设。
+- 游戏运行期不生成人设：浏览器不接触 provider，也没有 `/api/personas`。开发者只有显式执行
+  `pnpm personas:generate` 才会发一次请求，严格校验成功后写入仓库。
 
 **变异测试自查**（三条各改一次，确认都被抓住后还原）：
 
@@ -825,7 +825,7 @@ pnpm vitest run src/lib/ai/real-game.test.ts
 | 场外话术（里程碑/分工/时间线） | 几乎每条都有 | 基本消失 |
 | 自曝身份 | 2 → 1 → 0 | **0**（60 条发言） |
 | schema 兜底 / 合法性兜底 | 0% / 0% | **0% / 0%** |
-| 人设 | 占位（AI-1…AI-5） | 一次调用出齐：陈川、李珂、孙娜、赵明、周晴，**没走回退** |
+| 人设 | 占位（AI-1…AI-5） | 当时一次调用出齐：陈川、李珂、孙娜、赵明、周晴，**没走回退**；当前实现已改为静态库 |
 
 **L2 那条线是对的。** prompt 里只给了方法（"失败票只可能来自坏人"及其反向），
 没给任何本局结论，模型自己把结论说了出来——派西维尔在第 2 轮复盘里说
@@ -1343,41 +1343,20 @@ pnpm vitest run src/lib/ai/real-game.test.ts
       - **不动 `AiClient.decide` 的签名**：那是 mock 与真实实现的共同契约，
         不该为一方的实现细节变形。挂在 client 的构造参数上
 
-### 开局的真人设：`/api/personas`
+### 静态人设库与开局指派
 
-`personas.ts` 的文件头、`store/game.ts` 的 `CreateGameInput`、以及上面阶段 4 那句
-「浏览器要用的 `/api/personas` 留到阶段 5」三处都指着这件事，但一直没做。
-后果是**浏览器里跑的永远是占位人设**（AI-1…AI-5）——`generatePersonas` 至今只被
-`real-game.test.ts` 调用过，而 [rules.md §6](./rules.md) 说这正是「五个 AI 说话千人一面」的主因。
-
-- [x] `src/app/api/personas/route.ts`：逐条照抄 `api/ai/route.ts` 的写法
-      - `maxDuration = 30` 而不是 60：那边留 60 是因为一次请求内可能跑 3 次模型调用
-        （校验失败要带反馈重问），人设只有一次。**这个差别写在注释里**，
-        否则下一个人会顺手抄成 60
-      - **必须自己先调 `readProviderConfig()`**：`generatePersonas` 把配置错误也吞成了
-        占位回退（那是它相对 `client.ts` 的刻意差别——人设是锦上添花，不是前置条件），
-        503 那一支只能在 route 里判，否则「没配 key」会伪装成「模型不听话」
-      - **没有 502 分支**：上游挂了照样 200，回退占位人设，原因写在 `notes` 里。
-        对调用方来说「拿到了一桌能用的人设」永远成立
-      - `notes` 就是 [rules.md §6](./rules.md)「回退必须打点说明」的落点，
-        一路传到 `RoleCard` 上显示给玩家
-- [x] `personaRequestSchema`（`ai/schema.ts`）：`count` 的上下界从 `config.ts` 的常量派生。
-      下界是 `MIN_PLAYERS - 1`——count 是**AI 座位数**，有人类玩家时比总人数少 1。
-      夹这一下的理由与 `maxRetries` 同源：请求来自浏览器，`count: 9999` 会让模型编一万份人设
-- [x] `ai/personas.ts`：这一次调用**不发 `max_tokens`**，全项目唯一的例外
-      - 上一轮加的 `LLM_MAX_TOKENS` 是按对局中的单次决策定的（一个布尔值加一句 reasoning）。
-        人设一次出齐全桌，10 份 × 每份 4 个 `mind` 字段，700 token 必然截断 →
-        JSON 解析失败 → **回退占位人设**，而那恰恰是这个模块要修的症状。
-        **让一个提速开关把它悄悄退回去，是最难查的一类坑**，有一条用例专门钉着
-- [x] `ai/remote.ts` 的 `fetchPersonas`：放这个文件是刻意的，
-      `remote.test.ts` 那条源码断言（查不到 `./client` / `apiKey` / `process.env`）
-      会连它一起罩住。**这个函数不抛**，与 `decide` 正好相反
-- [x] `SetupScreen` 的「入座」变异步：`busy` 状态 + 按钮文案，只在 remote 模式下发这一趟
-      （mock 模式根本不碰 LLM，发了就是白等）
-      - 种子仍在**点击时**取，而且要在 `await` 之前取好——await 之后 `draft` 可能已经变了
-      - **绝不因为人设失败而不开局**
-- [x] `personaNotesAtom` + `RoleCard` 上的那一行：落在身份卡而不是设置页，
-      因为设置页点完就卸载了，而这句话必须让玩家看见
+- [x] 仓库保存 30 个稳定 ID 的双语逻辑人物；中英文各是一份完整 `Persona`，同一个 ID
+      表示同一个人物的本地化版本
+- [x] `pnpm personas:generate` 只在开发者手动执行时发一次 provider 请求，不发送
+      `max_tokens`；恰好 30 项、字段、双语姓名和画像唯一性全部通过后才写入
+- [x] 已有目录默认拒绝覆盖，只有显式 `--force` 可重生成；失败不落半成品、不塞占位数据、
+      不自动做第二次付费调用
+- [x] 设置页为每个 AI 座位提供圆桌名册，可搜索并逐座位指定；已分配条目不能重复占座，
+      支持单座恢复随机与全部随机
+- [x] 点击开局时，未指定座位由独立于发牌 RNG 的派生种子无重复补齐；同 seed 与选择得到
+      同样结果，且不会改变角色洗牌或首任队长
+- [x] 开局按当前界面语言解析人设并锁定本局；mock 与 remote 共用静态库，运行期间不再因
+      人设请求 LLM。`/api/personas`、浏览器 `fetchPersonas`、请求 schema 和回退打点已删除
 
 ### 移动端：圆桌在窄屏降级为列表
 
@@ -1803,14 +1782,13 @@ Vercel Hobby 只允许个人、非商业用途。**任何真实收款、公开�
 ```
 点击开局
   -> POST /api/game-sessions（验证账号 + 幂等扣 1 额度 + 创建 session）
-  -> /api/personas 带 X-Game-Session-Id
-  -> 本地 createGame
+  -> 本地从静态目录指派人设并 createGame
   -> /api/ai 全程带同一个 X-Game-Session-Id
   -> 终局或重开时关闭 session
 ```
 
-**必须先创建 session，再请求人设。** 现有流程是 `/api/personas` 在本地 `createGame` 之前调用；
-它同样会花 LLM 预算。只保护 `/api/ai` 会留下一个不登录也能刷的洞。
+**必须先创建 session，再建局。** 人设指派是纯本地操作，不消耗 LLM 预算；运行期唯一需要
+按 session 保护的 provider 入口是 `/api/ai`。
 
 - [ ] `POST /api/game-sessions`
       - 请求只收一次点击期间稳定不变的 `requestId`，不收 `userId`
@@ -1819,7 +1797,7 @@ Vercel Hobby 只允许个人、非商业用途。**任何真实收款、公开�
       - 返回 `{ sessionId, remainingCredits, maxAiRequests, expiresAt }`
 - [ ] `GET /api/credits`：从已验证 session 取用户，返回当前余额与必要的交易摘要；
       绝不按 query/body 里的用户标识查账
-- [ ] `/api/personas`、`/api/ai` 和以后新增的赛后点评等付费 LLM 路由共用同一 guard：
+- [ ] `/api/ai` 和以后新增的赛后点评等付费 LLM 路由共用同一 guard：
       - 先验登录、session 所属账号、状态和过期时间，再验各自请求 schema
       - 全部通过后，在调用 provider **之前**用单条原子更新增加请求计数
       - `used < limit` 必须写进更新条件；10 个并发决策也不能一起穿过第 250 次
@@ -1849,8 +1827,8 @@ Vercel Hobby 只允许个人、非商业用途。**任何真实收款、公开�
 - [ ] 用服务端 `APP_DEPLOYMENT_STAGE=invited|commercial` 控制商业能力：`invited` 时完全隐藏购买入口，
       `POST /api/payments/checkout` 也必须在调用 provider 前返回 `403 COMMERCE_DISABLED`；
       不能只靠“没有支付 key”或客户端隐藏按钮来关停收款
-- [ ] 改写 `SetupScreen.start()` 的顺序：remote 模式先取 game session，拿到后再 `fetchPersonas`；
-      任一步失败都恢复按钮状态并按稳定错误码给出下一步操作
+- [ ] 改写 `SetupScreen.start()` 的顺序：remote 模式先取 game session，拿到后在本地从静态目录
+      指派人设并建局；失败时恢复按钮状态并按稳定错误码给出下一步操作
 - [ ] 一次开局点击只生成一个 `requestId`，直到请求成功或明确取消前都复用它；
       不能因为 React StrictMode、连点或网络重试生成多个扣费请求
 - [ ] 生产构建不显示 mock/remote 单选项，固定使用 remote；mock 只在本地开发、单测和明确的
@@ -1924,7 +1902,7 @@ interface PaymentProvider {
       [Protection Bypass for Automation](https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation)
 - [ ] `next.config.ts` 显式保持 `productionBrowserSourceMaps: false`；部署后确认公共静态资源没有 `.map`，
       客户端 bundle 不含 Supabase secret、LLM key、支付 secret 或构建时注入的 secret canary
-- [ ] Vercel 固定 Node.js 22+；复核 `/api/ai`、`/api/personas` 和 sandbox Webhook 的 runtime、
+- [ ] Vercel 固定 Node.js 22+；复核 `/api/ai` 和 sandbox Webhook 的 runtime、
       `maxDuration` 与缓存行为，所有带用户 Cookie 的响应都不得进入共享缓存
 - [ ] 发邀请前跑 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build`，再在受保护 Preview 验收：
       注册邮件、确认回跳、密码重置、恰好 1 局免费额度、开局扣费、退款、sandbox Webhook 与终局
@@ -1964,14 +1942,14 @@ interface PaymentProvider {
 
 | 场景 | 必须断言 |
 | --- | --- |
-| 未登录调用 `/api/personas` 或 `/api/ai` | 401，provider 0 次 |
+| 未登录调用 `/api/ai` | 401，provider 0 次 |
 | 未确认邮箱尝试开局 | 拒绝，不扣额度，不建 session |
 | 新确认账号 | 恰好 1 局；重复触发初始化仍是 1 局 |
 | 同一 `requestId` 并发开局 | 只扣 1 次，只返回 1 个 session |
 | 余额为 0 | 402，不出现负余额，不调用 provider |
 | 拿别人的 session id | 不可区分地按不存在处理，provider 0 次 |
 | 10 个并发请求撞上限 | 最多放行到 250，第 251 次在 provider 前被拒绝 |
-| 人设请求 | 和 `/api/ai` 使用同一 session、同一计数器，不能匿名调用 |
+| 静态人设指派 | 不调用 provider、不消耗 session 请求计数；手选与随机结果均不重复 |
 | 零成功调用后关闭/过期 | 只退 1 次，并有 refund 流水 |
 | 已有一次成功调用后退出 | 不退款；重开需要新额度 |
 | 同一支付 Webhook 重放 | order 只变 paid 一次，额度只增加一次 |
@@ -2040,7 +2018,7 @@ interface PaymentProvider {
 | 好人投失败 | 好人莫名其妙输 | `getLegalActions` 不给选项 + reducer 抛 `GOOD_CANNOT_FAIL`，双保险 |
 | LLM 输出不合 schema | 运行时崩，或静默拿到错的动作 | zod 校验 + 重试 + 合法动作随机兜底 |
 | token 成本失控 | 调试几天烧掉预算 | mock 模式默认开启，生产构建不暴露 mock 切换 |
-| 受邀或公开部署后 LLM 路由被刷 | `/api/personas` 或 `/api/ai` 账单异常增长 | 两条路由共用账号鉴权、按局扣费、session 上限；7.6A 前不发邀请，7.6B 前不公开 Production |
+| 受邀或公开部署后 LLM 路由被刷 | `/api/ai` 账单异常增长 | 路由使用账号鉴权、按局扣费、session 上限；7.6A 前不发邀请，7.6B 前不公开 Production |
 | 把 Private Repo 当安全边界 | secret 或商业规则被打进客户端，只因“仓库私有”就误判安全 | 浏览器与 API 全部按攻击者可见设计；server-only 边界、bundle canary 与 `.map` 检查 |
 | 受邀 Preview 意外变成公开 Production | 未受邀者能打开测试站点，或测试版本被搜索/传播 | Hobby 阶段只分享受保护 Preview，不 promote、不绑正式域名；逐项验收 Deployment Protection |
 | staging 数据或 secret 进入 production | 测试账号出现在正式站、sandbox/live 互串 | production 新项目只跑 migration；所有环境变量逐项隔离，断言业务数据 0 条迁入 |

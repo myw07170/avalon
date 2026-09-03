@@ -11,6 +11,7 @@
  *
  * 【三个零件在 TimelineItems.tsx】终局复盘画的是同一批东西，只是不打字、
  * 每条发言底下多挂一段心证。本文件只剩"直播"独有的那两样：打字机与自动滚动。
+ * 桌面端它还承担整屏右栏：标题固定在上、消息占满中间、人类操作台固定在下。
  *
  * 推导在 speech-feed-model.ts 与 vote-model.ts。
  */
@@ -19,10 +20,11 @@ import { useReducedMotion } from "framer-motion";
 import { useAtomValue } from "jotai";
 import { useMessages } from "@/i18n/useMessages";
 import { viewAtom } from "@/store/game";
+import { ActionPanel } from "./ActionPanel";
 import { GroupDivider, SpeechBubble, VoteCard } from "./TimelineItems";
 import { describeTimeline, typewriterStepMs } from "./speech-feed-model";
 
-export function SpeechFeed() {
+export function SpeechFeed({ enableActions = false }: { enableActions?: boolean }) {
   const view = useAtomValue(viewAtom);
   const msg = useMessages();
   const reduced = useReducedMotion() === true;
@@ -50,14 +52,19 @@ export function SpeechFeed() {
   if (!view) return null;
 
   return (
-    <section className="w-full">
-      <h2 className="mb-3 font-display text-xs tracking-[var(--track-3)] text-muted">
-        {msg.feed.title}
-      </h2>
+    <section className="w-full lg:flex lg:h-full lg:min-h-0 lg:flex-col">
+      <header className="mb-3 lg:mb-0 lg:shrink-0 lg:border-b lg:border-ink-line lg:px-5 lg:pb-4 lg:pt-18">
+        <h2 className="font-display text-xs tracking-[var(--track-3)] text-muted">
+          {msg.feed.title}
+        </h2>
+      </header>
 
       <div
         ref={boxRef}
-        className="max-h-[45dvh] overflow-y-auto rounded-lg border border-ink-line bg-ink-raised px-4 py-3"
+        className={
+          "max-h-[45dvh] overflow-y-auto rounded-lg border border-ink-line bg-ink-raised px-4 py-3 " +
+          "lg:min-h-0 lg:max-h-none lg:flex-1 lg:rounded-none lg:border-0 lg:bg-transparent lg:px-5 lg:py-5"
+        }
       >
         {items.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">{msg.feed.empty}</p>
@@ -79,6 +86,8 @@ export function SpeechFeed() {
           </ol>
         )}
       </div>
+
+      {enableActions && <ActionPanel />}
     </section>
   );
 }

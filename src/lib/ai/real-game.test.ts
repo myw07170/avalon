@@ -25,54 +25,16 @@
  * 【全 AI 局不需要 UI，也不需要起 Next 服务器】直接用 createAiClient 调 provider——
  * /api/ai 那层存在的意义是别让 key 进浏览器，而这里本来就跑在 Node 里。
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createConfig } from "../game/config";
 import { createRng } from "../game/rng";
 import { createGame } from "../game/setup";
 import { createAiClient, readMaxRetries, readProviderConfig } from "./client";
 import { runGame, type DecisionRecord } from "./orchestrator";
-import { generatePersonas } from "./personas";
 import { renderTranscript } from "./transcript";
-
-/**
- * vitest 不像 next dev 那样自动加载 .env.local，所以这里自己读一次。
- *
- * 刻意不用 vite 的 loadEnv：pnpm 的严格布局下 vite 从项目根目录解析不到
- * （`require.resolve("vite")` 会失败）。手写这十来行反而更稳，也不多一个依赖。
- *
- * 【真实的进程环境变量优先，与 next dev 一致】已核对 @next/env 的行为：
- * 它只填 process.env 里还没有的键，不覆盖已有的。这里照抄那条规则，
- * 免得同一台机器上出现"测试能跑但 next dev 不行"。
- *
- * 【但沉默地优先是个陷阱，所以要报出来】一个装在用户级环境里的旧 LLM_API_KEY
- * 会不声不响地盖掉 .env.local 里刚填的新 key，表现是一个毫无线索的 401——
- * 这坑真踩过。宁可开局就炸，也不要让人以为自己在用文件里那份配置。
- */
-function loadEnvLocal(): string[] {
-  let text: string;
-  try {
-    text = readFileSync(new URL("../../../.env.local", import.meta.url), "utf8");
-  } catch {
-    return []; // 没有这个文件是正常情况，下面的 skipIf 会接管
-  }
-
-  const shadowed: string[] = [];
-  for (const line of text.split("\n")) {
-    const match = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
-    const key = match?.[1];
-    if (!key) continue;
-    const value = (match?.[2] ?? "").replace(/^["']|["']$/g, "").trim();
-    const existing = process.env[key];
-    if (existing) {
-      if (existing !== value) shadowed.push(key);
-      continue;
-    }
-    process.env[key] = value;
-  }
-
-  return shadowed;
-}
+import { assignPersonas } from "../persona-catalog";
+import { loadEnvLocal } from "./env-local";
 
 /**
  * 【只返回不抛】在模块顶层抛会把整个文件炸掉，连"跳过"都做不到——
@@ -171,13 +133,12 @@ describe.skipIf(!configured)("真实模型试跑", () => {
       const client = createAiClient(config);
       const records: DecisionRecord[] = [];
 
-      // 先花一次调用生成一桌人设。占位人设让五个 AI 说一模一样的话，
-      // 而这个测试的全部意义就是人工读发言（失败会自动回退，不会让整局跑不起来）
-      const personas = await generatePersonas({
-        config,
+      // 人设来自随代码发布的静态库；真实对局只把预算花在实际决策上。
+      const personas = assignPersonas({
+        playerCount: PLAYER_COUNT,
+        humanSeat: null,
         locale: LOCALE,
-        count: PLAYER_COUNT,
-        onNote: (note) => say(`  ${note}`),
+        seed,
       });
 
       const final = await runGame({

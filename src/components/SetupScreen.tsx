@@ -7,22 +7,26 @@
  * previewSetup 的返回值画出来。那些函数因此能用 .ts 测试覆盖，
  * 不必为一屏表单引入 jsdom。
  */
-import { useState } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useState } from "react";
 import { useLocale, useMessages } from "@/i18n/useMessages";
 import { MAX_PLAYERS, MIN_PLAYERS, type MissionConfig } from "@/lib/game";
 import { cn } from "@/lib/utils";
-import { fetchPersonas } from "@/lib/ai/remote";
+import { assignPersonas } from "@/lib/persona-catalog";
 import { createSeatAvatarSeed, PREVIEW_AVATAR_SEED } from "@/lib/seat-avatar";
 import { aiModeAtom, createGameAtom, errorAtom } from "@/store/game";
 import { SeatRing } from "./SeatRing";
+import { PersonaLibrary } from "./PersonaLibrary";
 import {
+  aiSeatsOf,
+  clearPersonaSelections,
   defaultDraft,
   finalizeConfig,
   previewSetup,
   tallyRoles,
   withEvilOption,
   withHumanSeat,
+  withPersonaSelection,
   withPlayerCount,
   withSeat,
   withSpectator,
@@ -40,55 +44,33 @@ export function SetupScreen() {
   const createGame = useSetAtom(createGameAtom);
   const storeError = useAtomValue(errorAtom);
   const msg = useMessages();
-  // 人设跟着**界面语言**生成：英文界面下的那桌人该有英文名字
+  // 开局时按界面语言解析同一组双语条目，之后随 Persona 一起锁进本局。
   const locale = useLocale();
-
-  const [busy, setBusy] = useState(false);
 
   const preview = previewSetup(draft);
   const seated = draft.humanSeat !== null;
 
   /**
    * 开局。落座与观战走同一条路——差别只有 humanSeat 是不是 null，
-   * 而 aiSeatCount 早就把这件事算对了。remote 模式下先取一桌真人设，再建局。
-   *
-   * 【异步的只有这一步】createGameAtom 本身是同步的（createGame 是纯函数），
-   * store 的注释写着"异步的只有人设生成，那一步在调用方"——就是这里。
-   *
-   * 【人设失败绝不拦着开局】拿不到就用占位继续，把原因带进 personaNotes 显示出来。
-   * 人设是锦上添花，不是开局的必要条件（personas.ts 文件头）。
+   * 人设来自随代码发布的静态库；用户手选优先，其余座位用独立随机源补齐。
+   * 它不推进引擎 RNG，所以选择人设不会改变同一 seed 下的发牌与首任队长。
    */
-  async function start() {
+  function start() {
     // 【种子在点击时才取】放进 useState 初值会让 SSR 与 hydration 对不上。
     // 不显式传的话 createConfig 的缺省 seed 是 0，每一局发的牌完全一样。
-    // 注意要在 await 之前取好：await 之后 draft 可能已经不是这一份了
     const config = finalizeConfig(draft, Date.now() >>> 0);
-    // 与发牌 seed 完全独立；同样在 await 前锁住，避免人设请求期间换成另一套脸
+    // 头像 seed 与发牌 seed 完全独立。
     const avatarSeed = createSeatAvatarSeed();
     const humanSeat = draft.humanSeat;
 
-    // mock 模式根本不碰 LLM，发这一趟就是白等
-    if (aiMode !== "remote") {
-      createGame({ config, avatarSeed, humanSeat });
-      return;
-    }
-
-    const aiSeatCount = humanSeat === null ? config.playerCount : config.playerCount - 1;
-
-    setBusy(true);
-    try {
-      const { personas, notes } = await fetchPersonas(aiSeatCount, locale);
-      createGame({
-        config,
-        avatarSeed,
-        humanSeat,
-        // null 时不传，createGameAtom 自己回退 makePlaceholderPersonas
-        ...(personas ? { personas } : {}),
-        personaNotes: notes,
-      });
-    } finally {
-      setBusy(false);
-    }
+    const personas = assignPersonas({
+      playerCount: config.playerCount,
+      humanSeat,
+      selections: draft.personaSelections,
+      locale,
+      seed: config.seed,
+    });
+    createGame({ config, avatarSeed, humanSeat, personas });
   }
 
   return (
@@ -125,6 +107,17 @@ export function SetupScreen() {
           setDraft((d) => (d.humanSeat === null ? withSeat(d) : withSpectator(d)))
         }
       />
+
+      <Field label={msg.setup.personaField}>
+        <PersonaLibrary
+          aiSeats={aiSeatsOf(draft)}
+          selections={draft.personaSelections}
+          onSelect={(seat, personaId) =>
+            setDraft((current) => withPersonaSelection(current, seat, personaId))
+          }
+          onClearAll={() => setDraft(clearPersonaSelections)}
+        />
+      </Field>
 
       <Field label={msg.setup.freeEvilSlots(preview.freeEvilSlots)}>
         {preview.freeEvilSlots === 0 ? (
@@ -229,10 +222,8 @@ export function SetupScreen() {
 
         <button
           type="button"
-          onClick={() => void start()}
-          // busy 期间也要禁用：连点两次会发两趟人设请求，还会建两次局
-          disabled={!preview.canStart || busy}
-          aria-busy={busy}
+          onClick={start}
+          disabled={!preview.canStart}
           className={cn(
             "mt-1 w-full rounded-lg px-6 py-3.5 font-display text-lg tracking-[var(--track-3)] transition-colors",
             "bg-brass text-on-brass hover:bg-brass/85",
@@ -240,7 +231,7 @@ export function SetupScreen() {
           )}
         >
           <span className="-mr-[var(--track-3)]">
-            {busy ? msg.setup.busy : seated ? msg.setup.submit : msg.setup.spectate}
+            {seated ? msg.setup.submit : msg.setup.spectate}
           </span>
         </button>
       </div>

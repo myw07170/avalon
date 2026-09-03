@@ -176,15 +176,6 @@ export const errorAtom = atom<string | null>((get) => {
   }
 });
 
-/**
- * 人设生成的打点，由 SetupScreen 在建局时写入。
- *
- * 【不是错误，但必须让人看见】rules.md §6：生成失败可以回退占位人设，
- * 但**绝不能静默**——悄悄回退会让你对着一桌说话雷同的 AI 找半天 prompt 的毛病。
- * 所以它单独一个 atom，而不是塞进 errorAtom（那会让开局看起来像出了故障）。
- */
-export const personaNotesAtom = atom<readonly string[]>([]);
-
 // ---------------------------------------------------------------------------
 // 私有：AI 心证、人类动作桥、中止句柄
 // ---------------------------------------------------------------------------
@@ -651,16 +642,14 @@ export interface CreateGameInput {
   avatarSeed: number;
   /** null 表示全 AI 观战局 */
   humanSeat: PlayerId | null;
-  /** 缺省时用占位人设。真人设走 /api/personas，由 SetupScreen 取好了传进来 */
+  /** 缺省只供测试与内部调用回退；正常 UI 始终从静态人设库传入完整数组 */
   personas?: Persona[];
-  /** 人设生成的打点。回退到占位时必须让玩家看见，见 personaNotesAtom */
-  personaNotes?: string[];
 }
 
 /**
  * 建局，停在 SETUP。
  *
- * 同步函数，因为 createGame 本身是纯的。异步的只有人设生成，那一步在调用方。
+ * 同步函数：静态人设库的选择与随机补齐都在调用方完成。
  */
 export const createGameAtom = atom(null, (_get, set, input: CreateGameInput) => {
   set(resetGameAtom);
@@ -676,7 +665,6 @@ export const createGameAtom = atom(null, (_get, set, input: CreateGameInput) => 
     set(gameStateAtom, state);
     set(mySeatAtom, humanSeat);
     set(seatAvatarSeedStateAtom, avatarSeed);
-    set(personaNotesAtom, input.personaNotes ?? []);
     set(rngAtom, () => rng);
     set(runStatusAtom, "ready");
   } catch (error) {
@@ -794,7 +782,6 @@ export const resetGameAtom = atom(null, (get, set) => {
   set(pendingTurnAtom, null);
   set(decisionsAtom, []);
   set(thinkingAtom, null);
-  set(personaNotesAtom, []);
   set(rngAtom, null);
   set(runStatusAtom, "idle");
   set(errorSourceAtom, null);

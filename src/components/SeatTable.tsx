@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { revealedRolesAtom, seatAvatarSeedAtom, viewAtom } from "@/store/game";
 import { SeatRing } from "./SeatRing";
 import { describeTable, type SeatState } from "./seat-table-model";
+import { useOptionalTeamDraft } from "./TeamDraftContext";
 
 export function SeatTable() {
   const view = useAtomValue(viewAtom);
@@ -27,35 +28,61 @@ export function SeatTable() {
   // 落座局恒为 null；观战局只含**已翻开**的座位，过滤在 store 那一层做过了
   const roles = useAtomValue(revealedRolesAtom);
   const msg = useMessages();
+  const teamDraft = useOptionalTeamDraft();
   if (!view) return null;
 
   const table = describeTable(view, msg, roles);
+  const selecting = teamDraft?.active === true;
+  const selected = new Set(teamDraft?.selected ?? []);
+  const seats = selecting
+    ? table.seats.map((seat) => ({ ...seat, onTeam: selected.has(seat.id) }))
+    : table.seats;
+
+  const ring = (interactive: boolean) => (
+    <SeatRing
+      count={view.players.length}
+      avatarSeed={avatarSeed}
+      marks={seats}
+      onSelect={interactive ? teamDraft?.toggle : undefined}
+      selectedIds={interactive ? teamDraft?.selected : undefined}
+      isDisabled={
+        interactive
+          ? (id) => teamDraft?.full === true && !selected.has(id)
+          : undefined
+      }
+      seatLabel={(_id, mark) => seatDescription(seats, mark.id, msg)}
+      center={
+        <>
+          <p className="font-display text-xs tracking-[var(--track-3)] text-muted">
+            <span className="-mr-[var(--track-3)]">{table.phaseLabel}</span>
+          </p>
+          {table.progressLabel && (
+            <p className="tabular mt-2 text-sm text-vellum">{table.progressLabel}</p>
+          )}
+          <p className="tabular mt-2 text-[11px] text-muted">{table.roundLabel}</p>
+        </>
+      }
+    />
+  );
 
   return (
     <section className="w-full">
-      <SeatRing
-        count={view.players.length}
-        avatarSeed={avatarSeed}
-        marks={table.seats}
-        seatLabel={(_id, mark) => seatDescription(table.seats, mark.id, msg)}
-        center={
-          <>
-            <p className="font-display text-xs tracking-[var(--track-3)] text-muted">
-              <span className="-mr-[var(--track-3)]">{table.phaseLabel}</span>
-            </p>
-            {table.progressLabel && (
-              <p className="tabular mt-2 text-sm text-vellum">{table.progressLabel}</p>
-            )}
-            <p className="tabular mt-2 text-[11px] text-muted">{table.roundLabel}</p>
-          </>
-        }
-      />
+      {selecting ? (
+        <>
+          {/* 单列布局在右下操作区使用大触控块；这里保持只读，避免两处来回滚动。 */}
+          <div className="lg:hidden">{ring(false)}</div>
+          {/* 桌面端的圆桌就是组队选择器。CSS 分岔保持 SSR 与水合输出一致。 */}
+          <div className="hidden lg:block">{ring(true)}</div>
+        </>
+      ) : (
+        ring(false)
+      )}
 
       <p aria-live="polite" className="mt-5 text-center text-sm text-vellum">
         {table.statusLine}
       </p>
 
-      <Legend seats={table.seats} />
+      <Legend seats={seats} />
     </section>
   );
 }

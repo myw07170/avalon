@@ -341,6 +341,7 @@ export const en: Messages = {
     submitTeam: "Submit team",
     needMore: (n) => `${n} more to pick`,
     teamPreview: "This team",
+    pickOnTable: "Pick players on the round table to the left, then confirm here.",
 
     team: {
       title: "You are the Leader this round",
@@ -565,7 +566,25 @@ export const en: Messages = {
       "with no human turn to slow it down. Watch your spend in remote mode.",
     standUp: "Stand up and watch",
     sitDown: "Sit back down",
-    busy: "Generating characters…",
+    personaField: "AI personas",
+    personaNote:
+      "Assign any AI seat yourself. Seats left on Random are filled from the remaining roster when the game starts.",
+    personaCount: (selected, total) => `${selected}/${total} assigned`,
+    personaClearAll: "Make all random",
+    personaSeat: (id) => `Seat ${id} AI`,
+    personaRandom: "Random assignment",
+    personaRandomNote:
+      "Drawn from unused personas when the game starts, with no duplicates at the table.",
+    personaChooseAria: (id, name) => `Seat ${id} AI, current persona: ${name}`,
+    personaDialogTitle: (id) => `Choose a persona for Seat ${id}`,
+    personaDialogDescription:
+      "The roster controls the AI's name, voice, and habits of thought. It never reveals or changes their hidden role.",
+    personaCloseAria: "Close persona roster",
+    personaSearchAria: "Search personas",
+    personaSearchPlaceholder: "Search names, traits, speaking styles, or reasoning…",
+    personaEmpty: "No personas match that search.",
+    personaUsedBy: (id) => `Used by Seat ${id}`,
+    personaReasoning: "Notices first: ",
     submit: "Take the seat",
     spectate: "Start watching",
     seatAriaSelf: (id) => `Your seat, Seat ${id}`,

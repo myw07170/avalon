@@ -2,6 +2,7 @@
 
 /**
  * 轮到你时的操作面板。没轮到你就什么都不画。
+ * 除最终刺杀弹窗外，所有人类输入都从右侧发言栏底部的这一处进入。
  *
  * 【面板不判断你能做什么，它只把 legalActions 画出来】推导在 action-panel-model.ts，
  * 那里解释了为什么这条线不能反过来。
@@ -32,6 +33,7 @@ import {
   type TeamForm,
   type VoteForm,
 } from "./action-panel-model";
+import { useTeamDraft } from "./TeamDraftContext";
 
 type Submit = (action: GameAction) => void;
 
@@ -39,26 +41,25 @@ export function ActionPanel() {
   const turn = useAtomValue(humanTurnAtom);
   const msg = useMessages();
   const submit = useSetAtom(submitActionAtom);
-  const reduced = useReducedMotion() === true;
   const ref = useRef<HTMLElement>(null);
   const key = turn ? turnKey(turn) : null;
+  const form = turn ? describeTurn(turn, msg) : null;
 
-  // 发言流会把面板顶到屏幕外，手机上尤其明显。block: "nearest" 保证
-  // 已经看得见时不动——真正的"滚一下"只发生在它确实在视野外的时候
-  useEffect(() => {
-    if (!key) return;
-    ref.current?.scrollIntoView({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
-  }, [key, reduced]);
+  useRevealTurn(ref, key);
 
   if (!turn) return null;
-
-  const form = describeTurn(turn, msg);
 
   return (
     <section
       ref={ref}
       aria-live="polite"
-      className="w-full scroll-mb-6 rounded-xl border border-brass/60 bg-ink-raised p-5 shadow-[0_0_0_1px_var(--panel-ring)]"
+      className={cn(
+        "mt-8 w-full scroll-mb-6 rounded-xl border border-brass/60 bg-ink-raised p-5",
+        "shadow-[0_0_0_1px_var(--panel-ring)]",
+        "lg:mt-0 lg:max-h-[65dvh] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain",
+        "xl:max-h-[55dvh]",
+        "lg:scroll-mb-0 lg:rounded-none lg:border-x-0 lg:border-b-0 lg:bg-ink lg:p-4 lg:shadow-none",
+      )}
     >
       <p className="font-display text-[10px] tracking-[var(--track-3)] text-brass">
         <span className="-mr-[var(--track-3)]">{msg.turn.heading}</span>
@@ -71,12 +72,14 @@ export function ActionPanel() {
         </p>
       ) : (
         <>
-          <h2 className="mt-2 font-display text-xl tracking-wide text-vellum">
+          <h2 className="mt-2 font-display text-xl tracking-wide text-vellum lg:mt-1.5 lg:text-lg">
             {form.title}
           </h2>
-          <p className="mt-1.5 text-sm leading-relaxed text-muted">{form.hint}</p>
+          <p className="mt-1.5 text-sm leading-relaxed text-muted lg:mt-1 lg:text-xs">
+            {form.hint}
+          </p>
 
-          <div className="mt-5">
+          <div className="mt-5 lg:mt-3">
             {form.kind === "TEAM_PROPOSAL" && (
               <TeamBody key={key} form={form} submit={submit} />
             )}
@@ -98,32 +101,48 @@ export function ActionPanel() {
   );
 }
 
+/** block: nearest 只在面板确实离开视野时滚动；桌面常驻栏因此不会带着正文跳。 */
+function useRevealTurn(ref: React.RefObject<HTMLElement | null>, key: string | null) {
+  const reduced = useReducedMotion() === true;
+
+  useEffect(() => {
+    if (!key) return;
+    ref.current?.scrollIntoView({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
+  }, [key, reduced, ref]);
+}
+
 // ---------------------------------------------------------------------------
 // 组队
 // ---------------------------------------------------------------------------
 
 function TeamBody({ form, submit }: { form: TeamForm; submit: Submit }) {
   const msg = useMessages();
-  const [team, setTeam] = useState<number[]>([]);
+  const teamDraft = useTeamDraft();
   const [statement, setStatement] = useState("");
-  const full = team.length >= form.teamSize;
+  const team = teamDraft.selected;
+  const full = teamDraft.full;
   const ready = team.length === form.teamSize;
-
-  // 选满之后不再接受新的选择，而不是悄悄把最早那个挤掉——
-  // 被挤掉的那个人玩家不会注意到，交上去才发现名单不对
-  const toggle = (id: number) =>
-    setTeam((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : prev.length < form.teamSize ? [...prev, id] : prev,
-    );
+  const selectedSeats = team
+    .map((id) => form.candidates.find((candidate) => candidate.id === id))
+    .filter((seat): seat is TeamForm["candidates"][number] => seat !== undefined);
 
   return (
     <div className="space-y-4">
-      <SeatGrid
-        seats={form.candidates}
-        selected={team}
-        disabled={(id) => full && !team.includes(id)}
-        onToggle={toggle}
-      />
+      <div className="lg:hidden">
+        <SeatGrid
+          seats={form.candidates}
+          selected={team}
+          disabled={(id) => full && !team.includes(id)}
+          onToggle={teamDraft.toggle}
+        />
+      </div>
+
+      <div className="hidden lg:block">
+        <p className="mb-2 text-xs text-muted">{msg.turn.pickOnTable}</p>
+        {selectedSeats.length > 0 && (
+          <SeatChips label={msg.turn.teamPreview} seats={selectedSeats} />
+        )}
+      </div>
 
       <p className="tabular text-xs text-muted">
         {msg.turn.picked(team.length, form.teamSize, full)}
@@ -167,7 +186,7 @@ function SpeechBody({ form, submit }: { form: SpeechForm; submit: Submit }) {
       />
 
       <div className="flex flex-wrap items-center gap-3">
-        <PrimaryButton disabled={content.trim().length === 0} onClick={send}>
+        <PrimaryButton fullWidth={false} disabled={content.trim().length === 0} onClick={send}>
           {msg.turn.speechLabel}
         </PrimaryButton>
         {/* 空发言在引擎里是合法的，所以给一个明写的出口，
@@ -193,26 +212,7 @@ function VoteBody({ form, submit }: { form: VoteForm; submit: Submit }) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <p className="mb-2 text-xs text-muted">{msg.turn.teamPreview}</p>
-        <ul className="flex flex-wrap gap-2">
-          {form.team.map((seat) => (
-            <li
-              key={seat.id}
-              aria-label={seat.label}
-              className={cn(
-                "tabular rounded-lg border px-3 py-1.5 text-sm ring-2 ring-brass",
-                SEAT_TONE_CLASS[seat.tone],
-              )}
-            >
-              {seat.id}{" "}
-              <span className="text-xs opacity-70">
-                {seat.isSelf ? msg.seat.you : seat.name}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
+      <SeatChips label={msg.turn.teamPreview} seats={form.team} />
 
       {form.warning && (
         <p role="alert" className="text-sm leading-relaxed text-mordred">
@@ -221,6 +221,39 @@ function VoteBody({ form, submit }: { form: VoteForm; submit: Submit }) {
       )}
 
       <OptionButtons options={form.options} submit={submit} />
+    </div>
+  );
+}
+
+function SeatChips({
+  label,
+  seats,
+}: {
+  label: string;
+  seats: readonly TeamForm["candidates"][number][];
+}) {
+  const msg = useMessages();
+
+  return (
+    <div>
+      <p className="mb-2 text-xs text-muted">{label}</p>
+      <ul className="flex flex-wrap gap-2">
+        {seats.map((seat) => (
+          <li
+            key={seat.id}
+            aria-label={seat.label}
+            className={cn(
+              "tabular rounded-lg border px-3 py-1.5 text-sm ring-2 ring-brass",
+              SEAT_TONE_CLASS[seat.tone],
+            )}
+          >
+            {seat.id}{" "}
+            <span className="text-xs opacity-70">
+              {seat.isSelf ? msg.seat.you : seat.name}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -316,11 +349,13 @@ function TextBox({
 
 function PrimaryButton({
   disabled,
+  fullWidth = true,
   tone = "brass",
   onClick,
   children,
 }: {
   disabled?: boolean;
+  fullWidth?: boolean;
   tone?: "brass" | "danger";
   onClick: () => void;
   children: React.ReactNode;
@@ -331,7 +366,8 @@ function PrimaryButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "w-full rounded-lg px-6 py-3 font-display text-base tracking-[var(--track-1)] transition-colors",
+        "whitespace-nowrap rounded-lg font-display text-base tracking-[var(--track-1)] transition-colors",
+        fullWidth ? "w-full px-6 py-3" : "min-h-11 px-5 py-2.5",
         "disabled:cursor-not-allowed disabled:border disabled:border-ink-line disabled:bg-transparent disabled:text-muted",
         tone === "brass"
           ? "bg-brass text-on-brass hover:bg-brass/85"

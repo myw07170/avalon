@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
-    "transcripts": "vitest run src/lib/ai/transcript-page.test.ts"
+    "transcripts": "vitest run src/lib/ai/transcript-page.test.ts",
+    "personas:generate": "node scripts/generate-personas.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.23",

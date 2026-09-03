@@ -17,7 +17,6 @@ import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
 import {
   viewAtom,
-  personaNotesAtom,
   resetGameAtom,
   runGameAtom,
   seatAvatarSeedAtom,
@@ -30,7 +29,6 @@ export function RoleCard() {
   const view = useAtomValue(viewAtom);
   const avatarSeed = useAtomValue(seatAvatarSeedAtom);
   const msg = useMessages();
-  const personaNotes = useAtomValue(personaNotesAtom);
   const startRun = useSetAtom(runGameAtom);
   const reset = useSetAtom(resetGameAtom);
   const [flipped, setFlipped] = useState(false);
@@ -54,11 +52,6 @@ export function RoleCard() {
       <p className="font-display text-xs tracking-[var(--track-3)] text-muted">
         {msg.role.seatLine(view.players.length, view.selfId)}
       </p>
-
-      {/* 【回退绝不静默】人设生成失败会让一桌 AI 说话雷同，不说清楚的话，
-          你会去改 prompt 而不是去看这一行（rules.md §6）。
-          SetupScreen 点完就卸载了，所以这句话只能落在这一屏 */}
-      <PersonaNotes notes={personaNotes} />
 
       <RoleFlipCard
         flipped={flipped}
@@ -157,24 +150,6 @@ function RoleFlipCard({ flipped, reduced, onToggle, brief }: RoleFlipCardProps) 
 // ---------------------------------------------------------------------------
 // 小件
 // ---------------------------------------------------------------------------
-
-/** 人设生成的打点。成功那条也显示——它顺带告诉玩家这一桌是谁 */
-function PersonaNotes({ notes }: { notes: readonly string[] }) {
-  if (notes.length === 0) return null;
-
-  return (
-    <ul className="w-full max-w-sm space-y-1">
-      {notes.map((note, i) => (
-        <li
-          key={i}
-          className="break-words rounded-lg border border-ink-line bg-ink-raised px-3 py-2 text-xs leading-relaxed text-muted"
-        >
-          {note}
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 function Screen({ children }: { children: React.ReactNode }) {
   return (

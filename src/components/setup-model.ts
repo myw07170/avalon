@@ -26,6 +26,7 @@ import {
   type PlayerId,
   type Role,
 } from "@/lib/game";
+import type { PersonaSelectionMap } from "@/lib/persona-catalog";
 
 /** 玩家在 SetupScreen 上编辑的东西。除此之外的一切都是推导出来的 */
 export interface SetupDraft {
@@ -34,6 +35,8 @@ export interface SetupDraft {
   humanSeat: PlayerId | null;
   /** getEvilOptions(playerCount) 的下标 */
   evilOptionIndex: number;
+  /** 只记录用户明确指定的 AI 人设；缺席的座位在开局时随机补齐 */
+  personaSelections: PersonaSelectionMap;
 }
 
 export interface SetupPreview {
@@ -83,6 +86,7 @@ export function defaultDraft(playerCount: number = DEFAULT_PLAYER_COUNT): SetupD
     playerCount,
     humanSeat: 0,
     evilOptionIndex: presetOptionIndex(playerCount),
+    personaSelections: {},
   };
 }
 
@@ -113,7 +117,8 @@ export function withEvilOption(draft: SetupDraft, index: number): SetupDraft {
 export function withHumanSeat(draft: SetupDraft, seat: PlayerId): SetupDraft {
   const inRange = Number.isInteger(seat) && seat >= 0 && seat < draft.playerCount;
   const next = !inRange || draft.humanSeat === seat ? null : seat;
-  return { ...draft, humanSeat: next };
+  const changed = { ...draft, humanSeat: next };
+  return { ...changed, personaSelections: normalizePersonaSelections(changed) };
 }
 
 /**
@@ -130,7 +135,55 @@ export function withSpectator(draft: SetupDraft): SetupDraft {
 }
 
 export function withSeat(draft: SetupDraft): SetupDraft {
-  return draft.humanSeat === null ? { ...draft, humanSeat: 0 } : draft;
+  return draft.humanSeat === null ? withHumanSeat(draft, 0) : draft;
+}
+
+export function aiSeatsOf(draft: Pick<SetupDraft, "playerCount" | "humanSeat">): PlayerId[] {
+  return Array.from({ length: draft.playerCount }, (_, seat) => seat).filter(
+    (seat) => seat !== draft.humanSeat,
+  );
+}
+
+/**
+ * 丢掉越界、人类座位与重复 ID，只保留每个 ID 最先出现的 AI 座位。
+ * 正常 UI 操作不会造出脏值；这层用于草稿形状变更与以后可能增加的导入入口。
+ */
+export function normalizePersonaSelections(draft: SetupDraft): PersonaSelectionMap {
+  const aiSeats = new Set(aiSeatsOf(draft));
+  const usedIds = new Set<string>();
+  const normalized: Partial<Record<PlayerId, string>> = {};
+  for (const [rawSeat, personaId] of Object.entries(draft.personaSelections)) {
+    const seat = Number(rawSeat);
+    if (!aiSeats.has(seat) || !personaId || usedIds.has(personaId)) continue;
+    normalized[seat] = personaId;
+    usedIds.add(personaId);
+  }
+  return normalized;
+}
+
+export function withPersonaSelection(
+  draft: SetupDraft,
+  seat: PlayerId,
+  personaId: string | null,
+): SetupDraft {
+  if (!aiSeatsOf(draft).includes(seat)) return draft;
+  const personaSelections = { ...normalizePersonaSelections(draft) };
+  if (personaId === null) {
+    delete personaSelections[seat];
+  } else {
+    const usedByAnotherSeat = Object.entries(personaSelections).some(
+      ([rawSeat, selected]) => Number(rawSeat) !== seat && selected === personaId,
+    );
+    if (usedByAnotherSeat) return draft;
+    personaSelections[seat] = personaId;
+  }
+  return { ...draft, personaSelections };
+}
+
+export function clearPersonaSelections(draft: SetupDraft): SetupDraft {
+  return Object.keys(draft.personaSelections).length === 0
+    ? draft
+    : { ...draft, personaSelections: {} };
 }
 
 /** 当前草稿选中的那一组自由位。配置固定或人数非法时是空数组 */

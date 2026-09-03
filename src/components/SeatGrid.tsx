@@ -17,8 +17,8 @@ import type { SeatChoice } from "./action-panel-model";
 import { SEAT_TONE_CLASS } from "./SeatRing";
 
 export interface SeatGridProps {
-  seats: SeatChoice[];
-  selected: PlayerId[];
+  seats: readonly SeatChoice[];
+  selected: readonly PlayerId[];
   /** 返回 true 的座位点不动。选满之后用它挡住其余候选 */
   disabled?: (id: PlayerId) => boolean;
   onToggle: (id: PlayerId) => void;

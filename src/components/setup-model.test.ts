@@ -2,13 +2,17 @@ import { describe, expect, it } from "vitest";
 import { createConfig, getEvilOptions, validateConfig } from "@/lib/game";
 import {
   DEFAULT_PLAYER_COUNT,
+  aiSeatsOf,
+  clearPersonaSelections,
   defaultDraft,
   finalizeConfig,
+  normalizePersonaSelections,
   presetOptionIndex,
   previewSetup,
   tallyRoles,
   withEvilOption,
   withHumanSeat,
+  withPersonaSelection,
   withSeat,
   withSpectator,
   withPlayerCount,
@@ -111,6 +115,7 @@ describe("previewSetup", () => {
         playerCount: count,
         humanSeat: 0,
         evilOptionIndex: 0,
+        personaSelections: {},
       });
       expect(preview.errors).toHaveLength(1);
       expect(preview.errors[0]?.code).toBe("PLAYER_COUNT_UNSUPPORTED");
@@ -148,12 +153,14 @@ describe("草稿变更", () => {
     let draft: SetupDraft = defaultDraft(10);
     draft = withEvilOption(draft, 3); // 爪牙+爪牙，9 人局装不下
     draft = withHumanSeat(draft, 8); // 座位 8 在 6 人局越界
+    draft = withPersonaSelection(draft, 1, "persona-01");
     expect(draft.evilOptionIndex).toBe(3);
     expect(draft.humanSeat).toBe(8);
 
     const next = withPlayerCount(draft, 6);
     expect(next.humanSeat).toBe(0);
     expect(next.evilOptionIndex).toBe(presetOptionIndex(6));
+    expect(next.personaSelections).toEqual({});
     expect(previewSetup(next).canStart).toBe(true);
   });
 
@@ -193,6 +200,66 @@ describe("草稿变更", () => {
   it("观战草稿照样开得了局——canStart 不看座位", () => {
     // 座位是"你玩不玩"，不是配置合不合法。SetupScreen 那边的按钮也因此不再拦它
     expect(previewSetup(withSpectator(defaultDraft(7))).canStart).toBe(true);
+  });
+
+  it("只允许给 AI 座位选人设，并拒绝同一人设重复占座", () => {
+    let draft = defaultDraft(7);
+    draft = withPersonaSelection(draft, 0, "persona-01");
+    expect(draft.personaSelections).toEqual({});
+
+    draft = withPersonaSelection(draft, 1, "persona-01");
+    draft = withPersonaSelection(draft, 2, "persona-01");
+    expect(draft.personaSelections).toEqual({ 1: "persona-01" });
+  });
+
+  it("更换人类座位时清掉新座位上的 AI 人设，其余选择保留", () => {
+    let draft = defaultDraft(7);
+    draft = withPersonaSelection(draft, 1, "persona-01");
+    draft = withPersonaSelection(draft, 2, "persona-02");
+
+    const moved = withHumanSeat(draft, 1);
+    expect(moved.humanSeat).toBe(1);
+    expect(moved.personaSelections).toEqual({ 2: "persona-02" });
+  });
+
+  it("观战后坐回 0 号会清掉 0 号原先作为 AI 时的选择", () => {
+    let draft = withSpectator(defaultDraft(7));
+    draft = withPersonaSelection(draft, 0, "persona-01");
+
+    const seated = withSeat(draft);
+    expect(seated.humanSeat).toBe(0);
+    expect(seated.personaSelections).toEqual({});
+  });
+
+  it("支持单座恢复随机与全部随机", () => {
+    let draft = defaultDraft(7);
+    draft = withPersonaSelection(draft, 1, "persona-01");
+    draft = withPersonaSelection(draft, 2, "persona-02");
+    draft = withPersonaSelection(draft, 1, null);
+    expect(draft.personaSelections).toEqual({ 2: "persona-02" });
+    expect(clearPersonaSelections(draft).personaSelections).toEqual({});
+  });
+
+  it("按座位顺序列出当前 AI，观战时包括全部座位", () => {
+    expect(aiSeatsOf(defaultDraft(5))).toEqual([1, 2, 3, 4]);
+    expect(aiSeatsOf(withSpectator(defaultDraft(5)))).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it("归一化时清掉人类座位、越界座位与重复 ID", () => {
+    const draft: SetupDraft = {
+      ...defaultDraft(5),
+      personaSelections: {
+        0: "persona-human",
+        1: "persona-01",
+        2: "persona-01",
+        4: "persona-04",
+        9: "persona-outside",
+      },
+    };
+    expect(normalizePersonaSelections(draft)).toEqual({
+      1: "persona-01",
+      4: "persona-04",
+    });
   });
 
   it("越界的自由位下标退回第一项", () => {
