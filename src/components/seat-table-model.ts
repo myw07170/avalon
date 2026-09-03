@@ -40,8 +40,6 @@ export interface TableState {
   progressLabel: string | null;
   /** 环下面那句话：现在在等谁做什么 */
   statusLine: string;
-  /** 「第 2 轮 · 否决 1 / 5」 */
-  roundLabel: string;
 }
 
 /*
@@ -173,10 +171,5 @@ export function describeTable(
     phaseLabel: msg.table.phase[view.phase],
     progressLabel: progressLabelOf(view, msg),
     statusLine: statusLineOf(view, msg),
-    roundLabel: msg.table.roundLabel(
-      view.missionIndex + 1,
-      view.rejectCount,
-      view.maxRejects,
-    ),
   };
 }

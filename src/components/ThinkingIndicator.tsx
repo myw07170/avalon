@@ -11,34 +11,45 @@
  * 把"他在想什么"显示出来就是开天眼，AI 心证的闸在 reviewDecisionsAtom 上。
  */
 import { useAtomValue } from "jotai";
+import { LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useMessages } from "@/i18n/useMessages";
 import { viewAtom, thinkingAtom } from "@/store/game";
+import { describeThinking } from "./thinking-indicator-model";
 
 export function ThinkingIndicator() {
-  const thinking = useAtomValue(thinkingAtom);
+  const entries = useAtomValue(thinkingAtom);
   const view = useAtomValue(viewAtom);
   const msg = useMessages();
-  const seconds = useElapsedSeconds(thinking?.startedAt ?? null);
+  const model = describeThinking(entries, view?.players ?? [], msg);
+  const seconds = useElapsedSeconds(model?.startedAt ?? null);
 
-  if (!thinking) return null;
-
-  const player = view?.players.find((p) => p.id === thinking.playerId);
-  const who = player
-    ? msg.seat.named(thinking.playerId, player.name)
-    : msg.seat.short(thinking.playerId);
+  if (!model) return null;
 
   return (
-    <p
+    <section
       role="status"
       aria-live="polite"
-      className="tabular flex items-center gap-2 text-xs text-muted"
+      className={
+        "w-full max-w-md rounded-lg border border-brass/60 bg-brass/10 px-4 py-3 " +
+        "shadow-[0_0_0_1px_var(--panel-ring)]"
+      }
     >
-      <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-brass" />
-      {who} {msg.thinking.kind[thinking.kind]}…
-      {/* 秒数只在等了一会儿之后才出现：mock 模式下每次都是 0 秒，闪一下反而像坏了 */}
-      {seconds >= 3 && <span>{msg.thinking.seconds(seconds)}</span>}
-    </p>
+      <div className="flex items-start gap-3">
+        <LoaderCircle
+          aria-hidden
+          className="mt-0.5 size-5 shrink-0 animate-spin text-brass"
+        />
+        <div className="min-w-0">
+          <p className="tabular mt-1 text-sm leading-relaxed text-vellum">
+            {model.line}
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            {msg.thinking.seconds(seconds)}
+          </p>
+        </div>
+      </div>
+    </section>
   );
 }
 

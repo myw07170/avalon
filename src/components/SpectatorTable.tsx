@@ -17,7 +17,6 @@ import { MissionTrack } from "./MissionTrack";
 import { SeatTable } from "./SeatTable";
 import { SpectatorBar } from "./SpectatorBar";
 import { SpeechFeed } from "./SpeechFeed";
-import { ThinkingIndicator } from "./ThinkingIndicator";
 import { VoteMatrix } from "./VoteMatrix";
 
 export function SpectatorTable() {
@@ -47,9 +46,6 @@ export function SpectatorTable() {
       conversation={<SpeechFeed />}
       controls={
         <>
-          {/* 没有人类回合，所以这是全屏唯一能看出"它还活着"的东西 */}
-          <ThinkingIndicator />
-
           <SpectatorBar />
           <MindPanel />
 

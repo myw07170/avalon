@@ -154,15 +154,26 @@ export const en: Messages = {
   },
 
   thinking: {
-    // 接在座位名后面：「Seat 3 (Ann) is picking a team…」
+    title: "AI is acting",
+    single: (kind, who) => `${who} is ${en.thinking.kind[kind]}`,
+    multiple: (kind, count) =>
+      `${count} ${plural(count, "AI is", "AIs are")} ${en.thinking.kind[kind]}`,
+    // 接在座位名后面：「Seat 3 (Ann) is picking the mission team」
     kind: {
-      TEAM_PROPOSAL: "picking a team",
-      SPEECH: "thinking of what to say",
-      VOTE: "deciding how to vote",
-      MISSION_CARD: "deciding this card",
-      ASSASSINATION: "deciding who to strike",
+      TEAM_PROPOSAL: "picking the mission team",
+      SPEECH: "preparing to speak",
+      VOTE: "voting",
+      MISSION_CARD: "submitting mission cards",
+      ASSASSINATION: "choosing the assassination target",
     },
-    seconds: (n) => `(${n}s)`,
+    detail: {
+      TEAM_PROPOSAL: "Waiting for the Leader's team and public pitch.",
+      SPEECH: "Waiting for the current speaker to take a position.",
+      VOTE: "Waiting for the simultaneous team vote; results reveal together.",
+      MISSION_CARD: "Waiting for mission players to submit anonymous cards.",
+      ASSASSINATION: "Waiting for the Assassin's final target.",
+    },
+    seconds: (n) => `waiting ${n}s`,
   },
 
   spectator: {
@@ -223,9 +234,9 @@ export const en: Messages = {
     nodeAria: (label, teamSize, doubleFail, detail) =>
       `${label}, ${teamSize} on the team` +
       `${doubleFail ? ", needs 2 fail cards to fail" : ""}, ${detail}`,
-    rejects: "Rejected this round",
+    rejects: "Failed team votes this round",
     rejectsAria: (count, max) =>
-      `Rejected ${plural(count, "once", `${count} times`)} in a row this round, limit ${max}`,
+      `Team votes have failed ${plural(count, "once", `${count} times`)} in a row this round, limit ${max}`,
   },
 
   table: {

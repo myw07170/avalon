@@ -188,14 +188,25 @@ export const zh = {
 
   /** ThinkingIndicator.tsx。等模型时全屏唯一会动的东西 */
   thinking: {
+    title: "AI 正在行动",
+    single: (kind: AiDecisionKind, who: string) => `${who}${zh.thinking.kind[kind]}`,
+    multiple: (kind: AiDecisionKind, count: number) =>
+      `${count} 位 AI ${zh.thinking.kind[kind]}`,
     kind: {
-      TEAM_PROPOSAL: "在挑人",
-      SPEECH: "在想说什么",
-      VOTE: "在决定投票",
-      MISSION_CARD: "在决定这一票",
-      ASSASSINATION: "在决定刺谁",
+      TEAM_PROPOSAL: "正在选任务名单",
+      SPEECH: "正在准备发言",
+      VOTE: "正在投票",
+      MISSION_CARD: "正在出任务票",
+      ASSASSINATION: "正在选择刺杀目标",
     } as Record<AiDecisionKind, string>,
-    seconds: (n: number) => `（${n} 秒）`,
+    detail: {
+      TEAM_PROPOSAL: "等待队长给出名单和公开说明。",
+      SPEECH: "等待当前发言人表态。",
+      VOTE: "等待所有人同时完成组队表决，结果会一起公开。",
+      MISSION_CARD: "等待上队玩家匿名提交任务票。",
+      ASSASSINATION: "等待刺客指定最后的目标。",
+    } as Record<AiDecisionKind, string>,
+    seconds: (n: number) => `已等待 ${n} 秒`,
   },
 
   /**
@@ -262,9 +273,9 @@ export const zh = {
     /** 一个任务节点读屏念的整句 */
     nodeAria: (label: string, teamSize: number, doubleFail: boolean, detail: string) =>
       `${label}，${teamSize} 人出任务${doubleFail ? "，需 2 张失败票才算失败" : ""}，${detail}`,
-    rejects: "本轮否决",
+    rejects: "本轮组队失败",
     rejectsAria: (count: number, max: number) =>
-      `本轮已连续否决 ${count} 次，上限 ${max} 次`,
+      `本轮组队已连续失败 ${count} 次，上限 ${max} 次`,
   },
 
   /** seat-table-model.ts */

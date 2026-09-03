@@ -40,6 +40,7 @@ import {
   seatAvatarSeedAtom,
   submitActionAtom,
   teamConstraintAtom,
+  thinkingAtom,
   toggleSeatAtom,
   togglePauseAtom,
   viewAtom,
@@ -217,6 +218,7 @@ describe("跑完整一局", () => {
     // 循环结算后不该再有挂起的操作面板
     expect(store.get(isMyTurnAtom)).toBe(false);
     expect(store.get(humanTurnAtom)).toBeNull();
+    expect(store.get(thinkingAtom)).toEqual([]);
   });
 
   it("终局后再点开始不会重跑", async () => {
@@ -438,6 +440,7 @@ describe("中止与重开", () => {
     expect(store.get(gameStateAtom)).toBeNull();
     expect(store.get(mySeatAtom)).toBeNull();
     expect(store.get(humanTurnAtom)).toBeNull();
+    expect(store.get(thinkingAtom)).toEqual([]);
     expect(store.get(errorAtom)).toBeNull();
   });
 

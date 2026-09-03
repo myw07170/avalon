@@ -5,6 +5,7 @@ import { ROLE_TEAM } from "../game/types";
 import { assertLegal, getLegalActions } from "../game/legal";
 import { createRng } from "../game/rng";
 import { createGame, makePlaceholderPersonas } from "../game/setup";
+import { toPlayerView } from "../game/view";
 import {
   EngineError,
   type AiClient,
@@ -140,6 +141,34 @@ describe("并发与串行", () => {
     expect(cards.length).toBeGreaterThan(0);
     for (const req of cards) {
       expect(req.view.progress.submitted).toBe(0);
+    }
+  });
+
+  it("TEAM_VOTE 落地时会更新公开进度，但不把票型提前公开", async () => {
+    const rng = createRng(3);
+    const states: GameState[] = [];
+
+    await runGame({
+      state: newGame(6, 3),
+      client: createMockAiClient(rng),
+      rng,
+      hooks: { onState: (state) => void states.push(state) },
+    });
+
+    const votingViews = states
+      .filter((state) => state.phase === "TEAM_VOTE")
+      .map((state) => toPlayerView(state, 0));
+
+    expect(votingViews.length).toBeGreaterThan(0);
+    expect(votingViews.some((view) => view.progress.submitted > 0)).toBe(true);
+    for (const view of votingViews) {
+      expect(view.progress.submitted).toBeLessThan(view.progress.required);
+      expect(
+        view.proposalHistory.every(
+          (record) =>
+            record.forced || Object.keys(record.votes).length === view.players.length,
+        ),
+      ).toBe(true);
     }
   });
 

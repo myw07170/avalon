@@ -261,14 +261,6 @@ describe("文案", () => {
     expect(describeTable(mine!).statusLine).toMatch(/^轮到你.+。$/);
   });
 
-  it("轮次与否决计数跟着状态走", async () => {
-    for (const view of await views()) {
-      expect(describeTable(view).roundLabel).toBe(
-        `第 ${view.missionIndex + 1} 轮 · 否决 ${view.rejectCount} / ${view.maxRejects}`,
-      );
-    }
-  });
-
   it("不计数的阶段不显示进度", async () => {
     const view = firstIn(await views(), "TEAM_BUILDING");
     expect(describeTable(view).progressLabel).toBeNull();

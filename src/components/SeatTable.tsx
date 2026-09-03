@@ -14,23 +14,34 @@
  * 默认一张牌都没翻，所以观战的圆桌一开始与落座局长得一模一样。
  */
 import { useAtomValue } from "jotai";
+import { LoaderCircle } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { Messages } from "@/i18n/messages";
 import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
-import { revealedRolesAtom, seatAvatarSeedAtom, viewAtom } from "@/store/game";
+import {
+  revealedRolesAtom,
+  seatAvatarSeedAtom,
+  thinkingAtom,
+  viewAtom,
+} from "@/store/game";
 import { SeatRing } from "./SeatRing";
 import { describeTable, type SeatState } from "./seat-table-model";
+import { describeThinking } from "./thinking-indicator-model";
 import { useOptionalAssassinationDraft } from "./AssassinationDraftContext";
 import { useOptionalTeamDraft } from "./TeamDraftContext";
 
 export function SeatTable() {
   const view = useAtomValue(viewAtom);
   const avatarSeed = useAtomValue(seatAvatarSeedAtom);
+  const thinkingEntries = useAtomValue(thinkingAtom);
   // 落座局恒为 null；观战局只含**已翻开**的座位，过滤在 store 那一层做过了
   const roles = useAtomValue(revealedRolesAtom);
   const msg = useMessages();
   const teamDraft = useOptionalTeamDraft();
   const assassinationDraft = useOptionalAssassinationDraft();
+  const thinking = view ? describeThinking(thinkingEntries, view.players, msg) : null;
+  const thinkingSeconds = useElapsedSeconds(thinking?.startedAt ?? null);
   if (!view) return null;
 
   const table = describeTable(view, msg, roles);
@@ -66,15 +77,18 @@ export function SeatTable() {
       isDisabled={interactive ? selection?.isDisabled : undefined}
       seatLabel={(_id, mark) => seatDescription(seats, mark.id, msg)}
       center={
-        <>
-          <p className="font-display text-xs tracking-[var(--track-3)] text-muted">
-            <span className="-mr-[var(--track-3)]">{table.phaseLabel}</span>
-          </p>
-          {table.progressLabel && (
-            <p className="tabular mt-2 text-sm text-vellum">{table.progressLabel}</p>
-          )}
-          <p className="tabular mt-2 text-[11px] text-muted">{table.roundLabel}</p>
-        </>
+        thinking ? (
+          <ThinkingCenter line={thinking.line} seconds={thinkingSeconds} msg={msg} />
+        ) : (
+          <>
+            <p className="font-display text-xs tracking-[var(--track-3)] text-muted">
+              <span className="-mr-[var(--track-3)]">{table.phaseLabel}</span>
+            </p>
+            {table.progressLabel && (
+              <p className="tabular mt-2 text-sm text-vellum">{table.progressLabel}</p>
+            )}
+          </>
+        )
       }
     />
   );
@@ -99,6 +113,46 @@ export function SeatTable() {
       <Legend seats={seats} />
     </section>
   );
+}
+
+function ThinkingCenter({
+  line,
+  seconds,
+  msg,
+}: {
+  line: string;
+  seconds: number;
+  msg: Messages;
+}) {
+  return (
+    <div role="status" aria-live="polite" className="mx-auto max-w-[11rem]">
+      <LoaderCircle
+        aria-hidden
+        className="mx-auto size-5 animate-spin text-brass"
+      />
+      <p className="mt-2 text-sm leading-snug text-vellum">{line}</p>
+      <p className="tabular mt-1 text-[11px] text-muted">{msg.thinking.seconds(seconds)}</p>
+    </div>
+  );
+}
+
+function useElapsedSeconds(startedAt: number | null): number {
+  const [now, setNow] = useState(0);
+  const [seen, setSeen] = useState(startedAt);
+
+  if (seen !== startedAt) {
+    setSeen(startedAt);
+    setNow(startedAt ?? 0);
+  }
+
+  useEffect(() => {
+    if (startedAt === null) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [startedAt]);
+
+  if (startedAt === null) return 0;
+  return Math.max(0, Math.floor((now - startedAt) / 1000));
 }
 
 /** 读屏用的一句话。把四层信息按同一个顺序念出来 */

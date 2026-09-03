@@ -237,7 +237,7 @@ export const humanTurnAtom = atom<HumanTurn | null>(
 export const isMyTurnAtom = atom<boolean>((get) => get(pendingTurnAtom) !== null);
 
 /**
- * 现在是谁在等模型。没人在等时为 null。
+ * 现在有哪些 AI 在等模型。没人在等时为空数组。
  *
  * 【为什么必须有】AI 在想的时候界面一动不动，于是"15 秒"和"3 分钟"长得一模一样，
  * 玩家分不清是慢还是卡死。这是唯一能在对局中当场看出某次调用出问题的手段。
@@ -245,13 +245,17 @@ export const isMyTurnAtom = atom<boolean>((get) => get(pendingTurnAtom) !== null
  * 只含座位号与决策种类，**不含任何 payload**——那是 AI 心证，对局中读到就是开天眼。
  */
 export interface Thinking {
+  /** 只在 UI 驱动层内用于并发请求归位，不含任何对局信息 */
+  key: string;
   playerId: PlayerId;
   kind: AiDecisionKind;
   /** Date.now()。组件自己按 1 秒一跳算已等了多久 */
   startedAt: number;
 }
 
-export const thinkingAtom = atom<Thinking | null>(null);
+const EMPTY_THINKING: readonly Thinking[] = Object.freeze([]);
+
+export const thinkingAtom = atom<readonly Thinking[]>(EMPTY_THINKING);
 
 /** 终局复盘的公开面。非 GAME_OVER 恒为 null */
 export const revealAtom = atom<PlayerView["reveal"]>(
@@ -434,6 +438,15 @@ function paceOf(base: number, kind: AiDecisionKind, latencyMs: number): number {
   return Math.max(0, Math.round(base * PACE_WEIGHT[kind]) - latencyMs);
 }
 
+const SUBMISSION_PROGRESS_CADENCE_WEIGHT: Partial<Record<AiDecisionKind, number>> = {
+  VOTE: 0.15,
+  MISSION_CARD: 0.15,
+};
+
+function submissionProgressCadenceOf(base: number, kind: AiDecisionKind): number {
+  return Math.max(0, Math.round(base * (SUBMISSION_PROGRESS_CADENCE_WEIGHT[kind] ?? 0)));
+}
+
 // ---------------------------------------------------------------------------
 // 内部工具
 // ---------------------------------------------------------------------------
@@ -491,27 +504,38 @@ type GateSetter = (atom: typeof gateAtom, value: (() => void) | null) => void;
  * 包在 store 这一层而不是改 AiClient 接口：那个接口是 mock 与真实实现的共同契约，
  * 不该为一个界面指示器变形。mock 也照包——它快到看不见，但少一条分支就少一处会分叉的地方。
  *
- * finally 里清空：抛错时若不清，界面会永远停在"3 号在想…"。
+ * finally 里只清自己的条目：投票和任务票是并发请求，不能让先结束的人把其他人也抹掉。
  */
+let thinkingSeq = 0;
+
 function withThinking(client: AiClient, set: ThinkingSetter): AiClient {
   return {
     async decide(req) {
-      set(thinkingAtom, {
+      const startedAt = Date.now();
+      const entry: Thinking = {
+        key: `${req.view.selfId}:${req.kind}:${startedAt}:${thinkingSeq++}`,
         playerId: req.view.selfId,
         kind: req.kind,
-        startedAt: Date.now(),
-      });
+        startedAt,
+      };
+
+      set(thinkingAtom, (prev) => [...prev, entry]);
       try {
         return await client.decide(req);
       } finally {
-        set(thinkingAtom, null);
+        set(thinkingAtom, (prev) => prev.filter((item) => item.key !== entry.key));
       }
     },
   };
 }
 
 /** 只用得上写 thinkingAtom 这一种能力，不把整个 setter 的宽签名拖进来 */
-type ThinkingSetter = (atom: typeof thinkingAtom, value: Thinking | null) => void;
+type ThinkingSetter = (
+  atom: typeof thinkingAtom,
+  value:
+    | readonly Thinking[]
+    | ((prev: readonly Thinking[]) => readonly Thinking[]),
+) => void;
 
 /**
  * 把一个异常归到某一支来源上。
@@ -703,6 +727,7 @@ export const runGameAtom = atom(null, async (get, set) => {
       : createMockAiClient(rng),
     set,
   );
+  let lastDecisionKind: AiDecisionKind | null = null;
 
   const onHumanAction = (turn: HumanTurn) =>
     new Promise<GameAction>((resolve, reject) => {
@@ -736,6 +761,13 @@ export const runGameAtom = atom(null, async (get, set) => {
       hooks: {
         onState: (next) => {
           set(gameStateAtom, next);
+          const kind = lastDecisionKind;
+          lastDecisionKind = null;
+          const isIntermediateSubmission =
+            (kind === "VOTE" && next.phase === "TEAM_VOTE") ||
+            (kind === "MISSION_CARD" && next.phase === "MISSION_EXECUTION");
+          if (!kind || !isIntermediateSubmission) return;
+          return sleep(submissionProgressCadenceOf(get(paceMsAtom), kind), signal);
         },
         // orchestrator 会 await 这个 promise（有测试钉住），节奏控制就落在这里。
         // 顺序是 onDecision -> reduce -> onState，所以停顿发生在这条发言出现【之前】，
@@ -745,6 +777,7 @@ export const runGameAtom = atom(null, async (get, set) => {
           await sleep(paceOf(get(paceMsAtom), record.kind, record.latencyMs), signal);
           // 停顿走完才看闸：先把这一手画出来再停，暂停键按下去的观感才是"停在这里"
           await waitWhileGated(get, set, signal);
+          lastDecisionKind = record.kind;
         },
       },
     });
@@ -761,7 +794,7 @@ export const runGameAtom = atom(null, async (get, set) => {
     if (get(abortAtom) === controller) {
       set(abortAtom, null);
       set(pendingTurnAtom, null);
-      set(thinkingAtom, null);
+      set(thinkingAtom, EMPTY_THINKING);
     }
   }
 });
@@ -779,7 +812,7 @@ export const resetGameAtom = atom(null, (get, set) => {
   set(seatAvatarSeedStateAtom, PREVIEW_AVATAR_SEED);
   set(pendingTurnAtom, null);
   set(decisionsAtom, []);
-  set(thinkingAtom, null);
+  set(thinkingAtom, EMPTY_THINKING);
   set(rngAtom, null);
   set(runStatusAtom, "idle");
   set(errorSourceAtom, null);

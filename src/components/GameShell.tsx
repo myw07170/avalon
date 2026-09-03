@@ -27,7 +27,6 @@ import { SpeechFeed } from "./SpeechFeed";
 import { SetupScreen } from "./SetupScreen";
 import { SpectatorIntro } from "./SpectatorIntro";
 import { SpectatorTable } from "./SpectatorTable";
-import { ThinkingIndicator } from "./ThinkingIndicator";
 import { TutorialModal } from "./TutorialModal";
 import { TeamDraftProvider } from "./TeamDraftContext";
 import { AssassinationDraftProvider } from "./AssassinationDraftContext";
@@ -92,6 +91,9 @@ function Table() {
   return (
     <TeamDraftProvider>
       <AssassinationDraftProvider>
+        <div className="fixed left-3 top-3 z-30">
+          <SecondaryButton onClick={() => reset()}>{msg.shell.restart}</SecondaryButton>
+        </div>
         <InGameLayout
           overview={
             <>
@@ -103,16 +105,11 @@ function Table() {
           conversation={<SpeechFeed enableActions />}
           controls={
             <>
-              {/* 没轮到你时这里是全屏唯一会动的东西——不给的话，慢和卡死长得一样 */}
-              <ThinkingIndicator />
-
               {error && (
                 <p role="alert" className="max-w-md text-center text-sm text-mordred">
                   {error}
                 </p>
               )}
-
-              <SecondaryButton onClick={() => reset()}>{msg.shell.restart}</SecondaryButton>
             </>
           }
         />
