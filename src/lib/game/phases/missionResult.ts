@@ -7,7 +7,7 @@
  */
 import { MISSIONS_TO_WIN } from "../config";
 import { createPending, type GameAction, type GameState } from "../types";
-import { endGame, enterReviewDiscussion, unexpectedAction } from "./transitions";
+import { endGame, enterNextMission, unexpectedAction } from "./transitions";
 
 export function reduceMissionResult(state: GameState, action: GameAction): GameState {
   if (action.type !== "NEXT") throw unexpectedAction(state, action);
@@ -18,5 +18,5 @@ export function reduceMissionResult(state: GameState, action: GameAction): GameS
   if (state.evilScore >= MISSIONS_TO_WIN) {
     return endGame(state, "EVIL", "THREE_MISSIONS");
   }
-  return enterReviewDiscussion(state);
+  return enterNextMission(state);
 }

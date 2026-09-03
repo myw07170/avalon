@@ -1,18 +1,14 @@
 /**
  * 发言流。
  *
- * 【四个阶段都会往 speeches 里写】队长的选人说明（TEAM_BUILDING）、
- * 组队讨论、复盘讨论、以及刺杀阶段的逐个推测。最后一个容易漏——
- * assassination.ts 明确把它当作"说出口的话"记进 speeches，不是暗票。
- *
- * 三种发言在流里要分得开：选人说明是队长对自己名单的解释，
- * 刺杀讨论是终局前的公开推测，其余才是普通发言。
+ * 两个阶段会往 speeches 里写：队长的选人说明（TEAM_BUILDING）与组队讨论。
+ * 选人说明是队长对自己名单的解释，需要与其余发言区分。
  */
 import type { Messages } from "@/i18n/messages";
-import type { AnyView, Phase, PlayerId, Speech } from "@/lib/game";
+import type { AnyView, PlayerId, Speech } from "@/lib/game";
 import { describeVotes, type VoteTally } from "./vote-model";
 
-export type SpeechKind = "proposal" | "speech" | "opinion";
+export type SpeechKind = "proposal" | "speech";
 
 export interface FeedEntry {
   seq: number;
@@ -46,34 +42,14 @@ interface Group {
  */
 function groupOf(speech: Speech, msg: Messages): Group {
   const round = speech.missionIndex + 1;
-
-  switch (speech.phase) {
-    case "TEAM_BUILDING":
-    case "PROPOSAL_DISCUSSION":
-      return {
-        key: `propose-${speech.missionIndex}-${speech.attempt}`,
-        label: msg.feed.groupProposal(round, speech.attempt + 1),
-      };
-
-    case "REVIEW_DISCUSSION":
-      return { key: `review-${speech.missionIndex}`, label: msg.feed.groupReview(round) };
-
-    case "ASSASSINATION":
-      return { key: "assassination", label: msg.feed.groupAssassination };
-
-    default:
-      // 其余阶段不产生发言。真出现了也别丢，按阶段名单独成组
-      return { key: `other-${speech.phase}`, label: labelOfPhase(speech.phase) };
-  }
+  return {
+    key: `propose-${speech.missionIndex}-${speech.attempt}`,
+    label: msg.feed.groupProposal(round, speech.attempt + 1),
+  };
 }
 
-function labelOfPhase(phase: Phase): string {
-  return phase;
-}
-
-function kindOf(phase: Phase): SpeechKind {
+function kindOf(phase: Speech["phase"]): SpeechKind {
   if (phase === "TEAM_BUILDING") return "proposal";
-  if (phase === "ASSASSINATION") return "opinion";
   return "speech";
 }
 
@@ -105,9 +81,7 @@ export function describeFeed(view: AnyView, msg: Messages): FeedEntry[] {
 // ---------------------------------------------------------------------------
 
 /**
- * 【`describeFeed` 的签名与返回值刻意一个字没动】`assassination-model.ts` 靠
- * `entry.kind === "opinion"` 从里面捞刺杀推测，把返回值改成联合类型会把那条路
- * 和它二十来条测试一起带塌。所以时间轴是**新增**的一层，不是改造。
+ * 时间轴在发言之外插入每次组队投票结果。
  */
 export type TimelineItem =
   | {
@@ -136,10 +110,8 @@ export type TimelineItem =
 /**
  * 发言流 + 每次组队投票的逐人票。
  *
- * 【按分组 flush，不按 seq 排序】复盘讨论的 `Speech.attempt` 记的是该轮**最后一次**
- * 提议的 attempt，与提议记录撞号；按 `(missionIndex, attempt, seq)` 排序会把复盘发言
- * 排到本该更早的投票卡前面去。分组 key 是这个文件本来就有的概念，顺着它走不引入
- * 第二套顺序。
+ * 【按分组 flush，不按 seq 排序】分组 key 是本文件既有概念，顺着它走不引入
+ * 第二套时间顺序。
  *
  * 【投票卡落在同组最后一条发言之后】一次提议的完整故事是"队长解释名单 → 大家回应
  * → 票出来了"，卡片就该收在这个故事的末尾。它自然也不带 groupLabel——那条分隔线

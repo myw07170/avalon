@@ -51,21 +51,26 @@ const text = (view: PlayerView): string => buildPerspective(view).join(" ");
 describe("被点名", () => {
   it("本轮有人写了你的座位号就提示，并列出是谁", () => {
     const view = viewOf({
-      speeches: [speech(2, "我觉得座位 0 有问题"), speech(3, "同意座位 2 的说法")],
+      speeches: [speech(2, "我觉得座位 1 有问题"), speech(3, "同意座位 3 的说法")],
     });
-    expect(text(view)).toContain("座位 2 在本轮点了你的名");
+    expect(text(view)).toContain("座位 3 在本轮点了你的名");
   });
 
   it("上一轮点的名不算——那是旧账，本轮没人提你", () => {
     const view = viewOf({
       missionIndex: 1,
-      speeches: [speech(2, "座位 0 很可疑", 0)],
+      speeches: [speech(2, "座位 1 很可疑", 0)],
     });
     expect(text(view)).not.toContain("点了你的名");
   });
 
   it("自己提到自己不算", () => {
-    const view = viewOf({ speeches: [speech(0, "我是座位 0，我说两句")] });
+    const view = viewOf({ speeches: [speech(0, "我是座位 1，我说两句")] });
+    expect(text(view)).not.toContain("点了你的名");
+  });
+
+  it("1 号不会误命中 10 号", () => {
+    const view = viewOf({ speeches: [speech(2, "我觉得座位 10 有问题")] });
     expect(text(view)).not.toContain("点了你的名");
   });
 });
@@ -85,7 +90,7 @@ describe("票型分歧", () => {
     const view = viewOf({
       proposalHistory: [proposal({ 0: true, 1: true, 2: false, 3: false, 4: true })],
     });
-    expect(text(view)).toContain("座位 2、3 和你投的相反");
+    expect(text(view)).toContain("座位 3、4 和你投的相反");
   });
 
   it("全场一致时不提", () => {
@@ -157,7 +162,7 @@ function crowded(selfId = 0): PlayerView {
     {
       missionIndex: 2,
       proposedTeam: [0, 1],
-      speeches: [speech(2, "座位 0 解释一下", 2), speech(3, "座位 0 别躲", 2)],
+      speeches: [speech(2, "座位 1 解释一下", 2), speech(3, "座位 1 别躲", 2)],
       proposalHistory: [
         {
           missionIndex: 1,
@@ -241,7 +246,8 @@ describe("红线：只给事实，不给立场", () => {
         for (const word of BANNED) expect(body).not.toContain(word);
         // 座位号必须都在本局范围内，不能凭空冒出一个不存在的座位
         for (const match of body.matchAll(/座位 (\d+)/g)) {
-          expect(Number(match[1])).toBeLessThan(state.players.length);
+          expect(Number(match[1])).toBeGreaterThanOrEqual(1);
+          expect(Number(match[1])).toBeLessThanOrEqual(state.players.length);
         }
       }
     };

@@ -49,8 +49,6 @@ export interface StrikeOutcome {
   targetRoleLabel: string;
   /** 「梅林是 3 号（孙娜）」。本局必有梅林，所以恒有值 */
   merlinLabel: string;
-  /** 动手之前坏人各自的公开推测，按发言顺序 */
-  opinions: Array<{ label: string; content: string }>;
 }
 
 export interface RevealedMission {
@@ -209,11 +207,6 @@ function strikeOf(view: AnyView, msg: Messages): StrikeOutcome | null {
       merlinId === null
         ? msg.gameOver.noMerlin
         : msg.gameOver.merlinIs(seatLabel(view, merlinId, msg)),
-    opinions: record.opinions.map((o) => ({
-      label: seatLabel(view, o.playerId, msg),
-      // 空发言是合法状态（legal.ts 不校验文本），如实显示而不是画个空气泡
-      content: o.content.trim() === "" ? msg.gameOver.silent : o.content,
-    })),
   };
 }
 
@@ -291,7 +284,6 @@ function spokenTextOf(action: DecisionRecord["action"]): string | null {
     case "PROPOSE_TEAM":
       return action.statement;
     case "SPEAK":
-    case "ASSASSIN_OPINION":
       return action.content;
     default:
       return null;

@@ -20,6 +20,7 @@ import { toPlayerView } from "../game/view";
 import { createMockAiClient } from "./mock";
 import { runGame, type DecisionRecord } from "./orchestrator";
 import { safeParseAiPayload } from "./schema";
+import { toDisplaySeatNumber } from "../seat-number";
 
 // ---------------------------------------------------------------------------
 // 驱动
@@ -163,7 +164,6 @@ describe("100 局全 AI mock 对局", () => {
         "SPEECH",
         "VOTE",
         "MISSION_CARD",
-        "ASSASSIN_OPINION",
         "ASSASSINATION",
       ]),
     );
@@ -206,10 +206,9 @@ describe("mock 的输出", () => {
     const allowed: Partial<Record<Phase, AiDecisionKind[]>> = {
       TEAM_BUILDING: ["TEAM_PROPOSAL"],
       PROPOSAL_DISCUSSION: ["SPEECH"],
-      REVIEW_DISCUSSION: ["SPEECH"],
       TEAM_VOTE: ["VOTE"],
       MISSION_EXECUTION: ["MISSION_CARD"],
-      ASSASSINATION: ["ASSASSIN_OPINION", "ASSASSINATION"],
+      ASSASSINATION: ["ASSASSINATION"],
     };
     for (const d of allDecisions) {
       expect(allowed[d.phase], `${d.phase} 不该产生决策`).toBeDefined();
@@ -243,16 +242,14 @@ describe("mock 的输出", () => {
   });
 
   it("发言带上座位号与人设，suspicions 覆盖除自己外的每个人", () => {
-    const speeches = allDecisions.filter(
-      (d) => d.kind === "SPEECH" || d.kind === "ASSASSIN_OPINION",
-    );
+    const speeches = allDecisions.filter((d) => d.kind === "SPEECH");
     expect(speeches.length).toBeGreaterThan(0);
     for (const d of speeches) {
       const payload = d.payload as {
         content: string;
         suspicions?: Array<{ playerId: PlayerId }>;
       };
-      expect(payload.content).toContain(`座位 ${d.playerId}`);
+      expect(payload.content).toContain(`座位 ${toDisplaySeatNumber(d.playerId)}`);
       expect(payload.suspicions).toHaveLength(d.playerCount - 1);
       expect(payload.suspicions?.map((s) => s.playerId)).not.toContain(d.playerId);
     }
@@ -342,8 +339,7 @@ describe("kind 与 legalActions 对不上就抛错，不兜底", () => {
     ["VOTE", [{ type: "SPEAK", playerId: leaderId, content: "" }]],
     ["MISSION_CARD", [{ type: "CAST_VOTE", playerId: leaderId, approve: true }]],
     ["TEAM_PROPOSAL", []],
-    ["SPEECH", [{ type: "ASSASSIN_OPINION", playerId: leaderId, content: "" }]],
-    ["ASSASSIN_OPINION", [{ type: "SPEAK", playerId: leaderId, content: "" }]],
+    ["SPEECH", [{ type: "CAST_VOTE", playerId: leaderId, approve: true }]],
     ["ASSASSINATION", [{ type: "CAST_VOTE", playerId: leaderId, approve: false }]],
   ];
 

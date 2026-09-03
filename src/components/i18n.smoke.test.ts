@@ -51,7 +51,7 @@ import { describeCast, describeMinds } from "./spectator-model";
 const CJK = /[　-〿一-鿿＀-￯]/;
 
 /** 多跑几个种子：刺杀、否决撞线、四轮双失败票不是每局都会走到 */
-const SEEDS = [1, 7, 23, 42];
+const SEEDS = [1, 3, 7, 11, 23, 42, 99, 123, 777];
 const EVIL: Role[] = ["MORDRED", "OBERON"];
 
 interface Sample {
@@ -259,7 +259,7 @@ describe("英文模式下 view-model 不产出汉字", () => {
     for (const { view, decisions } of finals) {
       const brief = describeGameOver(view, decisions, en);
       if (!brief) continue;
-      // reasoning 与 opinions 的 content 是模型（这里是 mock）产出的中文，不是文案
+      // reasoning 与发言正文是模型（这里是 mock）产出的中文，不是文案
       offenders.push(
         ...offendersIn("describeGameOver", {
           ...brief,
@@ -274,10 +274,7 @@ describe("英文模式下 view-model 不产出汉字", () => {
             })),
             tail: round.tail.map(mindLabels),
           })),
-          strike: brief.strike && {
-            ...brief.strike,
-            opinions: brief.strike.opinions.map((o) => o.label),
-          },
+          strike: brief.strike,
         }),
       );
       if (offenders.length > 0) break;

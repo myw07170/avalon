@@ -120,7 +120,6 @@ describe("状态分层", () => {
       "TEAM_VOTE",
       "MISSION_EXECUTION",
       "PROPOSAL_DISCUSSION",
-      "REVIEW_DISCUSSION",
     ];
     for (const view of await views()) {
       if (!COUNTED.includes(view.phase)) continue;

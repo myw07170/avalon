@@ -17,6 +17,7 @@
  */
 import { useAtomValue } from "jotai";
 import { useMessages } from "@/i18n/useMessages";
+import { toDisplaySeatNumber } from "@/lib/seat-number";
 import { cn } from "@/lib/utils";
 import { viewAtom } from "@/store/game";
 import { describeVoteMatrix, type VoteMatrix as VoteMatrixData } from "./vote-model";
@@ -69,7 +70,7 @@ export function VoteMatrix({
                     seat.isSelf && "text-brass",
                   )}
                 >
-                  {seat.id}
+                  {toDisplaySeatNumber(seat.id)}
                 </th>
               ))}
               <th scope="col" className="px-2 py-1.5 text-left font-normal">

@@ -15,6 +15,7 @@
  */
 import type { Messages } from "@/i18n/messages";
 import { useMessages } from "@/i18n/useMessages";
+import { toDisplaySeatNumber } from "@/lib/seat-number";
 import { cn } from "@/lib/utils";
 import type { FeedEntry } from "./speech-feed-model";
 import type { VoteSeat, VoteTally } from "./vote-model";
@@ -44,7 +45,7 @@ export function SpeechBubble({
   content: string;
 }) {
   const msg = useMessages();
-  // 普通发言不加标：三种发言里只有选人说明和刺杀推测需要区分出来
+  // 普通讨论不加标，队长的选人说明单独标出。
   const tag = entry.kind === "speech" ? undefined : msg.feed.kind[entry.kind];
 
   return (
@@ -58,7 +59,7 @@ export function SpeechBubble({
             : "border-ink-line text-muted",
         )}
       >
-        {entry.playerId}
+        {toDisplaySeatNumber(entry.playerId)}
       </span>
 
       <div className="min-w-0 flex-1">
@@ -173,7 +174,7 @@ function VoteLine({
               seat.isSelf && "ring-1 ring-brass",
             )}
           >
-            {seat.id}
+            {toDisplaySeatNumber(seat.id)}
           </span>
         ))
       )}

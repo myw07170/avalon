@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import { zh } from "@/i18n/messages.zh";
 import { createMockAiClient } from "@/lib/ai/mock";
 import { runGame, type DecisionRecord } from "@/lib/ai/orchestrator";
+import { toDisplaySeatNumber } from "@/lib/seat-number";
 import {
   ROLE_TEAM,
   createConfig,
@@ -87,7 +88,9 @@ describe("describeCast：默认全盖", () => {
   it("座位标签仍然给全——盖着的是身份，不是这一桌有谁", () => {
     const cast = describeCast(GAME.view, NONE, zh);
     expect(cast.map((s) => s.id)).toEqual([0, 1, 2, 3, 4]);
-    for (const seat of cast) expect(seat.label).toContain(`${seat.id} 号`);
+    for (const seat of cast) {
+      expect(seat.label).toContain(`${toDisplaySeatNumber(seat.id)} 号`);
+    }
   });
 });
 

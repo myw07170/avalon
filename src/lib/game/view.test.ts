@@ -91,7 +91,7 @@ const SPEECHES: Speech[] = [
   {
     seq: 1,
     playerId: 2,
-    phase: "REVIEW_DISCUSSION",
+    phase: "PROPOSAL_DISCUSSION",
     missionIndex: 0,
     attempt: 1,
     content: "1 号很可疑",
@@ -134,11 +134,6 @@ const finished = (): GameState =>
     winner: "GOOD",
     winReason: "ASSASSINATION_MISS",
     assassination: {
-      opinions: [
-        { playerId: 1, content: "我猜 0 号" },
-        { playerId: 4, content: "不好说" },
-        { playerId: 5, content: "打 2 号" },
-      ],
       assassinId: 5,
       targetId: 2,
       hit: false,
@@ -221,7 +216,7 @@ describe("toPlayerView：基础字段", () => {
   it("speakingOrder 只在讨论阶段有值", () => {
     const order = [2, 3, 4, 5, 6, 0, 1];
     const talking = build(
-      { phase: "REVIEW_DISCUSSION" },
+      { phase: "PROPOSAL_DISCUSSION", proposedTeam: [0, 1, 2] },
       { speakingOrder: order, speakerIndex: 2 },
     );
     expect(toPlayerView(talking, 0).speakingOrder).toEqual(order);
@@ -272,13 +267,10 @@ describe("toPlayerView：progress 与 selfSubmitted", () => {
     expect(toPlayerView(state, 1).selfSubmitted).toBe(false); // 还没轮到
   });
 
-  it("刺杀阶段的分母是坏人数量——那是人数表定死的公开信息", () => {
-    const state = build(
-      { phase: "ASSASSINATION", goodScore: 3 },
-      { assassinOpinions: [{ playerId: 1, content: "我猜 0 号" }] },
-    );
-    expect(toPlayerView(state, 2).progress).toEqual({ submitted: 1, required: 3 });
-    expect(toPlayerView(state, 1).selfSubmitted).toBe(true);
+  it("刺杀阶段只等待刺客的一次选择", () => {
+    const state = build({ phase: "ASSASSINATION", goodScore: 3 });
+    expect(toPlayerView(state, 2).progress).toEqual({ submitted: 0, required: 1 });
+    expect(toPlayerView(state, 1).selfSubmitted).toBe(false);
     expect(toPlayerView(state, 5).selfSubmitted).toBe(false);
   });
 

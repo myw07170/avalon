@@ -1,5 +1,5 @@
 /**
- * 选座方块。ActionPanel 的组队选人和 AssassinationModal 的选目标共用这一份。
+ * 选座方块。ActionPanel 的组队选人和刺杀选目标共用这一份。
  *
  * 【选中用光环，跟圆桌上"在队伍里"是同一条视觉通道】节点配色仍归身份认知
  * （见 SeatRing 文件头的四层分配），两者不打架——梅林选人时那个红块还是红的，
@@ -12,6 +12,7 @@
  */
 import type { PlayerId } from "@/lib/game";
 import { useMessages } from "@/i18n/useMessages";
+import { toDisplaySeatNumber } from "@/lib/seat-number";
 import { cn } from "@/lib/utils";
 import type { SeatChoice } from "./action-panel-model";
 import { SEAT_TONE_CLASS } from "./SeatRing";
@@ -48,7 +49,7 @@ export function SeatGrid({ seats, selected, disabled, onToggle }: SeatGridProps)
                 off ? "opacity-35" : "hover:border-muted",
               )}
             >
-              <span aria-hidden>{seat.id}</span>
+              <span aria-hidden>{toDisplaySeatNumber(seat.id)}</span>
               <span aria-hidden className="text-xs opacity-70">
                 {seat.isSelf ? msg.seat.you : seat.name}
               </span>

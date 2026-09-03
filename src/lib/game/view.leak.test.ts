@@ -85,7 +85,7 @@ const SETTLED_PROPOSAL: ProposalRecord = {
 const SPEECH: Speech = {
   seq: 0,
   playerId: 3,
-  phase: "REVIEW_DISCUSSION",
+  phase: "PROPOSAL_DISCUSSION",
   missionIndex: 0,
   attempt: 0,
   content: "1 号的票很难解释",
@@ -187,7 +187,6 @@ describe("身份", () => {
       "TEAM_VOTE",
       "MISSION_EXECUTION",
       "MISSION_RESULT",
-      "REVIEW_DISCUSSION",
       "ASSASSINATION",
     ] as const) {
       const state = build(
@@ -298,7 +297,7 @@ describe("角色构成是公开信息", () => {
 
 describe("任务票", () => {
   it("任何一条任务记录都没有 cards / playerId 字段", () => {
-    const state = build({ phase: "REVIEW_DISCUSSION" }, { speakingOrder: ALL_SEATS });
+    const state = build({ phase: "TEAM_BUILDING" });
     for (const id of ALL_SEATS) {
       for (const record of toPlayerView(state, id).missionHistory) {
         expect(Object.keys(record).sort()).toEqual([
@@ -362,73 +361,6 @@ describe("pending", () => {
     expect(toPlayerView(withHistory, 2).selfSubmitted).toBe(false);
   });
 
-  /**
-   * 【这一条被**改窄**过，改的理由必须留在这里】
-   *
-   * 原来它断言"刺杀阶段坏人的推测内容不进任何人的视角"，和上面 votes / 任务票 /
-   * acknowledged 放在一组。但那一组保护的是**同时提交的秘密**——结算之前不许看见
-   * 别人交了什么。刺杀推测**不是同时提交**：legal.ts 让坏人按座位升序**逐个**发言，
-   * 形状与讨论阶段一模一样，rules.md §4.5 的原话也是"各**发表**一次推测意见"。
-   *
-   * 内容只因为暂存在 pending 里，就连坐继承了 pending 的"什么都不漏"规则，
-   * 于是 ASSASSIN_OPINION 变成一个只写不读的步骤——**连刺客自己都读不到他刚说的话**。
-   * 两局真实对局的刺客因此都刺了自己的队友（seed 94938 与 52848）。
-   *
-   * 所以现在推测会同时落成一条公开 Speech（phases/assassination.ts），
-   * 而这条测试改为守住真正该守的两件事：pending 的形状不漏，没说出口的话不提前漏。
-   * **不要把它改回"推测一律不进视角"**——那会把那个 bug 一起改回来。
-   */
-  it("刺杀阶段：pending 里的推测形状不进任何人的视角", () => {
-    const state = build(
-      { phase: "ASSASSINATION", goodScore: 3 },
-      {
-        assassinOpinions: [
-          { playerId: 1, content: "梅林是 0 号" },
-          { playerId: 4, content: "我同意" },
-        ],
-      },
-    );
-    for (const id of ALL_SEATS) {
-      const json = dump(toPlayerView(state, id));
-      // 字段本身不进视角。公开的那一份走 speeches，不是这里
-      expect(json).not.toContain("assassinOpinions");
-      // 这局没有任何一条 Speech，所以内容也不该从别处冒出来
-      expect(json).not.toContain("梅林是 0 号");
-      expect(json).not.toContain("我同意");
-    }
-  });
-
-  it("刺杀阶段：还没轮到的人，他的推测不会提前出现在任何视角里", () => {
-    // 1 号已经说完（既进了 speeches 也进了 pending），4 号还没轮到
-    const state = build(
-      {
-        phase: "ASSASSINATION",
-        goodScore: 3,
-        speeches: [
-          {
-            seq: 0,
-            playerId: 1,
-            phase: "ASSASSINATION",
-            missionIndex: 2,
-            attempt: 0,
-            content: "我怀疑 0 号",
-          },
-        ],
-      },
-      { assassinOpinions: [{ playerId: 1, content: "我怀疑 0 号" }] },
-    );
-    for (const id of ALL_SEATS) {
-      const json = dump(toPlayerView(state, id));
-      // 说出口的看得见——刺客要靠这个才能接着推
-      expect(json).toContain("我怀疑 0 号");
-      // 没说出口的当然不存在，进度只剩一个数字
-      expect(json).not.toContain("assassinOpinions");
-    }
-    expect(toPlayerView(state, 4).progress).toEqual({ submitted: 1, required: 4 });
-    expect(toPlayerView(state, 1).selfSubmitted).toBe(true);
-    expect(toPlayerView(state, 4).selfSubmitted).toBe(false);
-  });
-
   it("ROLE_REVEAL 的确认名单不进视角，只剩一个数字", () => {
     const state = build({ phase: "ROLE_REVEAL" }, { acknowledged: [0, 1, 2, 3] });
     const json = dump(toPlayerView(state, 9));
@@ -468,12 +400,6 @@ describe("GAME_OVER", () => {
       winner: "EVIL",
       winReason: "ASSASSINATION_HIT",
       assassination: {
-        opinions: [
-          { playerId: 1, content: "打 0 号" },
-          { playerId: 4, content: "同意" },
-          { playerId: 6, content: "不知道" },
-          { playerId: 7, content: "就他了" },
-        ],
         assassinId: 7,
         targetId: 0,
         hit: true,
@@ -484,7 +410,7 @@ describe("GAME_OVER", () => {
     const view = toPlayerView(finished(), 9);
     expect(view.reveal?.roles[4]).toBe("MORDRED");
     expect(view.reveal?.missions[0]?.cards).toEqual(MISSION_0.cards);
-    expect(view.reveal?.assassination?.opinions).toHaveLength(4);
+    expect(view.reveal?.assassination).toMatchObject({ assassinId: 7, targetId: 0, hit: true });
   });
 
   it("公开的仍然只是 reveal 那一块，missionHistory 照旧没有 cards", () => {
@@ -513,10 +439,7 @@ describe("快照", () => {
   });
 
   it("奥伯伦在刺杀阶段的完整视角", () => {
-    const state = build(
-      { phase: "ASSASSINATION", goodScore: 3 },
-      { assassinOpinions: [{ playerId: 1, content: "梅林是 0 号" }] },
-    );
+    const state = build({ phase: "ASSASSINATION", goodScore: 3 });
     expect(toPlayerView(state, 6)).toMatchSnapshot();
   });
 });

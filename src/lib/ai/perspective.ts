@@ -32,11 +32,13 @@ const MAX_HINTS = 2;
  */
 function mentionedBy(view: PlayerView, c: PromptCopy): PlayerId[] {
   const token = c.seat(view.selfId);
+  const exactToken = new RegExp(`${token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\d)`, "i");
   const seats = new Set<PlayerId>();
   for (const speech of view.speeches) {
     if (speech.missionIndex !== view.missionIndex) continue;
     if (speech.playerId === view.selfId) continue;
-    if (speech.content.includes(token)) seats.add(speech.playerId);
+    // 1 号不能误命中 10 号；座位号后面没有更多数字才算点到本人。
+    if (exactToken.test(speech.content)) seats.add(speech.playerId);
   }
   return [...seats].sort((a, b) => a - b);
 }

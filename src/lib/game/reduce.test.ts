@@ -17,7 +17,6 @@ import {
   type PlayerId,
   type Role,
 } from "./types";
-import { toPlayerView } from "./view";
 
 // ---------------------------------------------------------------------------
 // 夹具
@@ -152,7 +151,7 @@ const policyOf =
         );
       }
       default:
-        // ACKNOWLEDGE / SPEAK / ASSASSIN_OPINION 都只有一个模板动作
+        // ACKNOWLEDGE / SPEAK 都只有一个模板动作
         return first(actions);
     }
   };
@@ -269,8 +268,7 @@ function expectPendingMatchesPhase(state: GameState): void {
   if (phase !== "ROLE_REVEAL") expect(pending.acknowledged).toEqual([]);
   if (phase !== "TEAM_VOTE") expect(pending.votes).toEqual({});
   if (phase !== "MISSION_EXECUTION") expect(pending.cards).toEqual([]);
-  if (phase !== "ASSASSINATION") expect(pending.assassinOpinions).toEqual([]);
-  if (phase !== "PROPOSAL_DISCUSSION" && phase !== "REVIEW_DISCUSSION") {
+  if (phase !== "PROPOSAL_DISCUSSION") {
     expect(pending.speakingOrder).toEqual([]);
     expect(pending.speakerIndex).toBe(0);
   }
@@ -704,7 +702,7 @@ describe("MISSION_RESULT", () => {
     expect(state.winReason).toBe("THREE_MISSIONS");
   });
 
-  it("都没到 3 分则进复盘讨论，发言顺序从当前队长开始", () => {
+  it("都没到 3 分则直接进入下一轮并顺延队长", () => {
     const state = step(
       {
         ...atMissionExecution(SIX, 1, [0, 1]),
@@ -715,38 +713,12 @@ describe("MISSION_RESULT", () => {
       },
       { type: "NEXT" },
     );
-    expect(state.phase).toBe("REVIEW_DISCUSSION");
-    expect(state.pending.speakingOrder).toEqual([3, 4, 5, 0, 1, 2]);
-  });
-
-  it("复盘说完进新一轮：missionIndex + 1、rejectCount 归零、队长顺延", () => {
-    const review = runUntil(
-      { ...started(SIX), rejectCount: 3, missionIndex: 0 },
-      (s) => s.phase === "REVIEW_DISCUSSION",
-      { vote: () => true },
-    );
-    expect(review.rejectCount).toBe(0); // 提议通过时就归零了
-
-    const nextRound = runUntil(review, (s) => s.phase === "TEAM_BUILDING", {});
-    expect(nextRound.missionIndex).toBe(1);
-    expect(nextRound.rejectCount).toBe(0);
-    expect(nextRound.currentLeaderId).toBe(1);
-    expect(nextRound.proposedTeam).toBeNull();
-    expectPendingMatchesPhase(nextRound);
-  });
-
-  it("复盘发言记的是该轮最后一次提议的 attempt", () => {
-    const review = atPhase(started(SIX), "REVIEW_DISCUSSION");
-    const spoken = step(review, {
-      type: "SPEAK",
-      playerId: review.pending.speakingOrder[0] as PlayerId,
-      content: "复盘",
-    });
-    expect(spoken.speeches.at(-1)).toMatchObject({
-      phase: "REVIEW_DISCUSSION",
-      missionIndex: 0,
-      attempt: review.missionHistory[0]?.attempt,
-    });
+    expect(state.phase).toBe("TEAM_BUILDING");
+    expect(state.missionIndex).toBe(2);
+    expect(state.currentLeaderId).toBe(4);
+    expect(state.rejectCount).toBe(0);
+    expect(state.proposedTeam).toBeNull();
+    expectPendingMatchesPhase(state);
   });
 });
 
@@ -761,67 +733,15 @@ describe("ASSASSINATION", () => {
     goodScore: 3,
   });
 
-  it("坏人逐个发表推测（含奥伯伦），全说完刺客才动手", () => {
-    let state = atAssassination(SEVEN);
-    const evils = evilSeatsOf(state);
-    expect(evils).toEqual([1, 4, 5]); // 莫甘娜、奥伯伦、刺客
-
-    for (const id of evils) {
-      expect(getAwaitingPlayerIds(state)).toEqual([id]);
-      state = step(state, { type: "ASSASSIN_OPINION", playerId: id, content: `我猜 ${id}` });
-      expect(state.phase).toBe("ASSASSINATION");
-    }
-    expect(state.pending.assassinOpinions).toHaveLength(3);
+  it("进入阶段后立即只等待刺客，且不新增发言", () => {
+    const state = atAssassination(SEVEN);
+    const before = state.speeches.length;
+    expect(getAwaitingPlayerIds(state)).toEqual([5]);
+    expect(getLegalActions(state, 5).every((a) => a.type === "ASSASSINATE")).toBe(true);
 
     const struck = step(state, { type: "ASSASSINATE", playerId: 5, targetId: 3 });
-    expect(struck.assassination?.opinions).toHaveLength(3);
+    expect(struck.speeches).toHaveLength(before);
     expect(struck.assassination).toMatchObject({ assassinId: 5, targetId: 3, hit: false });
-  });
-
-  /**
-   * 【推测必须同时落成一条公开 Speech】不落的话它只在 pending 里，
-   * 而 pending 一个字都不进 PlayerView，于是整个 ASSASSIN_OPINION 步骤只写不读。
-   *
-   * 这个坑真跑出来过两次，两次刺客都刺了自己的队友：seed 94938 那局刺客在推测里
-   * 写的是"我怀疑梅林在座位3"（座位 3 真的是梅林），轮到他动手时上下文里一个字都没有，
-   * 改指了座位 1——他自己的莫甘娜。
-   *
-   * 与 PROPOSE_TEAM.statement 是同一个坑的第二次复发。
-   */
-  it("推测同时进 speeches 和 pending，两份都要有", () => {
-    let state = atAssassination(SEVEN);
-    const before = state.speeches.length;
-
-    state = step(state, { type: "ASSASSIN_OPINION", playerId: 1, content: "我怀疑 3 号" });
-
-    expect(state.speeches).toHaveLength(before + 1);
-    expect(state.speeches.at(-1)).toMatchObject({
-      seq: before,
-      playerId: 1,
-      phase: "ASSASSINATION",
-      content: "我怀疑 3 号",
-    });
-    // 调度与结算仍然靠 pending，两份数据缺一不可
-    expect(state.pending.assassinOpinions).toEqual([{ playerId: 1, content: "我怀疑 3 号" }]);
-
-    // seq 连续——speeches 只被追加
-    state = step(state, { type: "ASSASSIN_OPINION", playerId: 4, content: "我同意" });
-    expect(state.speeches.map((s) => s.seq)).toEqual(state.speeches.map((_, i) => i));
-  });
-
-  it("轮到刺客动手时，他在自己的视角里读得到刚才所有推测（含他自己那条）", () => {
-    let state = atAssassination(SEVEN);
-    const evils = evilSeatsOf(state);
-    const assassin = evils.at(-1)!; // 5 号，最后一个说、也是动手的人
-
-    for (const id of evils) {
-      state = step(state, { type: "ASSASSIN_OPINION", playerId: id, content: `我猜 ${id}` });
-    }
-
-    const view = toPlayerView(state, assassin);
-    // 这一条直接钉住 seed 94938 那个 bug：他自己刚说的话不能凭空消失
-    expect(view.speeches.map((s) => s.content)).toEqual(evils.map((id) => `我猜 ${id}`));
-    expect(getLegalActions(state, assassin).some((a) => a.type === "ASSASSINATE")).toBe(true);
   });
 
   it("命中梅林坏人翻盘", () => {
@@ -878,7 +798,6 @@ describe("整局", () => {
     expect(over.goodScore).toBe(3);
     expect(over.winner).toBe("EVIL");
     expect(over.winReason).toBe("ASSASSINATION_HIT");
-    expect(over.assassination?.opinions).toHaveLength(3);
   });
 
   it("任意人数都能跑完，且任务不超过 5 轮", () => {

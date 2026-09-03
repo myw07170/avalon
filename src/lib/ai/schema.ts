@@ -81,8 +81,6 @@ export const AI_SCHEMAS: {
   SPEECH: aiSpeechSchema,
   VOTE: aiVoteSchema,
   MISSION_CARD: aiMissionCardSchema,
-  // 与 SPEECH 共用：AiDecisionPayload 里这两项本来就是同一个 AiSpeech
-  ASSASSIN_OPINION: aiSpeechSchema,
   ASSASSINATION: aiAssassinationSchema,
 };
 

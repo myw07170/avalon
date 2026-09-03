@@ -73,7 +73,6 @@ function fillTemplate(state: GameState, action: GameAction, rng: RngFn): GameAct
       };
     }
     case "SPEAK":
-    case "ASSASSIN_OPINION":
       return {
         ...action,
         content: `[模拟] 座位 ${action.playerId} 在 ${state.phase} 的发言`,

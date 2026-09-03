@@ -141,7 +141,7 @@ describe("describeTurn", () => {
     }
   });
 
-  it("六种决策全都出现过，断言不是空跑", async () => {
+  it("五种决策全都出现过，断言不是空跑", async () => {
     const kinds = new Set((await pool()).map((p) => p.turn.kind));
     expect(kinds).toEqual(
       new Set([
@@ -149,7 +149,6 @@ describe("describeTurn", () => {
         "SPEECH",
         "VOTE",
         "MISSION_CARD",
-        "ASSASSIN_OPINION",
         "ASSASSINATION",
       ]),
     );
@@ -229,7 +228,7 @@ describe("发言", () => {
     let checked = 0;
     for (const { state, turn } of await pool()) {
       const form = describeTurn(turn);
-      if (form?.kind !== "SPEECH" && form?.kind !== "ASSASSIN_OPINION") continue;
+      if (form?.kind !== "SPEECH") continue;
       // legal.ts 只校验"轮没轮到你"，不管文本本身——所以"不说了"这个出口是真的
       expect(() => assertLegal(state, speakAction(form, ""))).not.toThrow();
       expect(() => assertLegal(state, speakAction(form, "我先听听"))).not.toThrow();
@@ -238,28 +237,22 @@ describe("发言", () => {
     expect(checked).toBeGreaterThan(0);
   });
 
-  it("SPEAK 与 ASSASSIN_OPINION 的 type 都由模板带着", async () => {
+  it("SPEAK 的 type 由模板带着", async () => {
     for (const { turn } of await pool()) {
       const form = describeTurn(turn);
-      if (form?.kind !== "SPEECH" && form?.kind !== "ASSASSIN_OPINION") continue;
+      if (form?.kind !== "SPEECH") continue;
       expect(speakAction(form, "x").type).toBe(form.template.type);
-      expect(form.template.type).toBe(form.kind === "SPEECH" ? "SPEAK" : "ASSASSIN_OPINION");
+      expect(form.template.type).toBe("SPEAK");
     }
   });
 
-  it("刺杀前的推测要说清楚是公开发言", async () => {
-    const forms = await formsOfKind("ASSASSIN_OPINION");
-    expect(forms.length).toBeGreaterThan(0);
-    for (const form of forms) expect(form.hint).toContain("公开");
-  });
-
-  it("组队讨论与复盘讨论给的提示不一样", async () => {
+  it("所有发言表单都使用组队讨论提示", async () => {
     const hints = new Set<string>();
     for (const { turn } of await pool()) {
       const form = describeTurn(turn);
       if (form?.kind === "SPEECH") hints.add(form.hint);
     }
-    expect(hints.size).toBe(2);
+    expect(hints.size).toBe(1);
   });
 });
 
@@ -444,7 +437,6 @@ describe("端到端", () => {
               "先试试这几个。",
             );
           case "SPEECH":
-          case "ASSASSIN_OPINION":
             return speakAction(form, "我再看看。");
           case "VOTE":
           case "MISSION_CARD":

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { zh } from "@/i18n/messages.zh";
 import { ROLE_TEXT } from "@/i18n/roles";
+import { fromDisplaySeatNumber, toDisplaySeatNumber } from "@/lib/seat-number";
 import {
   ROLE_TEAM,
   composeRoles,
@@ -187,8 +188,8 @@ describe("派西维尔", () => {
     const [a, b] = item.playerIds;
     const line = describeRole(view).lines[0] ?? "";
 
-    expect(line).toContain(`${a} 号`);
-    expect(line).toContain(`${b} 号`);
+    expect(line).toContain(`${toDisplaySeatNumber(a)} 号`);
+    expect(line).toContain(`${toDisplaySeatNumber(b)} 号`);
     expect(line).toContain("分不清谁是谁");
     expect(line).not.toMatch(/可能|更像|大概|应该是/);
   });
@@ -202,7 +203,7 @@ describe("派西维尔", () => {
       if (item?.kind !== "MERLIN_OR_MORGANA") throw new Error("派西维尔的知识形态不对");
       const [a, b] = item.playerIds;
       expect(a).toBeLessThan(b);
-      expect(describeRole(view).lines[0]).toContain(`${a} 号`);
+      expect(describeRole(view).lines[0]).toContain(`${toDisplaySeatNumber(a)} 号`);
     }
   });
 });
@@ -274,11 +275,11 @@ describe("座位名", () => {
   it("座位号带上名字", () => {
     const view = findView("MERLIN", TEN_COUNT, TEN_EVIL);
     const line = describeRole(view).lines[0] ?? "";
-    const id = Number(line.match(/^(\d+) 号/)?.[1]);
-    const name = view.players.find((p) => p.id === id)?.name;
+    const seatNumber = Number(line.match(/^(\d+) 号/)?.[1]);
+    const name = view.players.find((p) => p.id === fromDisplaySeatNumber(seatNumber))?.name;
 
-    expect(Number.isInteger(id)).toBe(true);
-    expect(line).toContain(`${id} 号（${name}）`);
+    expect(Number.isInteger(seatNumber)).toBe(true);
+    expect(line).toContain(`${seatNumber} 号（${name}）`);
   });
 
   it("每个人数下都不抛错", () => {

@@ -21,6 +21,7 @@ import {
   type Role,
 } from "../game/types";
 import { simulateGame } from "../sim/random";
+import { toDisplaySeatNumber } from "../seat-number";
 import { decisionKindOf } from "./orchestrator";
 import { buildPrompt } from "./prompt";
 import { PROMPT_COPY, type SectionKey } from "./prompt-copy";
@@ -219,7 +220,6 @@ const ALL_KINDS: AiDecisionKind[] = [
   "SPEECH",
   "VOTE",
   "MISSION_CARD",
-  "ASSASSIN_OPINION",
   "ASSASSINATION",
 ];
 
@@ -279,9 +279,11 @@ describe("信息隔离", () => {
       // 期望值在测试里独立算一遍，不复用实现里的渲染函数
       for (const item of view.knowledge) {
         if (item.kind === "IS_EVIL") {
-          expect(body).toContain(`座位 ${item.playerId} 是坏人`);
+          expect(body).toContain(`座位 ${toDisplaySeatNumber(item.playerId)} 是坏人`);
         } else {
-          expect(body).toContain(`座位 ${item.playerIds[0]} 和 座位 ${item.playerIds[1]} 中`);
+          expect(body).toContain(
+            `座位 ${toDisplaySeatNumber(item.playerIds[0])} 和 座位 ${toDisplaySeatNumber(item.playerIds[1])} 中`,
+          );
         }
       }
       // 条数也要对得上，多一条就是凭空多知道了一个人
@@ -303,8 +305,8 @@ describe("信息隔离", () => {
     ];
     const state = build(roles, { phase: "TEAM_BUILDING", currentLeaderId: 2 });
     const body = sectionsOf(promptFor(state, 2, "SPEECH")).get("你知道的") ?? "";
-    expect(body).toContain("座位 1 和 座位 5 中");
-    expect(body).not.toContain("座位 5 和 座位 1 中");
+    expect(body).toContain("座位 2 和 座位 6 中");
+    expect(body).not.toContain("座位 6 和 座位 2 中");
   });
 
   it("【全场发言】原样转录 view.speeches，不加工也不添油加醋", () => {
@@ -317,24 +319,24 @@ describe("信息隔离", () => {
           phase: "PROPOSAL_DISCUSSION",
           missionIndex: 0,
           attempt: 0,
-          content: "1 号的票很难解释",
+          content: "2 号的票很难解释",
         },
         {
           seq: 1,
           playerId: 7,
-          phase: "REVIEW_DISCUSSION",
+          phase: "PROPOSAL_DISCUSSION",
           missionIndex: 0,
           attempt: 0,
-          content: "我觉得 3 号是梅林",
+          content: "我觉得 4 号是梅林",
         },
       ],
     });
     const body = sectionsOf(promptFor(state, 3, "TEAM_PROPOSAL")).get("全场发言") ?? "";
     const lines = body.split("\n").filter((l) => l.startsWith("- "));
     expect(lines).toHaveLength(2);
-    expect(body).toContain("1 号的票很难解释");
+    expect(body).toContain("2 号的票很难解释");
     // 别人在发言里点名"梅林"是玩游戏，不是泄漏——这一段刻意不在 CLEAN_SECTIONS 里
-    expect(body).toContain("我觉得 3 号是梅林");
+    expect(body).toContain("我觉得 4 号是梅林");
   });
 
   /**
@@ -346,55 +348,25 @@ describe("信息隔离", () => {
   it("【全场发言】里自己那条标了（你），别人那条不标", () => {
     const speeches = [
       { seq: 0, playerId: 3, phase: "PROPOSAL_DISCUSSION", missionIndex: 0, attempt: 0, content: "甲" },
-      { seq: 1, playerId: 7, phase: "REVIEW_DISCUSSION", missionIndex: 0, attempt: 0, content: "乙" },
+      { seq: 1, playerId: 7, phase: "PROPOSAL_DISCUSSION", missionIndex: 0, attempt: 0, content: "乙" },
     ] as const;
     const state = build(TEN, { phase: "TEAM_BUILDING", speeches: [...speeches] });
 
     const asThree = sectionsOf(promptFor(state, 3, "TEAM_PROPOSAL")).get("全场发言") ?? "";
-    expect(asThree).toContain("座位 3（你）：甲");
-    expect(asThree).toContain("座位 7：乙");
+    expect(asThree).toContain("座位 4（你）：甲");
+    expect(asThree).toContain("座位 8：乙");
 
     // 换个人看，标记必须跟着换——写死成某个座位是最容易犯的错
     const asSeven = sectionsOf(promptFor(state, 7, "TEAM_PROPOSAL")).get("全场发言") ?? "";
-    expect(asSeven).toContain("座位 7（你）：乙");
-    expect(asSeven).toContain("座位 3：甲");
-  });
-
-  /**
-   * 刺杀前的推测现在是正经的公开 Speech（phases/assassination.ts）。
-   * 刺客动手时必须读得到它们——**包括他自己刚说的那条**，
-   * 那正是 seed 94938 那局"推对了又改口"的直接原因。
-   */
-  it("刺杀阶段的推测进【全场发言】，且不渲染轮次", () => {
-    const state = build(
-      TEN,
-      {
-        phase: "ASSASSINATION",
-        goodScore: 3,
-        speeches: [
-          {
-            seq: 0,
-            playerId: 7,
-            phase: "ASSASSINATION",
-            missionIndex: 2,
-            attempt: 0,
-            content: "我怀疑座位 0",
-          },
-        ],
-      },
-      { assassinOpinions: state0Opinions() },
-    );
-    const body = sectionsOf(promptFor(state, 7, "ASSASSINATION")).get("全场发言") ?? "";
-    expect(body).toContain("刺杀 座位 7（你）：我怀疑座位 0");
-    // 任务已经打完了，"第 3 轮 刺杀"只会让模型分神
-    expect(body).not.toContain("第 3 轮");
+    expect(asSeven).toContain("座位 8（你）：乙");
+    expect(asSeven).toContain("座位 4：甲");
   });
 
   /**
    * 一轮里被否决两次，就有三批发言堆在【全场发言】里。
    * 不标"第几次提议"，模型分不清哪句话是冲着哪个队伍说的。
    */
-  it("组队与提议讨论的发言标出第几次提议，复盘讨论不标", () => {
+  it("组队与提议讨论的发言标出第几次提议", () => {
     const state = build(TEN, {
       phase: "TEAM_BUILDING",
       speeches: [
@@ -404,7 +376,7 @@ describe("信息隔离", () => {
           phase: "TEAM_BUILDING",
           missionIndex: 0,
           attempt: 1,
-          content: "这次我带 0、1、2、4",
+          content: "这次我带 1、2、3、5",
         },
         {
           seq: 1,
@@ -412,17 +384,15 @@ describe("信息隔离", () => {
           phase: "PROPOSAL_DISCUSSION",
           missionIndex: 0,
           attempt: 1,
-          content: "换掉 4 号我就同意",
+          content: "换掉 5 号我就同意",
         },
         {
           seq: 2,
           playerId: 7,
-          phase: "REVIEW_DISCUSSION",
+          phase: "PROPOSAL_DISCUSSION",
           missionIndex: 0,
-          // 复盘的 attempt 是"该轮最后一次提议"（types.ts 的约定），
-          // 渲染出来会让模型以为复盘也分了好几次
           attempt: 1,
-          content: "那张失败票只可能来自车上",
+          content: "这支队伍仍然有问题",
         },
       ],
     });
@@ -430,10 +400,9 @@ describe("信息隔离", () => {
       .split("\n")
       .filter((l) => l.startsWith("- "));
 
-    expect(lines[0]).toContain("第 1 轮第 2 次提议 队长组队 座位 3");
-    expect(lines[1]).toContain("第 1 轮第 2 次提议 提议讨论 座位 7");
-    expect(lines[2]).toContain("第 1 轮复盘讨论 座位 7");
-    expect(lines[2]).not.toContain("次提议");
+    expect(lines[0]).toContain("第 1 轮第 2 次提议 队长组队 座位 4");
+    expect(lines[1]).toContain("第 1 轮第 2 次提议 提议讨论 座位 8");
+    expect(lines[2]).toContain("第 1 轮第 2 次提议 提议讨论 座位 8");
   });
 });
 
@@ -477,9 +446,7 @@ describe("合法选项只从 legalActions 渲染", () => {
   });
 
   it("刺杀的可选目标与 legalActions 完全一致", () => {
-    const state = build(TEN, { phase: "ASSASSINATION", goodScore: 3 }, {
-      assassinOpinions: state0Opinions(),
-    });
+    const state = build(TEN, { phase: "ASSASSINATION", goodScore: 3 });
     const body = sectionsOf(promptFor(state, 7, "ASSASSINATION")).get("本次决策") ?? "";
     // 候选目标必须与 legalActions 逐一对上：少一个是漏掉合法动作，
     // 多一个是凭空造了一个引擎会拒绝的选项。
@@ -491,7 +458,7 @@ describe("合法选项只从 legalActions 渲染", () => {
     expect(targets).toEqual(state.players.map((p) => p.id));
 
     const listed = [...body.matchAll(/^- 座位 (\d+)/gm)].map((m) => Number(m[1]));
-    expect(listed).toEqual(targets);
+    expect(listed).toEqual(targets.map(toDisplaySeatNumber));
   });
 
   /**
@@ -500,15 +467,13 @@ describe("合法选项只从 legalActions 渲染", () => {
    * 这几条钉的是 prompt 侧的排除标注。
    */
   it("刺杀候选里，已知的队友和自己都被标注出来", () => {
-    const state = build(TEN, { phase: "ASSASSINATION", goodScore: 3 }, {
-      assassinOpinions: state0Opinions(),
-    });
+    const state = build(TEN, { phase: "ASSASSINATION", goodScore: 3 });
     const body = sectionsOf(promptFor(state, 7, "ASSASSINATION")).get("本次决策") ?? "";
 
-    // 刺客（座位 7）看得见莫甘娜(1) 与莫德雷德(4)
-    expect(body).toContain("- 座位 1（你已知的坏人，不可能是梅林）");
-    expect(body).toContain("- 座位 4（你已知的坏人，不可能是梅林）");
-    expect(body).toContain("- 座位 7（你自己，不可能是梅林）");
+    // 刺客（显示为座位 8）看得见莫甘娜(2) 与莫德雷德(5)
+    expect(body).toContain("- 座位 2（你已知的坏人，不可能是梅林）");
+    expect(body).toContain("- 座位 5（你已知的坏人，不可能是梅林）");
+    expect(body).toContain("- 座位 8（你自己，不可能是梅林）");
     expect(body).toContain("梅林是**好人阵营**的角色");
   });
 
@@ -520,34 +485,21 @@ describe("合法选项只从 legalActions 渲染", () => {
    * 拿全局坏人名单去算排除项，等于让刺客凭空认出奥伯伦——那是一次货真价实的信息泄漏。
    */
   it("刺客不认识的奥伯伦不会被标成队友", () => {
-    const state = build(TEN, { phase: "ASSASSINATION", goodScore: 3 }, {
-      assassinOpinions: state0Opinions(),
-    });
+    const state = build(TEN, { phase: "ASSASSINATION", goodScore: 3 });
     const sections = sectionsOf(promptFor(state, 7, "ASSASSINATION"));
     const body = sections.get("本次决策") ?? "";
 
     // 先确认前提：奥伯伦确实不在刺客的 knowledge 里
-    expect(sections.get("你知道的") ?? "").not.toContain("座位 6");
+    expect(sections.get("你知道的") ?? "").not.toContain("座位 7");
     // 于是候选里他就是干干净净的一行
-    expect(body).toContain("- 座位 6\n");
-    expect(body).not.toContain("座位 6（");
-  });
-
-  it("推测阶段也要求排除自己与已知队友", () => {
-    const state = build(TEN, { phase: "ASSASSINATION", goodScore: 3 });
-    const body = sectionsOf(promptFor(state, 1, "ASSASSIN_OPINION")).get("本次决策") ?? "";
-    // 莫甘娜（座位 1）认识莫德雷德(4) 与刺客(7)，不认识奥伯伦(6)
-    expect(body).toContain("座位 4、7");
-    expect(body).toContain("座位 1（你自己）");
-    expect(body).not.toContain("座位 6");
+    expect(body).toContain("- 座位 7\n");
+    expect(body).not.toContain("座位 7（");
   });
 
   it("刺杀的输出格式里再钉一次排除项，且不出现角色名", () => {
-    const state = build(TEN, { phase: "ASSASSINATION", goodScore: 3 }, {
-      assassinOpinions: state0Opinions(),
-    });
+    const state = build(TEN, { phase: "ASSASSINATION", goodScore: 3 });
     const body = sectionsOf(promptFor(state, 7, "ASSASSINATION")).get("输出格式") ?? "";
-    expect(body).toContain("targetId 不要填 座位 1、4、7");
+    expect(body).toContain("targetId 不要填 座位 2、5、8");
     // 【输出格式】属于"干净段"，一个角色名都不许有——整局那条断言钝得有道理
     expect(body).not.toContain("梅林");
   });
@@ -644,7 +596,7 @@ describe("合法选项只从 legalActions 渲染", () => {
         promptFor(
           build(
             TEN,
-            { phase: "REVIEW_DISCUSSION", missionHistory: [MISSION_0] },
+            { phase: "PROPOSAL_DISCUSSION", missionHistory: [MISSION_0] },
             { speakingOrder: order, speakerIndex },
           ),
           order[speakerIndex] as PlayerId,
@@ -661,8 +613,8 @@ describe("合法选项只从 legalActions 渲染", () => {
     it("中间的人拿到已发言与未发言两份名单", () => {
       const body = discussing(3);
       expect(body).toContain("你是第 4/10 个发言");
-      expect(body).toContain("已发言：座位 3、4、5");
-      expect(body).toContain("还没发言：座位 7、8、9、0、1、2");
+      expect(body).toContain("已发言：座位 4、5、6");
+      expect(body).toContain("还没发言：座位 8、9、10、1、2、3");
     });
 
     it("最后一个被告知别再等别人说", () => {
@@ -690,7 +642,7 @@ describe("合法选项只从 legalActions 渲染", () => {
         ).get("本次决策") ?? "";
 
       expect(body).toContain("你是第 2/10 个发言");
-      expect(body).toContain("已发言：座位 3");
+      expect(body).toContain("已发言：座位 4");
     });
   });
 
@@ -745,18 +697,13 @@ describe("合法选项只从 legalActions 渲染", () => {
     expect(body).toContain("容易被带");
   });
 
-  it("六个 kind 都能建出非空的【本次决策】段", () => {
+  it("五个 kind 都能建出非空的【本次决策】段", () => {
     for (const kind of ALL_KINDS) {
       const body = sectionsOf(promptFor(missionState, 1, kind)).get("本次决策");
       expect(body, kind).toBeTruthy();
     }
   });
 });
-
-/** 刺杀阶段：四个坏人都发表过推测，轮到刺客动手 */
-function state0Opinions(): Array<{ playerId: PlayerId; content: string }> {
-  return [1, 4, 6, 7].map((playerId) => ({ playerId, content: "我猜梅林是 0 号" }));
-}
 
 // ---------------------------------------------------------------------------
 // 发言长度与角色提醒
@@ -849,8 +796,8 @@ describe("好人不能投失败票，说三遍", () => {
 describe("发言长度", () => {
   const state = build(TEN, { phase: "TEAM_BUILDING", currentLeaderId: 3 });
 
-  it("三个要产出自由文本的 kind 都写了长度要求", () => {
-    for (const kind of ["TEAM_PROPOSAL", "SPEECH", "ASSASSIN_OPINION"] as const) {
+  it("两个要产出自由文本的 kind 都写了长度要求", () => {
+    for (const kind of ["TEAM_PROPOSAL", "SPEECH"] as const) {
       const body = sectionsOf(promptFor(state, 3, kind)).get("本次决策") ?? "";
       expect(body, kind).toContain("2-5 句");
     }
@@ -1055,10 +1002,10 @@ describe("快照", () => {
       {
         seq: 0,
         playerId: 3,
-        phase: "REVIEW_DISCUSSION",
+        phase: "PROPOSAL_DISCUSSION",
         missionIndex: 0,
         attempt: 0,
-        content: "1 号的票很难解释",
+        content: "2 号的票很难解释",
       },
     ],
   });
@@ -1077,9 +1024,7 @@ describe("快照", () => {
   });
 
   it("刺客在刺杀阶段的完整 prompt", () => {
-    const state = build(TEN, { phase: "ASSASSINATION", goodScore: 3 }, {
-      assassinOpinions: state0Opinions(),
-    });
+    const state = build(TEN, { phase: "ASSASSINATION", goodScore: 3 });
     expect(promptFor(state, 7, "ASSASSINATION")).toMatchSnapshot();
   });
 
@@ -1106,10 +1051,10 @@ describe("快照", () => {
         {
           seq: 0,
           playerId: 3,
-          phase: "REVIEW_DISCUSSION",
+          phase: "PROPOSAL_DISCUSSION",
           missionIndex: 0,
           attempt: 0,
-          content: "Seat 1's vote is hard to explain",
+          content: "Seat 2's vote is hard to explain",
         },
       ],
     },
@@ -1137,7 +1082,7 @@ describe("快照", () => {
     const state = build(
       TEN,
       { phase: "ASSASSINATION", goodScore: 3 },
-      { assassinOpinions: state0Opinions() },
+      {},
       EN_PERSONA,
     );
     expect(promptFor(state, 7, "ASSASSINATION", "en")).toMatchSnapshot();
@@ -1171,10 +1116,10 @@ describe("英文语料", () => {
           {
             seq: 0,
             playerId: 3,
-            phase: "REVIEW_DISCUSSION",
+            phase: "PROPOSAL_DISCUSSION",
             missionIndex: 0,
             attempt: 0,
-            content: "Seat 1 has some explaining to do",
+            content: "Seat 2 has some explaining to do",
           },
         ],
       },

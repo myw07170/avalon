@@ -122,12 +122,12 @@ export function withHumanSeat(draft: SetupDraft, seat: PlayerId): SetupDraft {
 }
 
 /**
- * 起身观战 / 坐回 0 号。
+ * 起身观战 / 坐回内部 ID 0（显示为 1 号）。
  *
  * 【为什么另给一对函数，而不是让人去点自己的座位】"再点一次起身"是 withHumanSeat
  * 的既有行为，好用，但只有点过的人才知道。观战是一种对局形态，得有个说得出名字的入口。
  *
- * 坐回时固定 0 号而不是记住上一次坐哪：多存一个字段就多一处会和 playerCount
+ * 坐回时固定内部 ID 0 而不是记住上一次坐哪：多存一个字段就多一处会和 playerCount
  * 对不上的地方（withPlayerCount 那条注释说的就是这类问题），而重新点一下座位是零成本的。
  */
 export function withSpectator(draft: SetupDraft): SetupDraft {

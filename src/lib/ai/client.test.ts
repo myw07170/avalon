@@ -203,6 +203,66 @@ describe("正常路径", () => {
   });
 });
 
+describe("模型座位号边界", () => {
+  it("组队结果从显示编号还原为内部 PlayerId，debug.raw 保留模型原文", async () => {
+    const raw =
+      '{"reasoning":"想了想","team":[1,3,4],"statement":"带这三位"}';
+    const provider = fakeProvider([{ content: raw }]);
+
+    const result = await createAiClient(CONFIG(provider.fetchFn)).decide(
+      makeReq(build(), 2, "TEAM_PROPOSAL"),
+    );
+
+    expect(result.payload.team).toEqual([0, 2, 3]);
+    expect(result.debug?.raw).toBe(raw);
+  });
+
+  it.each(["SPEECH"] as const)(
+    "%s 的 suspicions 使用显示编号，返回后还原为内部 PlayerId",
+    async (kind) => {
+      const provider = fakeProvider([
+        {
+          content:
+            '{"reasoning":"想了想","content":"公开发言","suspicions":[{"playerId":1,"score":0.8},{"playerId":6,"score":0.2}]}',
+        },
+      ]);
+
+      const result = await createAiClient(CONFIG(provider.fetchFn)).decide(
+        makeReq(build(), 2, kind),
+      );
+
+      expect(result.payload.suspicions?.map((item) => item.playerId)).toEqual([0, 5]);
+    },
+  );
+
+  it("刺杀目标从显示编号还原为内部 PlayerId", async () => {
+    const provider = fakeProvider([
+      { content: '{"reasoning":"想了想","targetId":6}' },
+    ]);
+
+    const result = await createAiClient(CONFIG(provider.fetchFn)).decide(
+      makeReq(build(), 2, "ASSASSINATION"),
+    );
+
+    expect(result.payload.targetId).toBe(5);
+  });
+
+  it("模型返回 0 号时转换为负数，由现有 schema 拒绝并重试", async () => {
+    const provider = fakeProvider([
+      { content: '{"reasoning":"错用了零基编号","targetId":0}' },
+      { content: '{"reasoning":"改成显示编号","targetId":1}' },
+    ]);
+
+    const result = await createAiClient(CONFIG(provider.fetchFn)).decide(
+      makeReq(build(), 2, "ASSASSINATION", 1),
+    );
+
+    expect(result.payload.targetId).toBe(0);
+    expect(result.debug?.attempts).toBe(2);
+    expect(provider.calls).toHaveLength(2);
+  });
+});
+
 describe("max_tokens", () => {
   afterEach(() => {
     vi.unstubAllEnvs();

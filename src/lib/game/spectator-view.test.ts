@@ -176,7 +176,6 @@ describe("多出来的只有 roles", () => {
     expect(dump).not.toContain("persona");
     expect(dump).not.toContain("acknowledged");
     expect(dump).not.toContain("speakerIndex");
-    expect(dump).not.toContain("assassinOpinions");
   });
 
   it("不共享引用：改返回值动不了引擎状态", () => {

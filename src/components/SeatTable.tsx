@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { revealedRolesAtom, seatAvatarSeedAtom, viewAtom } from "@/store/game";
 import { SeatRing } from "./SeatRing";
 import { describeTable, type SeatState } from "./seat-table-model";
+import { useOptionalAssassinationDraft } from "./AssassinationDraftContext";
 import { useOptionalTeamDraft } from "./TeamDraftContext";
 
 export function SeatTable() {
@@ -29,11 +30,28 @@ export function SeatTable() {
   const roles = useAtomValue(revealedRolesAtom);
   const msg = useMessages();
   const teamDraft = useOptionalTeamDraft();
+  const assassinationDraft = useOptionalAssassinationDraft();
   if (!view) return null;
 
   const table = describeTable(view, msg, roles);
-  const selecting = teamDraft?.active === true;
-  const selected = new Set(teamDraft?.selected ?? []);
+
+  // TEAM_PROPOSAL 与 ASSASSINATION 互斥，同一时刻只可能有一个激活。
+  // 两者共用 onTeam 这条光环视觉通道：圆桌上"被选中"就是被选中，不分组队还是刺杀
+  const selection = teamDraft?.active
+    ? {
+        toggle: teamDraft.toggle,
+        selected: teamDraft.selected,
+        isDisabled: (id: number) => teamDraft.full && !teamDraft.selected.includes(id),
+      }
+    : assassinationDraft?.active
+      ? {
+          toggle: assassinationDraft.toggle,
+          selected: assassinationDraft.selected,
+          isDisabled: () => false,
+        }
+      : null;
+  const selecting = selection !== null;
+  const selected = new Set(selection?.selected ?? []);
   const seats = selecting
     ? table.seats.map((seat) => ({ ...seat, onTeam: selected.has(seat.id) }))
     : table.seats;
@@ -43,13 +61,9 @@ export function SeatTable() {
       count={view.players.length}
       avatarSeed={avatarSeed}
       marks={seats}
-      onSelect={interactive ? teamDraft?.toggle : undefined}
-      selectedIds={interactive ? teamDraft?.selected : undefined}
-      isDisabled={
-        interactive
-          ? (id) => teamDraft?.full === true && !selected.has(id)
-          : undefined
-      }
+      onSelect={interactive ? selection?.toggle : undefined}
+      selectedIds={interactive ? selection?.selected : undefined}
+      isDisabled={interactive ? selection?.isDisabled : undefined}
       seatLabel={(_id, mark) => seatDescription(seats, mark.id, msg)}
       center={
         <>
@@ -71,7 +85,7 @@ export function SeatTable() {
         <>
           {/* 单列布局在右下操作区使用大触控块；这里保持只读，避免两处来回滚动。 */}
           <div className="lg:hidden">{ring(false)}</div>
-          {/* 桌面端的圆桌就是组队选择器。CSS 分岔保持 SSR 与水合输出一致。 */}
+          {/* 桌面端的圆桌就是选人器（组队 / 刺杀）。CSS 分岔保持 SSR 与水合输出一致。 */}
           <div className="hidden lg:block">{ring(true)}</div>
         </>
       ) : (

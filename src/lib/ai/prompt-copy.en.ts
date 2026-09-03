@@ -15,6 +15,7 @@
  * 这份语料在真实 provider 上跑过之前，不能算完成——见 README 与 todos 的阶段 6。
  */
 import { plural } from "@/i18n/plural";
+import { toDisplaySeatNumber } from "@/lib/seat-number";
 import type { AiDecisionKind, Phase, PlayerId, Role } from "../game/types";
 import type { PromptCopy, SectionKey } from "./prompt-copy.zh";
 
@@ -37,9 +38,11 @@ export const enPrompt: PromptCopy = {
   header: (title: string) => `## ${title}`,
   ref: (title: string) => `the "${title}" section`,
 
-  seat: (id: PlayerId) => `Seat ${id}`,
+  seat: (id: PlayerId) => `Seat ${toDisplaySeatNumber(id)}`,
   seatList: (ids: readonly PlayerId[]) =>
-    ids.length === 0 ? "none" : `Seat${ids.length > 1 ? "s" : ""} ${ids.join(", ")}`,
+    ids.length === 0
+      ? "none"
+      : `Seat${ids.length > 1 ? "s" : ""} ${ids.map(toDisplaySeatNumber).join(", ")}`,
   nth: (missionIndex: number) => `Mission ${missionIndex + 1}`,
   selfMark: (seatText: string) => `${seatText} (you)`,
   good: "Good",
@@ -53,7 +56,6 @@ export const enPrompt: PromptCopy = {
     TEAM_VOTE: "team vote",
     MISSION_EXECUTION: "mission",
     MISSION_RESULT: "mission result",
-    REVIEW_DISCUSSION: "review discussion",
     ASSASSINATION: "assassination",
     GAME_OVER: "game over",
   } as Record<Phase, string>,
@@ -207,9 +209,8 @@ export const enPrompt: PromptCopy = {
     attempt: (attempt: number) => `proposal ${attempt}`,
     /**
      * 【中文能直接拼，英文不能】中文那份是 `第 1 轮` + `第 1 次提议 ` + `提议讨论`，
-     * 方块字之间不需要分隔符；英文直接拼会得到 "Mission 1review discussion"。
-     * 而 round 与 attempt 都可能是空串（刺杀阶段不渲染轮次、复盘不标提议次数），
-     * 所以要先滤掉空的再用逗号连起来。
+     * 方块字之间不需要分隔符；英文直接拼会得到 "Mission 1proposal discussion"。
+     * 可选片段先滤掉空串，再用逗号连起来。
      */
     line: (round: string, attempt: string, phaseLabel: string, who: string, content: string) =>
       `- ${[round, attempt, phaseLabel].filter((part) => part !== "").join(", ")} — ` +
@@ -259,8 +260,6 @@ export const enPrompt: PromptCopy = {
       proposal:
         "This is the proposal discussion and it is your turn. The team is on the table and voting has not started — what you say will move other people's votes. " +
         "**Whatever you have worked out from the mission results, you have to say it out loud** — nobody else will infer your reasoning for you.",
-      review:
-        "This is the review discussion and it is your turn. The mission result is public. Accuse, defend yourself, or campaign for votes — all fair.",
       requirement: (speechLength: string) => `Length: ${speechLength}`,
       freedom:
         "You can be candid, vague, probing, combative, herd the table, shield someone, or hold your judgement for now.",
@@ -299,16 +298,6 @@ export const enPrompt: PromptCopy = {
         "Sending false is an illegal action. The engine rejects it outright — you cannot sabotage the mission that way.",
     },
 
-    opinion: {
-      lead: "Good has reached 3 points and the game has moved to the assassination. Before the Assassin strikes, each Evil player gives one public read.",
-      ask: (merlin: string) => `Say who you think ${merlin} is, and what you are going on.`,
-      excludedSelfOnly: (own: string, merlin: string) =>
-        `So do not point at yourself: ${own} cannot be ${merlin}.`,
-      excluded: (evil: string, own: string) =>
-        `So these are already ruled out: ${evil} (Evil players you know) and ${own}.`,
-      ownSeat: (seatText: string) => `${seatText} (yourself)`,
-    },
-
     assassination: {
       lead: (merlin: string) =>
         `You are the Assassin, and this is the last blow: name one player as ${merlin}. Hit, and Evil steals the game; miss, and Good wins.`,
@@ -328,13 +317,11 @@ export const enPrompt: PromptCopy = {
    */
   outputExamples: {
     TEAM_PROPOSAL:
-      '{"reasoning":"private analysis, nobody else sees this","team":[0,2,3],"statement":"your public explanation of the pick"}',
+      '{"reasoning":"private analysis, nobody else sees this","team":[1,3,4],"statement":"your public explanation of the pick"}',
     SPEECH:
       '{"reasoning":"private analysis, nobody else sees this","content":"what you say out loud","suspicions":[{"playerId":1,"score":0.8}]}',
     VOTE: '{"reasoning":"private analysis, nobody else sees this","approve":true}',
     MISSION_CARD: '{"reasoning":"private analysis, nobody else sees this","success":true}',
-    ASSASSIN_OPINION:
-      '{"reasoning":"private analysis, nobody else sees this","content":"what you say out loud","suspicions":[{"playerId":1,"score":0.8}]}',
     ASSASSINATION: '{"reasoning":"private analysis, nobody else sees this","targetId":2}',
   } as Record<AiDecisionKind, string>,
 
@@ -371,11 +358,9 @@ export const enPrompt: PromptCopy = {
       `Good ${good} to ${evil}, rejected ${rejectCount} times this round.`,
     topicProposal: "team pitch",
     topicSpeech: "speech",
-    topicOpinion: "pre-strike read",
     reasoningTeam: (playerCount: number, teamSize: number) =>
       `[mock] picked ${teamSize} at random out of ${playerCount}`,
     reasoningSpeech: "[mock] no strategy, template speech",
-    reasoningOpinion: "[mock] no strategy, template read",
     reasoningVote: (approve: boolean) =>
       `[mock] random ${approve ? "approve" : "reject"}`,
     reasoningCard: (count: number) =>

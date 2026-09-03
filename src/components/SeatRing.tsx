@@ -19,6 +19,7 @@
  */
 import type { PlayerId } from "@/lib/game";
 import { useMessages } from "@/i18n/useMessages";
+import { toDisplaySeatNumber } from "@/lib/seat-number";
 import { cn } from "@/lib/utils";
 import type { SeatTone } from "./role-card-model";
 import { SeatAvatar } from "./SeatAvatar";
@@ -197,7 +198,9 @@ function Ring({
                 id={point.id}
                 className="size-5 shrink-0 fill-current opacity-75"
               />
-              <span className="tabular text-[10px] leading-none">{point.id}</span>
+              <span className="tabular text-[10px] leading-none">
+                {toDisplaySeatNumber(point.id)}
+              </span>
             </span>
             {badges}
           </button>
@@ -215,7 +218,9 @@ function Ring({
                 id={point.id}
                 className="size-5 shrink-0 fill-current opacity-75"
               />
-              <span className="tabular text-[10px] leading-none">{point.id}</span>
+              <span className="tabular text-[10px] leading-none">
+                {toDisplaySeatNumber(point.id)}
+              </span>
             </span>
             {badges}
           </div>

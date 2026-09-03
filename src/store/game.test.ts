@@ -11,6 +11,7 @@ import { createConfig } from "@/lib/game/config";
 import { createRng } from "@/lib/game/rng";
 import { createGame, makePlaceholderPersonas } from "@/lib/game/setup";
 import { PREVIEW_AVATAR_SEED } from "@/lib/seat-avatar";
+import { toDisplaySeatNumber } from "@/lib/seat-number";
 import { describeTurn } from "@/components/action-panel-model";
 import { describeGameOver } from "@/components/game-over-model";
 import type { GameAction, PlayerId } from "@/lib/game/types";
@@ -257,7 +258,6 @@ describe("以梅林身份完整玩完一局", () => {
           statement: "就带这几个人",
         };
       case "SPEECH":
-      case "ASSASSIN_OPINION":
         return { ...form.template, content: "我先听听大家怎么说" };
 
       // 能穷举的动作：一律原样取用 legalActions 里那几个，面板不自己拼
@@ -328,7 +328,7 @@ describe("以梅林身份完整玩完一局", () => {
     // 4. 复盘面板画得出这一刀，而且梅林那一行指向人类座位
     const brief = describeGameOver(view, store.get(reviewDecisionsAtom), zh);
     expect(brief?.strike).not.toBeNull();
-    expect(brief?.strike?.merlinLabel).toContain(`${SEAT} 号`);
+    expect(brief?.strike?.merlinLabel).toContain(`${toDisplaySeatNumber(SEAT)} 号`);
     expect(brief?.strike?.headline).toMatch(/刺中|刺空/);
     // 梅林是好人，胜负与好人阵营一致
     expect(brief?.youWon).toBe(reveal?.winner === "GOOD");
@@ -415,7 +415,7 @@ describe("人类动作提交", () => {
     const stolen = { ...firstLegal(paused!), playerId: 1 } as GameAction;
     store.set(submitActionAtom, stolen);
 
-    expect(store.get(errorAtom)).toContain("不能替座位 1 行动");
+    expect(store.get(errorAtom)).toContain("不能替座位 2 行动");
     expect(store.get(humanTurnAtom)).toBe(paused);
 
     await drive(store, run);

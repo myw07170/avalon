@@ -17,6 +17,7 @@ import { plural } from "./plural";
 import type { Messages } from "./messages.zh";
 import { ROLE_TEXT } from "./roles";
 import type { Phase, Role } from "@/lib/game/types";
+import { toDisplaySeatNumber } from "@/lib/seat-number";
 
 const R = ROLE_TEXT.en;
 
@@ -30,7 +31,6 @@ const PHASE: Record<Phase, string> = {
   TEAM_VOTE: "Team Vote",
   MISSION_EXECUTION: "Mission",
   MISSION_RESULT: "Mission Result",
-  REVIEW_DISCUSSION: "Review",
   ASSASSINATION: "Assassination",
   GAME_OVER: "Game Over",
 };
@@ -53,8 +53,8 @@ export const en: Messages = {
   roles: R,
 
   seat: {
-    short: (id) => `Seat ${id}`,
-    named: (id, name) => `Seat ${id} (${name})`,
+    short: (id) => `Seat ${toDisplaySeatNumber(id)}`,
+    named: (id, name) => `Seat ${toDisplaySeatNumber(id)} (${name})`,
     withYou: (base) => `${base} (you)`,
     you: "you",
     leader: "Leader",
@@ -137,7 +137,7 @@ export const en: Messages = {
           "Usually 1 fail card defeats a mission. With 7 or more players, Mission 4 needs 2. A single fail there still proves at least one Evil player was on the team, even if the mission succeeds.",
         assassinationTitle: "After three successes: assassination",
         assassinationBody:
-          "Evil discusses who looks like Merlin, then the Assassin names one player. A hit steals the game; a miss finally gives Good the win.",
+          "After the third success, nobody speaks again: the Assassin immediately names one player. A hit steals the game; a miss finally gives Good the win.",
       },
 
       roles: {
@@ -160,7 +160,6 @@ export const en: Messages = {
       SPEECH: "thinking of what to say",
       VOTE: "deciding how to vote",
       MISSION_CARD: "deciding this card",
-      ASSASSIN_OPINION: "working out a read",
       ASSASSINATION: "deciding who to strike",
     },
     seconds: (n) => `(${n}s)`,
@@ -178,8 +177,8 @@ export const en: Messages = {
     deckTitle: "Identities",
     faceDown: "Face down",
     faceDownHint: "Tap to reveal",
-    flipAria: (id) => `Reveal the identity of Seat ${id}`,
-    hideAria: (id) => `Hide the identity of Seat ${id}`,
+    flipAria: (id) => `Reveal the identity of Seat ${toDisplaySeatNumber(id)}`,
+    hideAria: (id) => `Hide the identity of Seat ${toDisplaySeatNumber(id)}`,
     revealAll: "Reveal all",
     hideAll: "Hide all",
     revealedCount: (n, total) => `${n} of ${total} revealed`,
@@ -236,7 +235,6 @@ export const en: Messages = {
       ROLE_REVEAL: "confirm",
       TEAM_BUILDING: "propose a team",
       PROPOSAL_DISCUSSION: "speak",
-      REVIEW_DISCUSSION: "speak",
       TEAM_VOTE: "vote",
       MISSION_EXECUTION: "play a mission card",
       ASSASSINATION: "decide",
@@ -245,7 +243,6 @@ export const en: Messages = {
     counter: {
       ROLE_REVEAL: "confirmed",
       PROPOSAL_DISCUSSION: "have spoken",
-      REVIEW_DISCUSSION: "have spoken",
       TEAM_VOTE: "voted",
       MISSION_EXECUTION: "cards in",
     },
@@ -285,7 +282,7 @@ export const en: Messages = {
       `You can see all ${total} Evil players. There is no ${R.MORDRED.label}.`,
 
     noSeat: "You have no seat this game; the spectator view is not built yet.",
-    seatLine: (count, id) => `${count} players · you are Seat ${id}`,
+    seatLine: (count, id) => `${count} players · you are Seat ${toDisplaySeatNumber(id)}`,
     start: "Got it, begin",
     tapToReveal: "Tap to see your role",
     flipToFront: "Reveal your role",
@@ -295,14 +292,12 @@ export const en: Messages = {
 
   feed: {
     groupProposal: (round, attempt) => `Mission ${round} · proposal ${attempt}`,
-    groupReview: (round) => `Mission ${round} · review`,
-    groupAssassination: PHASE.ASSASSINATION,
 
     title: "Speeches",
     empty: "Nobody has spoken yet.",
     silent: SILENT,
-    kind: { proposal: "team pitch", opinion: "strike read" },
-    speaker: (id, name) => `Seat ${id} · ${name}`,
+    kind: { proposal: "team pitch" },
+    speaker: (id, name) => `Seat ${toDisplaySeatNumber(id)} · ${name}`,
   },
 
   vote: {
@@ -353,18 +348,9 @@ export const en: Messages = {
       placeholder: "Why these players?",
     },
 
-    opinion: {
-      title: "Your read before the strike",
-      hint: `Say who you think ${R.MERLIN.label} is. This is public — the whole table hears it.`,
-      placeholder: `Who is most likely ${R.MERLIN.label}, and why?`,
-      skipLabel: SKIP_LABEL,
-    },
-
     speech: {
       title: "Your turn to speak",
-      hintReview: "The result is in. Say what you make of this round.",
       hintProposal: "Take a position on this team: should it go, and why.",
-      placeholderReview: "What did this round tell you?",
       placeholderProposal: "What do you make of this team?",
       skipLabel: SKIP_LABEL,
     },
@@ -414,20 +400,12 @@ export const en: Messages = {
       `you know, and ${unknown} you cannot identify — ${R.OBERON.label} is at this table, ` +
       `and he cannot be ${R.MERLIN.label} either.`,
     pickSomeone: "Pick someone first",
-    confirm: (id, name) => `It is them: Seat ${id} (${name})`,
+    confirm: (id, name) => `It is them: Seat ${toDisplaySeatNumber(id)} (${name})`,
     yourself: "yourself",
 
-    openPanel: "Open the strike panel",
-    reopenNote:
-      "Close this to go back and re-read the speeches. You can reopen it any time, " +
-      "and your pick is kept.",
-    lastStep: "Last step",
     pickOne: "Pick one player",
-    thinkAgain: "Think again",
-    opinionsTitle: "The reads just now",
-    allSilent: (n) =>
-      `All ${n} of your allies said nothing. This one is entirely on you.`,
-    silent: SILENT,
+    pickOnTable: "Pick a target on the round table to the left, then confirm here.",
+    targetPreview: "Strike target",
   },
 
   gameOver: {
@@ -443,7 +421,6 @@ export const en: Messages = {
       SPEECH: "Speech",
       VOTE: "Vote",
       MISSION_CARD: "Mission card",
-      ASSASSIN_OPINION: "Strike read",
       ASSASSINATION: "Assassination",
     },
     hit: `The strike found ${R.MERLIN.label}`,
@@ -451,7 +428,6 @@ export const en: Messages = {
     unknownRole: "Role unknown",
     noMerlin: `There is no ${R.MERLIN.label} this game`,
     merlinIs: (who) => `${R.MERLIN.label} was ${who}`,
-    silent: SILENT,
     missionSuccess: "Succeeded",
     missionSuccessWithFails: (failCount) => `Succeeded · ${failCards(failCount)}`,
     missionFail: (failCount) => `Failed · ${failCards(failCount)}`,
@@ -493,13 +469,13 @@ export const en: Messages = {
   actionProblem: {
     WRONG_ACTION: (p) => `You cannot ${p.got} right now. Available: ${p.allowed.join(" / ")}`,
     SYSTEM_ACTION: (p) => `${p.got} is not something the interface submits`,
-    NOT_YOUR_SEAT: (p) => `You cannot act for Seat ${p.seat}`,
+    NOT_YOUR_SEAT: (p) => `You cannot act for Seat ${toDisplaySeatNumber(p.seat)}`,
     TEAM_SIZE: (p) => `This mission needs ${p.need} players; you picked ${p.got}`,
     TEAM_DUPLICATE: () => "The same seat is on the team twice",
-    SEAT_MISSING: (p) => `Seat ${p.seat} does not exist`,
+    SEAT_MISSING: (p) => `Seat ${toDisplaySeatNumber(p.seat)} does not exist`,
     VOTE_NOT_OFFERED: () => "That vote is not one of your options",
     GOOD_CANNOT_FAIL: () => "Your side cannot play a fail card",
-    BAD_TARGET: (p) => `Seat ${p.seat} is not a legal target`,
+    BAD_TARGET: (p) => `Seat ${toDisplaySeatNumber(p.seat)} is not a legal target`,
     NO_GAME: () => "There is no game running",
   },
 
@@ -571,29 +547,30 @@ export const en: Messages = {
       "Assign any AI seat yourself. Seats left on Random are filled from the remaining roster when the game starts.",
     personaCount: (selected, total) => `${selected}/${total} assigned`,
     personaClearAll: "Make all random",
-    personaSeat: (id) => `Seat ${id} AI`,
+    personaSeat: (id) => `Seat ${toDisplaySeatNumber(id)} AI`,
     personaRandom: "Random assignment",
     personaRandomNote:
       "Drawn from unused personas when the game starts, with no duplicates at the table.",
-    personaChooseAria: (id, name) => `Seat ${id} AI, current persona: ${name}`,
-    personaDialogTitle: (id) => `Choose a persona for Seat ${id}`,
+    personaChooseAria: (id, name) =>
+      `Seat ${toDisplaySeatNumber(id)} AI, current persona: ${name}`,
+    personaDialogTitle: (id) => `Choose a persona for Seat ${toDisplaySeatNumber(id)}`,
     personaDialogDescription:
       "The roster controls the AI's name, voice, and habits of thought. It never reveals or changes their hidden role.",
     personaCloseAria: "Close persona roster",
     personaSearchAria: "Search personas",
     personaSearchPlaceholder: "Search names, traits, speaking styles, or reasoning…",
     personaEmpty: "No personas match that search.",
-    personaUsedBy: (id) => `Used by Seat ${id}`,
+    personaUsedBy: (id) => `Used by Seat ${toDisplaySeatNumber(id)}`,
     personaReasoning: "Notices first: ",
     submit: "Take the seat",
     spectate: "Start watching",
-    seatAriaSelf: (id) => `Your seat, Seat ${id}`,
-    seatAria: (id) => `Seat ${id}`,
+    seatAriaSelf: (id) => `Your seat, Seat ${toDisplaySeatNumber(id)}`,
+    seatAria: (id) => `Seat ${toDisplaySeatNumber(id)}`,
     goodCount: (n) => `Good ${n}`,
     evilCount: (n) => `Evil ${n}`,
     seatHintIdle: "Tap any seat to sit down, or just start watching",
     seatHintSeated: (id) =>
-      `Tap to take a seat · you are Seat ${id} · tap again to stand up`,
+      `Tap to take a seat · you are Seat ${toDisplaySeatNumber(id)} · tap again to stand up`,
     missionsNote: "The number is how many players go on that mission.",
     doubleFailNote: "The mission marked ✳ needs 2 fail cards to fail.",
   },

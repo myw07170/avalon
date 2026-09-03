@@ -125,10 +125,9 @@ tone → 配色的映射集中在 `SeatRing` 导出的 `SEAT_TONE_CLASS`，加�
 几个按钮，等于把引擎规则在 UI 里再实现一遍——两处迟早不一致，而不一致的那一次
 就是一张本不该存在的失败票。
 
-只有两个例外是**模板动作**：`PROPOSE_TEAM` 和 `SPEAK` / `ASSASSIN_OPINION`。
+两个例外是**模板动作**：`PROPOSE_TEAM` 和 `SPEAK`。
 `legal.ts` 不穷举 C(10,5)=252 种队伍，也不猜你要说什么，给的是占位模板。这两种要填内容，
-但 `type` 和 `playerId` 仍然 `{ ...template, ... }` 沿用模板——所以 `SPEAK` 与
-`ASSASSIN_OPINION` 走的是同一条代码路径，不需要在 UI 里再抄一次阶段表。
+但 `type` 和 `playerId` 仍然 `{ ...template, ... }` 沿用模板，不在 UI 里重写阶段规则。
 
 **只有一个选项时要解释为什么。** 好人的任务票只有"成功"，一颗孤零零的按钮看起来像
 界面把另一个选项藏了。
@@ -163,9 +162,11 @@ tone → 配色的映射集中在 `SeatRing` 导出的 `SEAT_TONE_CLASS`，加�
 
 ## 刺杀面板
 
-`ActionPanel` 在 `ASSASSINATION` 这一手把整块交给 `AssassinationModal`（Radix Dialog）。
-它是整局唯一不可撤销、且当场决定胜负的动作，所以要抢过屏幕；但**必须能关掉**——
-刺客决定前十有八九要回去重读发言流。
+`ActionPanel` 在 `ASSASSINATION` 这一手内联渲染 `AssassinationBody`，与组队选人
+同一套交互：桌面端点击左侧圆桌头像选定目标，窄屏用 `SeatGrid` 方块选。选好后
+在右栏确认。刺客决定前十有八九要回去重读发言流，内联布局保证发言和投票始终可见。
+
+第三次任务成功后直接出现此面板。刺杀阶段不再有坏人讨论或推测列表，等待玩家恒为刺客。
 
 **奥伯伦标不出来，这是对的。** `risk` 只认自己和 `view.knowledge` 里明确给出的队友，
 而刺客本来就不认识奥伯伦。界面替他认出来就是开天眼。所以 `risk === null` 的含义是
@@ -209,7 +210,7 @@ tone → 配色的映射集中在 `SeatRing` 导出的 `SEAT_TONE_CLASS`，加�
 1. `runGame` 里 `onDecision` 恒在对应的 `reduce` 之前调用，并发阶段也按座位序走——
    决策流与 `view.speeches` 是同一条时间线。
 2. `DecisionRecord.action` 带着**提交上去的**原文（`PROPOSE_TEAM.statement` /
-   `SPEAK.content` / `ASSASSIN_OPINION.content`），而引擎就是拿它记的 `Speech`。
+   `SPEAK.content`），而引擎就是拿它记的 `Speech`。
    读 `action` 而不是 `result.payload`：合法性兜底过的那几手，payload 里还留着
    模型原本想做的，那正是复盘要看的差异，但它配不上已经说出口的话。
 3. 人类的动作**不进** `DecisionRecord`（`takeTurn` 走 `onHumanAction` 那一支时

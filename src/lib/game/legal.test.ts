@@ -87,7 +87,7 @@ const orderFrom = (leaderId: PlayerId, playerCount = 10): PlayerId[] =>
 
 const typesOf = (actions: GameAction[]): string[] => actions.map((a) => a.type);
 
-/** 覆盖全部 10 个阶段的状态集合，供不变量测试逐个跑 */
+/** 覆盖全部阶段的状态集合，供不变量测试逐个跑 */
 const SCENARIOS: Array<{ name: string; state: GameState }> = [
   { name: "SETUP", state: ten() },
   {
@@ -127,26 +127,7 @@ const SCENARIOS: Array<{ name: string; state: GameState }> = [
     ),
   },
   { name: "MISSION_RESULT", state: ten({ phase: "MISSION_RESULT" }) },
-  {
-    name: "REVIEW_DISCUSSION",
-    state: ten(
-      { phase: "REVIEW_DISCUSSION", currentLeaderId: 4 },
-      { speakingOrder: orderFrom(4), speakerIndex: 0 },
-    ),
-  },
-  {
-    name: "ASSASSINATION（无人发表推测）",
-    state: ten({ phase: "ASSASSINATION", goodScore: 3 }),
-  },
-  {
-    name: "ASSASSINATION（坏人已说完）",
-    state: ten(
-      { phase: "ASSASSINATION", goodScore: 3 },
-      {
-        assassinOpinions: EVIL_SEATS.map((playerId) => ({ playerId, content: "x" })),
-      },
-    ),
-  },
+  { name: "ASSASSINATION", state: ten({ phase: "ASSASSINATION", goodScore: 3 }) },
   {
     name: "GAME_OVER",
     state: ten({ phase: "GAME_OVER", winner: "GOOD", winReason: "ASSASSINATION_MISS" }),
@@ -219,7 +200,7 @@ describe("getAwaitingPlayerIds", () => {
     ).toEqual([6]);
   });
 
-  it("讨论阶段只等当前发言人，游标走到头则等系统转阶段", () => {
+  it("讨论阶段只等当前发言人，游标走到头则无人行动", () => {
     const speaking = ten(
       { phase: "PROPOSAL_DISCUSSION", currentLeaderId: 8, proposedTeam: [0, 1, 2] },
       { speakingOrder: orderFrom(8), speakerIndex: 3 },
@@ -227,7 +208,7 @@ describe("getAwaitingPlayerIds", () => {
     expect(getAwaitingPlayerIds(speaking)).toEqual([1]); // 8,9,0,1
 
     const done = ten(
-      { phase: "REVIEW_DISCUSSION", currentLeaderId: 8 },
+      { phase: "PROPOSAL_DISCUSSION", currentLeaderId: 8, proposedTeam: [0, 1, 2] },
       { speakingOrder: orderFrom(8), speakerIndex: 10 },
     );
     expect(getAwaitingPlayerIds(done)).toEqual([]);
@@ -261,16 +242,10 @@ describe("getAwaitingPlayerIds", () => {
     expect(getAwaitingPlayerIds(a)).toEqual(getAwaitingPlayerIds(b));
   });
 
-  it("刺杀阶段按座位升序逐个坏人发表推测，含奥伯伦", () => {
-    const opinions: Array<{ playerId: PlayerId; content: string }> = [];
-    for (const expected of EVIL_SEATS) {
-      const state = ten({ phase: "ASSASSINATION" }, { assassinOpinions: [...opinions] });
-      expect(getAwaitingPlayerIds(state)).toEqual([expected]);
-      opinions.push({ playerId: expected, content: "x" });
-    }
-    // 坏人全部说完，才轮到刺客动手
-    const strike = ten({ phase: "ASSASSINATION" }, { assassinOpinions: opinions });
-    expect(getAwaitingPlayerIds(strike)).toEqual([ASSASSIN_SEAT]);
+  it("刺杀阶段直接等待刺客", () => {
+    expect(getAwaitingPlayerIds(ten({ phase: "ASSASSINATION" }))).toEqual([
+      ASSASSIN_SEAT,
+    ]);
   });
 });
 
@@ -372,10 +347,7 @@ describe("getLegalActions：其余阶段", () => {
   });
 
   it("刺杀目标枚举全部座位，含刺客自己和坏人队友（rules.md §4.5）", () => {
-    const state = ten(
-      { phase: "ASSASSINATION" },
-      { assassinOpinions: EVIL_SEATS.map((playerId) => ({ playerId, content: "x" })) },
-    );
+    const state = ten({ phase: "ASSASSINATION" });
     const actions = getLegalActions(state, ASSASSIN_SEAT);
     expect(actions).toHaveLength(10);
     expect(
@@ -383,16 +355,9 @@ describe("getLegalActions：其余阶段", () => {
     ).toEqual(ALL_SEATS);
   });
 
-  it("推测没说完时刺客拿到的是 ASSASSIN_OPINION 而不是 ASSASSINATE", () => {
-    const state = ten(
-      { phase: "ASSASSINATION" },
-      {
-        assassinOpinions: [1, 4, 6].map((playerId) => ({ playerId, content: "x" })),
-      },
-    );
-    expect(getLegalActions(state, ASSASSIN_SEAT)).toEqual([
-      { type: "ASSASSIN_OPINION", playerId: ASSASSIN_SEAT, content: "" },
-    ]);
+  it("刺杀阶段只有刺客有动作", () => {
+    const state = ten({ phase: "ASSASSINATION" });
+    expect(getLegalActions(state, ASSASSIN_SEAT)).toHaveLength(10);
     // 好人在刺杀阶段完全没有动作
     for (const id of GOOD_SEATS) expect(getLegalActions(state, id)).toEqual([]);
   });
@@ -460,7 +425,7 @@ describe("assertLegal：轮到谁", () => {
 
   it("非当前发言人 SPEAK 抛 NOT_YOUR_TURN", () => {
     const state = ten(
-      { phase: "REVIEW_DISCUSSION", currentLeaderId: 4 },
+      { phase: "PROPOSAL_DISCUSSION", currentLeaderId: 4, proposedTeam: [1, 2, 3] },
       { speakingOrder: orderFrom(4), speakerIndex: 1 },
     );
     expectCode(
@@ -489,26 +454,8 @@ describe("assertLegal：轮到谁", () => {
     );
   });
 
-  it("坏人推测没说完，刺客就动手抛 NOT_YOUR_TURN", () => {
-    const state = ten(
-      { phase: "ASSASSINATION" },
-      {
-        assassinOpinions: [1, 4, 6].map((playerId) => ({ playerId, content: "x" })),
-      },
-    );
-    // 此刻 awaiting 恰好就是刺客本人，只判"在不在 awaiting 里"会放过去
-    expect(getAwaitingPlayerIds(state)).toEqual([ASSASSIN_SEAT]);
-    expectCode(
-      () => assertLegal(state, { type: "ASSASSINATE", playerId: ASSASSIN_SEAT, targetId: 0 }),
-      "NOT_YOUR_TURN",
-    );
-  });
-
   it("非刺客的坏人不能执行刺杀", () => {
-    const state = ten(
-      { phase: "ASSASSINATION" },
-      { assassinOpinions: EVIL_SEATS.map((playerId) => ({ playerId, content: "x" })) },
-    );
+    const state = ten({ phase: "ASSASSINATION" });
     expectCode(
       () => assertLegal(state, { type: "ASSASSINATE", playerId: 1, targetId: 0 }),
       "NOT_YOUR_TURN",
@@ -517,7 +464,7 @@ describe("assertLegal：轮到谁", () => {
 });
 
 describe("assertLegal：重复提交", () => {
-  it("重复确认身份 / 重复投票 / 重复交任务票 / 重复推测都抛 DUPLICATE_SUBMISSION", () => {
+  it("重复确认身份 / 重复投票 / 重复交任务票都抛 DUPLICATE_SUBMISSION", () => {
     expectCode(
       () =>
         assertLegal(
@@ -548,17 +495,6 @@ describe("assertLegal：重复提交", () => {
       "DUPLICATE_SUBMISSION",
     );
 
-    expectCode(
-      () =>
-        assertLegal(
-          ten(
-            { phase: "ASSASSINATION" },
-            { assassinOpinions: [{ playerId: 1, content: "x" }] },
-          ),
-          { type: "ASSASSIN_OPINION", playerId: 1, content: "再说一次" },
-        ),
-      "DUPLICATE_SUBMISSION",
-    );
   });
 });
 
@@ -611,10 +547,7 @@ describe("assertLegal：载荷", () => {
   });
 
   it("刺杀不存在的座位抛 INVALID_TARGET，指自己或队友合法", () => {
-    const state = ten(
-      { phase: "ASSASSINATION" },
-      { assassinOpinions: EVIL_SEATS.map((playerId) => ({ playerId, content: "x" })) },
-    );
+    const state = ten({ phase: "ASSASSINATION" });
     expectCode(
       () =>
         assertLegal(state, { type: "ASSASSINATE", playerId: ASSASSIN_SEAT, targetId: 10 }),

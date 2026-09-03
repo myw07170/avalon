@@ -19,6 +19,7 @@ import {
   seatAvatarSeedAtom,
 } from "@/store/game";
 import { useMessages } from "@/i18n/useMessages";
+import { toDisplaySeatNumber } from "@/lib/seat-number";
 import { cn } from "@/lib/utils";
 import { SeatRing } from "./SeatRing";
 import { MissionTrack } from "./MissionTrack";
@@ -179,17 +180,6 @@ function Strike({ strike }: { strike: StrikeOutcome }) {
         {msg.gameOver.period}
       </p>
 
-      {/* break-words：模型自由文本里可能有一长串不带空格的东西，不加会撑破卡片 */}
-      {strike.opinions.length > 0 && (
-        <ul className="mt-4 space-y-2 border-t border-ink-line pt-3">
-          {strike.opinions.map((opinion, i) => (
-            <li key={i} className="break-words text-xs leading-relaxed text-muted">
-              <span className="tabular text-vellum">{opinion.label}</span>
-              {msg.gameOver.opinionLine("", opinion.content)}
-            </li>
-          ))}
-        </ul>
-      )}
     </section>
   );
 }
@@ -227,7 +217,7 @@ function Identities({ brief, avatarSeed }: { brief: GameOverBrief; avatarSeed: n
               seat.isSelf && "ring-1 ring-brass",
             )}
           >
-            <span>{seat.id}</span>
+            <span>{toDisplaySeatNumber(seat.id)}</span>
             <span className="text-muted">{seat.roleLabel}</span>
           </li>
         ))}

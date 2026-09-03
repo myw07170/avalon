@@ -3,7 +3,7 @@
 exports[`快照 > 奥伯伦在刺杀阶段的完整视角 1`] = `
 {
   "awaitingPlayerIds": [
-    4,
+    7,
   ],
   "currentLeaderId": 3,
   "currentMission": {
@@ -105,8 +105,8 @@ exports[`快照 > 奥伯伦在刺杀阶段的完整视角 1`] = `
     },
   ],
   "progress": {
-    "required": 4,
-    "submitted": 1,
+    "required": 1,
+    "submitted": 0,
   },
   "proposalHistory": [
     {
@@ -157,7 +157,7 @@ exports[`快照 > 奥伯伦在刺杀阶段的完整视角 1`] = `
       "attempt": 0,
       "content": "1 号的票很难解释",
       "missionIndex": 0,
-      "phase": "REVIEW_DISCUSSION",
+      "phase": "PROPOSAL_DISCUSSION",
       "playerId": 3,
       "seq": 0,
     },
@@ -337,7 +337,7 @@ exports[`快照 > 忠臣在提议讨论阶段的完整视角 1`] = `
       "attempt": 0,
       "content": "1 号的票很难解释",
       "missionIndex": 0,
-      "phase": "REVIEW_DISCUSSION",
+      "phase": "PROPOSAL_DISCUSSION",
       "playerId": 3,
       "seq": 0,
     },
@@ -526,7 +526,7 @@ exports[`快照 > 梅林在投票阶段的完整视角 1`] = `
       "attempt": 0,
       "content": "1 号的票很难解释",
       "missionIndex": 0,
-      "phase": "REVIEW_DISCUSSION",
+      "phase": "PROPOSAL_DISCUSSION",
       "playerId": 3,
       "seq": 0,
     },

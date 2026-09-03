@@ -3,6 +3,7 @@ import { zh } from "@/i18n/messages.zh";
 import { ROLE_TEXT } from "@/i18n/roles";
 import { createMockAiClient } from "@/lib/ai/mock";
 import { runGame, type DecisionRecord } from "@/lib/ai/orchestrator";
+import { toDisplaySeatNumber } from "@/lib/seat-number";
 import {
   ROLE_TEAM,
   createConfig,
@@ -143,11 +144,11 @@ describe("刺杀结果", () => {
 
     expect(strike?.hit).toBe(true);
     expect(strike?.headline).toContain("刺中");
-    expect(strike?.targetLabel).toContain(`${record.targetId} 号`);
-    expect(strike?.assassinLabel).toContain(`${record.assassinId} 号`);
+    expect(strike?.targetLabel).toContain(`${toDisplaySeatNumber(record.targetId)} 号`);
+    expect(strike?.assassinLabel).toContain(`${toDisplaySeatNumber(record.assassinId)} 号`);
     // 命中即目标就是梅林，两行必须指向同一个座位
     expect(strike?.targetRoleLabel).toBe("梅林");
-    expect(strike?.merlinLabel).toContain(`${record.targetId} 号`);
+    expect(strike?.merlinLabel).toContain(`${toDisplaySeatNumber(record.targetId)} 号`);
   });
 
   it("落空时把被刺那一座的真实身份说出来——玩家最想看的就是这一行", () => {
@@ -160,7 +161,7 @@ describe("刺杀结果", () => {
     expect(strike?.hit).toBe(false);
     expect(strike?.targetRoleLabel).not.toBe("梅林");
     expect(strike?.targetRoleLabel).toBe(ROLE_TEXT.zh[trueRole].label);
-    expect(strike?.merlinLabel).toContain(`${merlinId} 号`);
+    expect(strike?.merlinLabel).toContain(`${toDisplaySeatNumber(merlinId)} 号`);
   });
 
   it("坏人靠三次任务赢时根本没有刺杀这一块", () => {
@@ -169,17 +170,6 @@ describe("刺杀结果", () => {
     expect(describeGameOver(game.view, game.decisions)?.strike).toBeNull();
   });
 
-  it("动手前的推测按发言顺序列出，空发言如实显示", () => {
-    const game = firstWith("ASSASSINATION_MISS");
-    const strike = describeGameOver(game.view, game.decisions)?.strike;
-    const opinions = game.final.assassination!.opinions;
-
-    expect(strike?.opinions).toHaveLength(opinions.length);
-    strike?.opinions.forEach((shown, i) => {
-      expect(shown.label).toContain(`${opinions[i]!.playerId} 号`);
-      expect(shown.content).not.toBe("");
-    });
-  });
 });
 
 describe("全身份公开", () => {
@@ -224,7 +214,7 @@ describe("每轮任务的失败票来源", () => {
           expected.length,
         );
         shown.failedByLabels.forEach((label, k) => {
-          expect(label).toContain(`${expected[k]} 号`);
+          expect(label).toContain(`${toDisplaySeatNumber(expected[k]!)} 号`);
         });
         expect(shown.failCount).toBe(record.failCount);
         expect(shown.succeeded).toBe(record.succeeded);

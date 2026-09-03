@@ -13,6 +13,7 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { useReducedMotion } from "framer-motion";
 import { useMessages } from "@/i18n/useMessages";
+import { toDisplaySeatNumber } from "@/lib/seat-number";
 import { cn } from "@/lib/utils";
 import {
   hideAllSeatsAtom,
@@ -95,7 +96,9 @@ function Card({
       back={
         <div className="flex size-full flex-col items-center justify-center gap-2 rounded-2xl border border-ink-line bg-ink-raised px-1">
           <TableMotif className="size-8" />
-          <p className="tabular text-[10px] text-muted">{seat.id}</p>
+          <p className="tabular text-[10px] text-muted">
+            {toDisplaySeatNumber(seat.id)}
+          </p>
         </div>
       }
       front={
@@ -105,7 +108,9 @@ function Card({
             seat.team === "EVIL" ? "border-mordred/60" : "border-loyal/60",
           )}
         >
-          <p className="tabular text-[10px] text-muted">{seat.id}</p>
+          <p className="tabular text-[10px] text-muted">
+            {toDisplaySeatNumber(seat.id)}
+          </p>
           <p
             className={cn(
               "font-display text-xs leading-tight",

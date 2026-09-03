@@ -74,12 +74,8 @@ export type Phase =
   | "TEAM_VOTE"
   | "MISSION_EXECUTION"
   | "MISSION_RESULT"
-  | "REVIEW_DISCUSSION"
   | "ASSASSINATION"
   | "GAME_OVER";
-
-/** 需要按座位顺序逐人发言的阶段，发言调度逻辑对这两个阶段完全共用 */
-export type DiscussionPhase = "PROPOSAL_DISCUSSION" | "REVIEW_DISCUSSION";
 
 // ---------------------------------------------------------------------------
 // 配置
@@ -287,20 +283,20 @@ export interface ProposalRecord {
   forced: boolean;
 }
 
+export type SpeechPhase = "TEAM_BUILDING" | "PROPOSAL_DISCUSSION";
+
 export interface Speech {
   /** 全局递增序号，UI 排序与 React key 用 */
   seq: number;
   playerId: PlayerId;
-  phase: Phase;
+  phase: SpeechPhase;
   missionIndex: number;
-  /** 提议讨论对应当次提议；复盘讨论记该轮最后一次提议的 attempt */
+  /** 组队说明与提议讨论对应的提议次数 */
   attempt: number;
   content: string;
 }
 
 export interface AssassinationRecord {
-  /** 刺杀前坏人各自的一次公开推测，按发言顺序 */
-  opinions: Array<{ playerId: PlayerId; content: string }>;
   assassinId: PlayerId;
   targetId: PlayerId;
   hit: boolean;
@@ -333,12 +329,10 @@ export interface PendingState {
   votes: Record<PlayerId, boolean>;
   /** MISSION_EXECUTION：已提交但未结算的任务票 */
   cards: MissionCard[];
-  /** 讨论阶段的发言顺序（座位序，从当前队长开始），进入阶段时一次性算好 */
+  /** 提议讨论的发言顺序（座位序，从当前队长开始），进入阶段时一次性算好 */
   speakingOrder: PlayerId[];
   /** speakingOrder 的游标，等于其长度表示本阶段发言完毕 */
   speakerIndex: number;
-  /** ASSASSINATION：坏人已发表的推测意见 */
-  assassinOpinions: Array<{ playerId: PlayerId; content: string }>;
 }
 
 /**
@@ -353,7 +347,6 @@ export function createPending(): PendingState {
     cards: [],
     speakingOrder: [],
     speakerIndex: 0,
-    assassinOpinions: [],
   };
 }
 
@@ -578,8 +571,6 @@ export type GameAction =
   | { type: "SPEAK"; playerId: PlayerId; content: string }
   | { type: "CAST_VOTE"; playerId: PlayerId; approve: boolean }
   | { type: "CAST_MISSION_CARD"; playerId: PlayerId; success: boolean }
-  /** 刺杀阶段坏人的公开推测。刺客也要先说一次，再执行 ASSASSINATE */
-  | { type: "ASSASSIN_OPINION"; playerId: PlayerId; content: string }
   | { type: "ASSASSINATE"; playerId: PlayerId; targetId: PlayerId }
   /** 系统推进，无行动人。仅用于 MISSION_RESULT 这类纯展示阶段 */
   | { type: "NEXT" };
@@ -661,7 +652,6 @@ export type AiDecisionKind =
   | "SPEECH"
   | "VOTE"
   | "MISSION_CARD"
-  | "ASSASSIN_OPINION"
   | "ASSASSINATION";
 
 export interface AiDecisionPayload {
@@ -669,7 +659,6 @@ export interface AiDecisionPayload {
   SPEECH: AiSpeech;
   VOTE: AiVote;
   MISSION_CARD: AiMissionCard;
-  ASSASSIN_OPINION: AiSpeech;
   ASSASSINATION: AiAssassination;
 }
 

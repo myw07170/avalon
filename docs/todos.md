@@ -236,14 +236,13 @@ export function getKnownIdentities(viewerId: PlayerId, players: readonly Player[
         - **不变量：`getLegalActions` 的每一项都能通过 `assertLegal`**。所以 `PROPOSE_TEAM`
           模板给的是一支**合法**队伍（队长 + 最小的若干座位，升序），而不是空数组——
           调用方照着候选项提交反而被抛错，是最难查的一类坑。选人用 `getTeamConstraint`
-        - 自由文本动作（`SPEAK` / `ASSASSIN_OPINION`）给 `content: ""` 的模板，
+        - 自由文本动作 `SPEAK` 给 `content: ""` 的模板，
           引擎不校验文本内容，那是策略问题不是合法性问题
         - 阶段与动作类型的对应写成 `PHASE_ACTIONS` 一张表，不散成各分支的 if，
           否则迟早出现"`getLegalActions` 给了但 `reduce` 不收"的分叉
         - `getAwaitingPlayerIds` 一律按座位号升序返回：**"谁还没交"是公开信息，
           "谁先交的"不是**，返回顺序不能把后者漏出去
-        - 刺杀阶段坏人按**座位号升序**逐个 `ASSASSIN_OPINION`（含奥伯伦），
-          全部说完才轮到刺客 `ASSASSINATE`；`phases/assassination.ts` 必须按同一次序结算
+        - 刺杀阶段只等待刺客，合法动作是所有座位对应的 `ASSASSINATE`
         - 校验顺序决定调用方看到哪个错误码：阶段 → 座位存在 → 重复提交 → 轮没轮到 → 载荷。
           重复投票报 `DUPLICATE_SUBMISSION` 而不是 `NOT_YOUR_TURN`
         - 多了两个导出：`getSystemActions`（`SETUP` 给 `START_GAME`、`MISSION_RESULT` 给 `NEXT`，
@@ -259,7 +258,7 @@ export function getKnownIdentities(viewerId: PlayerId, players: readonly Player[
 | 变异 | 被抓 |
 | --- | --- |
 | 好人也拿到 `success: false` | 4 条炸 |
-| 刺客可在推测未完时直接 `ASSASSINATE` | 1 条炸 |
+| 非刺客可提交 `ASSASSINATE` | 1 条炸 |
 | `TEAM_VOTE` 不判重复提交 | 1 条炸 |
 | `getAwaitingPlayerIds` 不按座位升序 | 2 条炸 |
 | 刺杀目标不校验座位号 | 1 条炸 |
@@ -277,7 +276,7 @@ export function getKnownIdentities(viewerId: PlayerId, players: readonly Player[
         在 `TEAM_BUILDING` / `TEAM_VOTE` 期间躺在 `pending` 里，与
         「进入新阶段必须清空 pending」直接冲突
 - [x] `phases/teamBuilding.ts`：校验队伍人数 === `currentMission.teamSize`、无重复、id 合法
-- [x] `phases/discussion.ts`：`PROPOSAL_DISCUSSION` 与 `REVIEW_DISCUSSION` 共用。按 `pending.speakingOrder` 逐人推进 `speakerIndex`，非当前发言人提交 `SPEAK` 抛 `NOT_YOUR_TURN`
+- [x] `phases/discussion.ts`：只处理 `PROPOSAL_DISCUSSION`。按 `pending.speakingOrder` 逐人推进 `speakerIndex`，非当前发言人提交 `SPEAK` 抛 `NOT_YOUR_TURN`
       - 发言顺序 = 座位序，从当前队长开始，绕一圈
 - [x] `phases/teamVote.ts`：
       - 累积 `pending.votes`，重复投票抛 `DUPLICATE_SUBMISSION`
@@ -293,8 +292,8 @@ export function getKnownIdentities(viewerId: PlayerId, players: readonly Player[
 - [x] `phases/missionResult.ts`：`NEXT` 推进
       - 好人 3 分 → `ASSASSINATION`（**不是 GAME_OVER**）
       - 坏人 3 分 → `GAME_OVER`（`THREE_MISSIONS`）
-      - 都没到 → `REVIEW_DISCUSSION`
-- [x] `phases/assassination.ts`：坏人逐个 `ASSASSIN_OPINION`（奥伯伦也参与，他也是坏人），全部说完后刺客 `ASSASSINATE`
+      - 都没到 → 队长顺延并直接进入下一轮 `TEAM_BUILDING`
+- [x] `phases/assassination.ts`：只接受刺客提交 `ASSASSINATE`，没有刺杀讨论
       - 目标必须是合法座位号，否则抛 `INVALID_TARGET`
       - 命中梅林 → 坏人胜（`ASSASSINATION_HIT`）；否则好人胜（`ASSASSINATION_MISS`）
 - [x] `view.ts` ✅ 已完成：`toPlayerView(state, playerId): PlayerView`
@@ -319,7 +318,7 @@ export function getKnownIdentities(viewerId: PlayerId, players: readonly Player[
 单元测试：
 - [x] 投票平票判否决（6 人局 3:3）
 - [x] `rejectCount` 在提议通过时归零
-- [x] `rejectCount` 在新一轮开始时归零（从 REVIEW_DISCUSSION 进 TEAM_BUILDING）
+- [x] `rejectCount` 在新一轮开始时归零（从 MISSION_RESULT 直接进 TEAM_BUILDING）
 - [x] 连续 5 次否决 → `GAME_OVER` / `REJECT_LIMIT`
 - [x] 7 人局第 4 轮：1 张失败票**不算**失败，2 张才算
 - [x] 5 人局第 4 轮：1 张失败票就算失败
@@ -832,7 +831,10 @@ pnpm vitest run src/lib/ai/real-game.test.ts
 "我上过那车，而且我不会投失败票，所以那张失败票必然来自座0或座2"。
 这正是当初撤掉 L3 时赌的那件事：**把推理留给模型，讨论才有内容**。
 
-##### 第五个缺陷：刺客会刺杀自己的队友（两局刺杀，两局都是）——**已修复**
+##### 历史记录：旧刺杀讨论曾导致刺客刺杀队友（该流程现已删除）
+
+> 本节记录的是已移除流程的历史排障过程。当前实现第三次任务成功后直接由刺客选择目标；
+> 下文出现的旧动作、pending 字段和意见记录只用于解释当时问题，不再属于运行时接口。
 
 到目前为止只有两局走到了刺杀（另外两局坏人靠三次任务直接赢了），**这两局的刺客都刺了自己人**：
 
@@ -1205,9 +1207,7 @@ pnpm vitest run src/lib/ai/real-game.test.ts
           凑齐「成功」「失败」「进行中」「否决撞线」这些不是每局都出现的状态
         - **已结算优先于「是当前轮」**：`MISSION_RESULT` 阶段记录已经进了 `missionHistory`，
           而 `missionIndex` 要等 `NEXT` 才递增，两者会同时指向同一轮
-        - **复盘讨论时没有任何一轮是「进行中」**：`enterNextMission` 在 `REVIEW_DISCUSSION`
-          结束后才递增 `missionIndex`，所以那段时间 `missionIndex` 指的是刚打完的那一轮。
-          不标当前轮是如实反映，别为了好看去猜下一轮
+        - `MISSION_RESULT` 执行 `NEXT` 后立即递增 `missionIndex` 并进入下一轮，结果展示期间仍优先显示已结算状态
         - **否决计数器是每轮独立的**：提议通过或进入下一轮都会归零，显示的是
           「本轮连续否决了几次」，不是整局流水。撞满 = 坏人直接获胜（`REJECT_LIMIT`），
           所以它是危险指示条，不是计数器
@@ -1216,9 +1216,7 @@ pnpm vitest run src/lib/ai/real-game.test.ts
           UI 看不到它，`SetupScreen` 也从不开启。真要支持得先把它投影进 `PlayerView`
       - [x] `SpeechFeed` 发言流，AI 逐字打字机效果
         - 推导在 `speech-feed-model.ts`（`describeFeed(view)`），测试跑 7 局真实对局
-        - **四个阶段都会往 `speeches` 里写**：队长的选人说明（`TEAM_BUILDING`）、组队讨论、
-          复盘讨论、**以及刺杀阶段的逐个推测**。最后一个容易漏——`assassination.ts` 明确
-          把它当"说出口的话"记进 `speeches`，不是暗票
+        - **只有两类内容会写进 `speeches`**：队长的选人说明（`TEAM_BUILDING`）与提议讨论
         - 选人说明与紧随其后的组队讨论归同一组，拆开的话"他怎么解释这份名单"和
           "大家怎么回应"会隔着一条分隔线
         - **只给最新一条打字**，更早的都是完整文本。所以"上一条没打完下一条就到了"
@@ -1238,9 +1236,8 @@ pnpm vitest run src/lib/ai/real-game.test.ts
         - **能选的东西一律来自 `legalActions`，面板不自己拼**：投票、任务票、刺杀目标都是
           原样取用引擎给的那几个动作对象。按 phase 或 `view.selfTeam` 自己判断该给几个按钮，
           等于把引擎规则在 UI 里再实现一遍，而不一致的那一次就是一张本不该存在的失败票
-        - 两个例外是模板动作（`PROPOSE_TEAM` / `SPEAK` / `ASSASSIN_OPINION`）：要填内容，
-          但 `type` 和 `playerId` 仍然 `{ ...template, ... }` 沿用模板，不在 UI 里手写。
-          `SPEAK` 与 `ASSASSIN_OPINION` 因此走同一条代码路径
+        - 两个例外是模板动作（`PROPOSE_TEAM` / `SPEAK`）：要填内容，
+          但 `type` 和 `playerId` 仍然 `{ ...template, ... }` 沿用模板，不在 UI 里手写
         - **组队按座位号升序提交，不保留点击顺序**：`proposedTeam` 原样进每个人的 `PlayerView`，
           `prompt.ts` 里 `seatList(view.proposedTeam)` 直接念给所有 AI 听——
           保留点击顺序等于把"你先想到谁"一起广播出去
@@ -1260,15 +1257,12 @@ pnpm vitest run src/lib/ai/real-game.test.ts
         - **为什么单独抢屏**：整局唯一不可撤销、且当场决定胜负的动作。与别的操作并排放在
           页面底部，误触的代价是整局作废。但**必须能关掉**——刺客决定前十有八九要回去重读发言流，
           关掉后面板留一个重开入口，选中的目标也留着
+        - 第三次任务成功后直接展示；刺杀阶段只有刺客行动，不展示讨论或推测列表
         - **奥伯伦标不出来，这是对的不是漏了**：`risk` 只认自己和 `view.knowledge` 里的队友。
           界面替刺客认出奥伯伦就是开天眼。所以 `risk === null` 的含义是"你不知道"，不是"安全"
         - 与其假装名单干净，不如直说「本局有 4 个坏人：你、你认得的 2 个队友，还有 1 个你也
           认不出来的」——`countEvil(roleComposition)` 是公开信息，差额恒等于奥伯伦数量。
           这是 `role-card-model` 里梅林那条提示的镜像，同一道算术
-        - 队友的推测搬进面板（`describeFeed(view).filter(kind === "opinion")`），省得回去翻发言流。
-          它们本来就是公开发言，不构成泄漏
-        - **全员空推测时改说一句话**，不列四条「（没有开口）」。mock 客户端是会说话的，
-          这个分支只能手工造 view 来测
         - **Tailwind v4 的 `translate-*` 走独立的 `translate` 属性**，不再合进 `transform`。
           所以入场关键帧里只写位移增量，照 v3 老经验把 `-50%` 再写一遍会把卡片多推半屏
         - ⚠️ Radix 的 `aria-labelledby` / `aria-describedby` 由 `Title` / `Description` 的

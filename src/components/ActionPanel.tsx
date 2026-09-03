@@ -2,7 +2,7 @@
 
 /**
  * 轮到你时的操作面板。没轮到你就什么都不画。
- * 除最终刺杀弹窗外，所有人类输入都从右侧发言栏底部的这一处进入。
+ * 所有人类输入——组队、发言、投票、任务票、刺杀——都从右侧发言栏底部的这一处进入。
  *
  * 【面板不判断你能做什么，它只把 legalActions 画出来】推导在 action-panel-model.ts，
  * 那里解释了为什么这条线不能反过来。
@@ -14,11 +14,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "framer-motion";
 import { useAtomValue, useSetAtom } from "jotai";
-import type { GameAction } from "@/lib/game";
+import type { GameAction, PlayerView } from "@/lib/game";
 import { useMessages } from "@/i18n/useMessages";
+import { toDisplaySeatNumber } from "@/lib/seat-number";
 import { cn } from "@/lib/utils";
 import { humanTurnAtom, submitActionAtom } from "@/store/game";
-import { AssassinationModal } from "./AssassinationModal";
 import { SeatGrid } from "./SeatGrid";
 import { SEAT_TONE_CLASS } from "./SeatRing";
 import {
@@ -28,11 +28,15 @@ import {
   speakAction,
   turnKey,
   type ActionOption,
+  type AssassinationForm,
   type MissionCardForm,
+  type SeatChoice,
   type SpeechForm,
   type TeamForm,
   type VoteForm,
 } from "./action-panel-model";
+import { useAssassinationDraft } from "./AssassinationDraftContext";
+import { describeStrike, strikeLabel } from "./assassination-model";
 import { useTeamDraft } from "./TeamDraftContext";
 
 type Submit = (action: GameAction) => void;
@@ -83,16 +87,15 @@ export function ActionPanel() {
             {form.kind === "TEAM_PROPOSAL" && (
               <TeamBody key={key} form={form} submit={submit} />
             )}
-            {(form.kind === "SPEECH" || form.kind === "ASSASSIN_OPINION") && (
+            {form.kind === "SPEECH" && (
               <SpeechBody key={key} form={form} submit={submit} />
             )}
             {form.kind === "VOTE" && <VoteBody key={key} form={form} submit={submit} />}
             {form.kind === "MISSION_CARD" && (
               <MissionCardBody key={key} form={form} submit={submit} />
             )}
-            {/* 刺杀抢整个屏幕，理由见 AssassinationModal 的文件头 */}
             {form.kind === "ASSASSINATION" && (
-              <AssassinationModal key={key} form={form} view={turn.view} submit={submit} />
+              <AssassinationBody key={key} form={form} view={turn.view} submit={submit} />
             )}
           </div>
         </>
@@ -230,7 +233,7 @@ function SeatChips({
   seats,
 }: {
   label: string;
-  seats: readonly TeamForm["candidates"][number][];
+  seats: readonly SeatChoice[];
 }) {
   const msg = useMessages();
 
@@ -247,7 +250,7 @@ function SeatChips({
               SEAT_TONE_CLASS[seat.tone],
             )}
           >
-            {seat.id}{" "}
+            {toDisplaySeatNumber(seat.id)}{" "}
             <span className="text-xs opacity-70">
               {seat.isSelf ? msg.seat.you : seat.name}
             </span>
@@ -263,6 +266,70 @@ function MissionCardBody({ form, submit }: { form: MissionCardForm; submit: Subm
     <div className="space-y-4">
       <OptionButtons options={form.options} submit={submit} />
       {form.note && <p className="text-xs leading-relaxed text-muted">{form.note}</p>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 刺杀
+// ---------------------------------------------------------------------------
+
+function AssassinationBody({
+  form,
+  view,
+  submit,
+}: {
+  form: AssassinationForm;
+  view: PlayerView;
+  submit: Submit;
+}) {
+  const msg = useMessages();
+  const draft = useAssassinationDraft();
+  const [sent, setSent] = useState(false);
+
+  const brief = describeStrike(form, view, msg);
+  const target = brief.targets.find((t) => t.id === draft.selected[0]) ?? null;
+  const selectedTargets = target ? [target] : [];
+
+  return (
+    <div className="space-y-4">
+      <p className="rounded-lg border border-ink-line px-3 py-2.5 text-xs leading-relaxed text-muted">
+        {brief.hiddenAllyHint}
+      </p>
+
+      <div className="lg:hidden">
+        <p className="mb-2 text-xs text-muted">{msg.strike.pickOne}</p>
+        <SeatGrid
+          seats={brief.targets}
+          selected={draft.selected}
+          onToggle={draft.toggle}
+        />
+      </div>
+
+      <div className="hidden lg:block">
+        <p className="mb-2 text-xs text-muted">{msg.strike.pickOnTable}</p>
+        {selectedTargets.length > 0 && (
+          <SeatChips label={msg.strike.targetPreview} seats={selectedTargets} />
+        )}
+      </div>
+
+      {target?.risk && (
+        <p role="alert" className="text-sm leading-relaxed text-mordred">
+          {target.risk}
+        </p>
+      )}
+
+      <PrimaryButton
+        tone="danger"
+        disabled={!target || sent}
+        onClick={() => {
+          if (!target) return;
+          setSent(true);
+          submit(target.action);
+        }}
+      >
+        {strikeLabel(target, msg)}
+      </PrimaryButton>
     </div>
   );
 }

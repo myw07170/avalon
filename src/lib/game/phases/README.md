@@ -7,7 +7,7 @@
 | `setup.ts` | SETUP |
 | `roleReveal.ts` | ROLE_REVEAL |
 | `teamBuilding.ts` | TEAM_BUILDING |
-| `discussion.ts` | PROPOSAL_DISCUSSION + REVIEW_DISCUSSION（共用） |
+| `discussion.ts` | PROPOSAL_DISCUSSION |
 | `teamVote.ts` | TEAM_VOTE |
 | `mission.ts` | MISSION_EXECUTION |
 | `missionResult.ts` | MISSION_RESULT |

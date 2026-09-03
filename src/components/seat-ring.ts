@@ -25,9 +25,9 @@ export interface SeatPoint {
 export const SEAT_RING_RADIUS = 38;
 
 /**
- * 座位沿圆周的位置。**0 号位在正下方，序号顺时针递增**。
+ * 座位沿圆周的位置。**内部 ID 0（显示为 1 号）在正下方，序号顺时针递增**。
  *
- * 0 号在下方是因为人类默认坐 0 号——视线先落在自己身上，
+ * 内部 ID 0 在下方是因为人类默认坐这一座——视线先落在自己身上，
  * 而不是先落在一个陌生 AI 上。顺时针递增对应"轮到你左手边"的常规牌序。
  */
 export function seatRingPositions(

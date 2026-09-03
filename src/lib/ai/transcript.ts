@@ -33,7 +33,7 @@ export interface TranscriptSpeech extends TranscriptSeat {
    * **可选**：三份早期记录（transcripts/*.txt）里没有这一段，读回来就是 undefined。
    */
   attempt?: number;
-  /** "组队" / "提议讨论" / "复盘讨论"。同样可选，理由同上 */
+  /** 新记录为“组队”/“提议讨论”；旧记录还可能是“复盘讨论”。 */
   phaseLabel?: string;
   content: string;
 }
@@ -153,27 +153,19 @@ function flatten(content: string): string {
 /**
  * 发言行方括号里的两段附注。
  *
- * 少了它们，同一轮的提议讨论与复盘讨论在记录里长得一模一样——
- * real-game-94938.txt 第 1 轮那 10 条就是这么黏在一起的，人读着极易误判。
- *
- * 提议次数只标组队与提议讨论：复盘的 attempt 按 types.ts 的约定是"该轮最后一次提议"，
- * 标出来会让人以为复盘也分了好几次。
+ * 旧记录的解析仍接受“复盘讨论”，但新对局只会产生组队与提议讨论发言。
  */
-const PHASE_TAG: Record<string, string> = {
+const PHASE_TAG: Record<Speech["phase"], string> = {
   TEAM_BUILDING: "组队",
   PROPOSAL_DISCUSSION: "提议讨论",
-  REVIEW_DISCUSSION: "复盘讨论",
 };
 
 function phaseTag(speech: Speech): string {
-  const label = PHASE_TAG[speech.phase];
-  return label ? ` ${label}` : "";
+  return ` ${PHASE_TAG[speech.phase]}`;
 }
 
 function attemptTag(speech: Speech): string {
-  const numbered =
-    speech.phase === "TEAM_BUILDING" || speech.phase === "PROPOSAL_DISCUSSION";
-  return numbered ? ` 第 ${speech.attempt + 1} 次提议` : "";
+  return ` 第 ${speech.attempt + 1} 次提议`;
 }
 
 /**
@@ -216,21 +208,6 @@ function countMentions(speeches: readonly Speech[]): number {
   ).length;
 }
 
-/**
- * 讨论发言——也就是【全场发言】那一段该有的内容。
- *
- * 刺杀前的推测现在也是正经的 Speech（phases/assassination.ts 修的那条：
- * 不进 speeches 就谁都读不到，包括刺客自己）。但对局记录里它们已经由【刺杀】段
- * 连同目标和结果一起呈现了，再进【全场发言】就是印两遍。
- *
- * 统计口径（提及数的分母、"共 N 条发言"、自曝扫描）一律用这一份，
- * 四份记录之间的数字才仍然可比——落盘格式因此一个字节都没变，
- * transcripts/ 里那几份不可再生的旧记录照旧解析得动。
- */
-function discussionSpeeches(final: GameState): Speech[] {
-  return final.speeches.filter((s) => s.phase !== "ASSASSINATION");
-}
-
 export function renderTranscript(
   final: GameState,
   records: DecisionRecord[],
@@ -250,7 +227,7 @@ export function renderTranscript(
   lines.push("\n=== 座位与身份 ===");
   for (const player of final.players) lines.push(`  ${nameOf(player.id)}`);
 
-  const spoken = discussionSpeeches(final);
+  const spoken = final.speeches;
 
   lines.push("\n=== 全场发言 ===");
   for (const speech of spoken) {
@@ -270,9 +247,6 @@ export function renderTranscript(
 
   if (final.assassination) {
     lines.push("\n=== 刺杀 ===");
-    for (const opinion of final.assassination.opinions) {
-      lines.push(`  ${nameOf(opinion.playerId)}：${flatten(opinion.content)}`);
-    }
     lines.push(
       `  刺客指认 ${nameOf(final.assassination.targetId)} → ${final.assassination.hit ? "命中" : "落空"}`,
     );

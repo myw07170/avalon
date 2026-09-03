@@ -28,8 +28,8 @@ export const metadata: Metadata = {
 
 /**
  * 【显式声明，不吃 Next 的默认值】默认只有 width/initial-scale，
- * 而 AssassinationModal 底部那根 sticky 操作条要靠 `viewport-fit: "cover"`
- * 让 env(safe-area-inset-bottom) 有非零值——不然 iPhone 上那颗按钮压在
+ * 而 ActionPanel 在窄屏上会撑出滚动区域，`viewport-fit: "cover"` 让
+ * env(safe-area-inset-bottom) 有非零值——不然 iPhone 上底部按钮压在
  * home indicator 底下点不着。
  *
  * **不设 maximumScale / userScalable**：禁掉双指缩放对视力不好的人是硬伤，

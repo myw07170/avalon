@@ -418,7 +418,6 @@ export const paceMsAtom = atom(DEFAULT_PACE_MS);
 const PACE_WEIGHT: Record<AiDecisionKind, number> = {
   TEAM_PROPOSAL: 1,
   SPEECH: 1,
-  ASSASSIN_OPINION: 1,
   ASSASSINATION: 1.5,
   VOTE: 0.15,
   MISSION_CARD: 0.15,
@@ -599,7 +598,6 @@ function validateHumanAction(turn: HumanTurn, action: GameAction): ActionProblem
 
     // 自由文本：引擎不校验内容，只校验轮没轮到你，上面已经查过了
     case "SPEAK":
-    case "ASSASSIN_OPINION":
     case "ACKNOWLEDGE":
       return null;
   }

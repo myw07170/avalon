@@ -74,7 +74,6 @@ function doneIdsOf(view: AnyView): PlayerId[] {
       return (view.proposedTeam ?? []).filter((id) => !waiting.has(id));
 
     case "PROPOSAL_DISCUSSION":
-    case "REVIEW_DISCUSSION":
       // progress.submitted 就是发言游标
       return view.speakingOrder.slice(0, view.progress.submitted);
 

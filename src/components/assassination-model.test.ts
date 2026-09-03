@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { zh } from "@/i18n/messages.zh";
 import { createMockAiClient } from "@/lib/ai/mock";
 import { runGame, type HumanTurn } from "@/lib/ai/orchestrator";
+import { toDisplaySeatNumber } from "@/lib/seat-number";
 import {
   ROLE_TEAM,
   composeRoles,
@@ -182,67 +183,6 @@ describe("奥伯伦是刺客的盲区", () => {
   });
 });
 
-describe("队友的推测", () => {
-  it("每个坏人都说过一次，一条不落", async () => {
-    for (const { state, form, view } of await strikes()) {
-      const brief = describeStrike(form, view);
-      const evilCount = state.players.filter((p) => ROLE_TEAM[p.role] === "EVIL").length;
-
-      // 刺客开刀前，所有坏人（含奥伯伦、含刺客自己）都已经发表过推测
-      expect(brief.opinions).toHaveLength(evilCount);
-      expect(brief.opinions.every((o) => o.kind === "opinion")).toBe(true);
-      for (const opinion of brief.opinions) {
-        expect(ROLE_TEAM[roleOf(state, opinion.playerId)]).toBe("EVIL");
-      }
-    }
-  });
-
-  it("刺客自己那条也在里面", async () => {
-    for (const { form, view } of await strikes()) {
-      const brief = describeStrike(form, view);
-      expect(brief.opinions.filter((o) => o.isSelf)).toHaveLength(1);
-    }
-  });
-
-  it("整场没人开口时单独标出来", async () => {
-    const { form, view } = (await strikes())[0]!;
-    // mock 客户端是会说话的，所以这个分支跑不出来，只能手工造
-    expect(describeStrike(form, view).allSilent).toBe(false);
-
-    // 引擎不校验发言内容（legal.ts 只管"轮没轮到你"），空推测是合法状态：
-    // 人类点了"不说了"、或真实模型返回空串，都会走到这里
-    const mute = (only?: number) => ({
-      ...view,
-      speeches: view.speeches.map((s) =>
-        s.phase === "ASSASSINATION" && (only === undefined || s.playerId === only)
-          ? { ...s, content: "" }
-          : s,
-      ),
-    });
-
-    expect(describeStrike(form, mute()).allSilent).toBe(true);
-    // 只有一个人没开口不算，那时还是要逐条列出来
-    const someone = view.speeches.find((s) => s.phase === "ASSASSINATION")!.playerId;
-    expect(describeStrike(form, mute(someone)).allSilent).toBe(false);
-  });
-
-  it("allSilent 与逐条的 isSilent 始终一致", async () => {
-    for (const { form, view } of await strikes()) {
-      const brief = describeStrike(form, view);
-      expect(brief.allSilent).toBe(brief.opinions.every((o) => o.isSilent));
-    }
-  });
-
-  it("按发言先后排，与发言流一致", async () => {
-    for (const { form, view } of await strikes()) {
-      const brief = describeStrike(form, view);
-      expect(brief.opinions.map((o) => o.seq)).toEqual(
-        view.speeches.filter((s) => s.phase === "ASSASSINATION").map((s) => s.seq),
-      );
-    }
-  });
-});
-
 describe("strikeLabel", () => {
   it("没选人时催一句", () => {
     expect(strikeLabel(null)).toBe("先选一个人");
@@ -254,7 +194,9 @@ describe("strikeLabel", () => {
     const other = brief.targets.find((t) => !t.isSelf)!;
     const self = brief.targets.find((t) => t.isSelf)!;
 
-    expect(strikeLabel(other)).toBe(`就是他：${other.id} 号（${other.name}）`);
+    expect(strikeLabel(other)).toBe(
+      `就是他：${toDisplaySeatNumber(other.id)} 号（${other.name}）`,
+    );
     expect(strikeLabel(self)).toContain("你自己");
   });
 });

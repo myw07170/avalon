@@ -20,6 +20,7 @@ import { buildPrompt } from "./prompt";
 import { PROMPT_COPY } from "./prompt-copy";
 import { safeParseAiPayload } from "./schema";
 import { AiError } from "./errors";
+import { fromDisplaySeatNumber } from "../seat-number";
 import type {
   AiClient,
   AiDecisionKind,
@@ -299,6 +300,49 @@ export function extractJson(raw: string): unknown {
   }
 }
 
+/**
+ * Prompt 里的座位号从 1 开始，但 AiDecisionPayload 仍是引擎内部的零基 PlayerId。
+ * 只转换模型真正负责填写的 ID 字段；reasoning / statement / content 等原文保持不动。
+ */
+function normalizeAiSeatNumbers(kind: AiDecisionKind, payload: unknown): unknown {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return payload;
+
+  const value = payload as Record<string, unknown>;
+  const internalId = (candidate: unknown): unknown =>
+    typeof candidate === "number" ? fromDisplaySeatNumber(candidate) : candidate;
+
+  switch (kind) {
+    case "TEAM_PROPOSAL":
+      return Array.isArray(value.team)
+        ? { ...value, team: value.team.map(internalId) }
+        : payload;
+
+    case "SPEECH":
+      return Array.isArray(value.suspicions)
+        ? {
+            ...value,
+            suspicions: value.suspicions.map((item) =>
+              typeof item === "object" && item !== null && !Array.isArray(item)
+                ? {
+                    ...(item as Record<string, unknown>),
+                    playerId: internalId((item as Record<string, unknown>).playerId),
+                  }
+                : item,
+            ),
+          }
+        : payload;
+
+    case "ASSASSINATION":
+      return "targetId" in value
+        ? { ...value, targetId: internalId(value.targetId) }
+        : payload;
+
+    case "VOTE":
+    case "MISSION_CARD":
+      return payload;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // provider 调用
 // ---------------------------------------------------------------------------
@@ -476,7 +520,7 @@ export function createAiClient(config: LlmProviderConfig): AiClient {
         const result =
           parsed === undefined
             ? { success: false as const, error: copy.noJsonObject }
-            : safeParseAiPayload(req.kind, parsed);
+            : safeParseAiPayload(req.kind, normalizeAiSeatNumbers(req.kind, parsed));
 
         if (result.success) {
           return { payload: result.data, fallback: false, debug: { prompt, raw, attempts } };

@@ -12,8 +12,7 @@ PROPOSAL_DISCUSSION   其余 n-1 人逐个发言
 TEAM_VOTE             全员公开投票同意/反对
 MISSION_EXECUTION     队员匿名投成功/失败
 MISSION_RESULT        公布结果（仅失败票数）
-REVIEW_DISCUSSION     全员复盘发言
-ASSASSINATION         坏人商议 + 刺客指定目标
+ASSASSINATION         刺客指定目标
 GAME_OVER             公开所有身份
 ```
 
@@ -31,16 +30,14 @@ GAME_OVER             公开所有身份
 | MISSION_EXECUTION | `CAST_MISSION_CARD` | 全体队员投票完毕 | MISSION_RESULT |
 | MISSION_RESULT | `NEXT` | 好人积分 = 3 | ASSASSINATION |
 | MISSION_RESULT | `NEXT` | 坏人积分 = 3 | GAME_OVER（坏人胜） |
-| MISSION_RESULT | `NEXT` | 均未到 3 | REVIEW_DISCUSSION |
-| REVIEW_DISCUSSION | `SPEAK` | 全员发言完毕 | TEAM_BUILDING（进入下一轮） |
-| ASSASSINATION | `ASSASSIN_OPINION` | 尚有坏人未发表推测 | ASSASSINATION（停留） |
-| ASSASSINATION | `ASSASSINATE` | 坏人推测完毕且目标合法 | GAME_OVER |
+| MISSION_RESULT | `NEXT` | 均未到 3 | TEAM_BUILDING（进入下一轮） |
+| ASSASSINATION | `ASSASSINATE` | 刺客选择合法目标 | GAME_OVER |
 
 `TEAM_VOTE` 若开启变体 `forcePassOnLastAttempt`，进入该阶段时若 `rejectCount === maxRejects - 1`，则不接受 `CAST_VOTE`，直接以 `forced: true` 记一条通过的提议并转入 `MISSION_EXECUTION`。
 
-两个讨论阶段的 `speakingOrder` 完全一样（都是从当前队长起的整圈），差别只在游标起点：提议讨论从 **1** 起步，因为 `speakingOrder[0]` 是队长，而他那一次已经被选人说明占掉了；复盘讨论从 0 起步。刻意不把队长从 `speakingOrder` 里删掉——保留整圈，`PlayerView` 的 `progress` 自然就是"已发言 1/n"、队长的 `selfSubmitted` 自然为 true，`view.ts` 一行都不用改。
+提议讨论的 `speakingOrder` 是从当前队长起的整圈，游标从 **1** 起步，因为 `speakingOrder[0]` 是队长，而他那一次已经被选人说明占掉了。刻意不把队长从 `speakingOrder` 里删掉——保留整圈，`PlayerView` 的 `progress` 自然就是"已发言 1/n"、队长的 `selfSubmitted` 自然为 true。
 
-进入 TEAM_BUILDING 有两条路径，含义不同，务必区分：从 TEAM_VOTE 来是"同一轮换队长重提"，`missionIndex` 不变、`rejectCount` 递增；从 REVIEW_DISCUSSION 来是"新一轮开始"，`missionIndex + 1`、`rejectCount` 归零。这两条路混淆是本项目最典型的 bug。
+进入 TEAM_BUILDING 有两条路径，含义不同，务必区分：从 TEAM_VOTE 来是"同一轮换队长重提"，`missionIndex` 不变、`rejectCount` 递增；从 MISSION_RESULT 来是"新一轮开始"，`missionIndex + 1`、队长顺延、`rejectCount` 归零。这两条路混淆是本项目最典型的 bug。
 
 ### 2.1 未结算中间态
 

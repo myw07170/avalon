@@ -61,7 +61,6 @@ describe("createPending", () => {
       cards: [],
       speakingOrder: [],
       speakerIndex: 0,
-      assassinOpinions: [],
     });
   });
 });

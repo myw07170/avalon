@@ -114,6 +114,24 @@ describe("文案目录", () => {
     expect(pathsOf(en)).toEqual(pathsOf(zh));
   });
 
+  it("中英文玩家可见座位号都从 1 开始", () => {
+    expect(zh.seat.short(0)).toBe("1 号");
+    expect(zh.seat.named(9, "阿九")).toBe("10 号（阿九）");
+    expect(zh.role.seatLine(10, 0)).toContain("你坐 1 号");
+    expect(zh.setup.seatAria(9)).toBe("10 号座位");
+    expect(zh.actionProblem.SEAT_MISSING({ code: "SEAT_MISSING", seat: 0 })).toBe(
+      "座位 1 不存在",
+    );
+
+    expect(en.seat.short(0)).toBe("Seat 1");
+    expect(en.seat.named(9, "Nine")).toBe("Seat 10 (Nine)");
+    expect(en.role.seatLine(10, 0)).toContain("you are Seat 1");
+    expect(en.setup.seatAria(9)).toBe("Seat 10");
+    expect(en.actionProblem.SEAT_MISSING({ code: "SEAT_MISSING", seat: 0 })).toBe(
+      "Seat 1 does not exist",
+    );
+  });
+
   it("en 目录里一个汉字都没有——漏译的唯一症状", () => {
     const offenders: string[] = [];
     walkLeaves(en, (path, value) => {

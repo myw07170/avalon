@@ -125,21 +125,12 @@ describe("发言分类", () => {
     expect(proposals.map((e) => e.seq)).toEqual(teamBuilding.map((s) => s.seq));
   });
 
-  it("刺杀阶段的推测也在流里，归为 opinion", async () => {
-    const withAssassination = (await manyFinals()).find((v) =>
-      v.speeches.some((s) => s.phase === "ASSASSINATION"),
-    );
-    expect(withAssassination).toBeDefined();
-
-    const feed = describeFeed(withAssassination!);
-    const opinions = feed.filter((e) => e.kind === "opinion");
-    expect(opinions.length).toBeGreaterThan(0);
-    // assassination.ts 把它当"说出口的话"记进 speeches，不是暗票——漏掉就谁都读不到
-    expect(opinions.map((e) => e.seq)).toEqual(
-      withAssassination!.speeches
-        .filter((s) => s.phase === "ASSASSINATION")
-        .map((s) => s.seq),
-    );
+  it("发言的阶段类型只包含组队说明与提议讨论", async () => {
+    for (const view of await manyFinals()) {
+      expect(new Set(view.speeches.map((s) => s.phase))).toEqual(
+        new Set(["TEAM_BUILDING", "PROPOSAL_DISCUSSION"]),
+      );
+    }
   });
 
   it("空发言被标出来，而不是渲染成一个空气泡", async () => {
@@ -161,9 +152,7 @@ describe("发言分类", () => {
     const view = (await game()).final;
     const feed = describeFeed(view);
     const plain = feed.filter((e) => e.kind === "speech");
-    const discussion = view.speeches.filter(
-      (s) => s.phase === "PROPOSAL_DISCUSSION" || s.phase === "REVIEW_DISCUSSION",
-    );
+    const discussion = view.speeches.filter((s) => s.phase === "PROPOSAL_DISCUSSION");
     expect(plain.map((e) => e.seq)).toEqual(discussion.map((s) => s.seq));
   });
 });
@@ -189,7 +178,7 @@ describe("分组", () => {
     if (next && next.kind === "speech") expect(next.groupLabel).toBeNull();
   });
 
-  it("复盘与刺杀有自己的标题", async () => {
+  it("发言流只包含组队与提议讨论分组", async () => {
     const labels = new Set<string>();
     for (const view of await manyFinals()) {
       for (const entry of describeFeed(view)) {
@@ -197,8 +186,8 @@ describe("分组", () => {
       }
     }
     expect(labels).toContain("第 N 轮 · 第 N 次组队");
-    expect(labels).toContain("第 N 轮 · 复盘");
-    expect(labels).toContain("刺杀");
+    expect(labels).not.toContain("第 N 轮 · 复盘");
+    expect(labels).not.toContain("刺杀");
   });
 
   it("同一轮的第二次组队会另起一组", async () => {

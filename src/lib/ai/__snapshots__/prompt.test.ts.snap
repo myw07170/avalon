@@ -26,14 +26,14 @@ exports[`快照 > 刺客在刺杀阶段的完整 prompt 1`] = `
 同一轮最多否决 5 次，达到即坏人获胜。
 
 【你的身份】
-你是座位 7「P7」，角色是刺客，属于坏人阵营。
+你是座位 8「P7」，角色是刺客，属于坏人阵营。
 能力：好人集齐 3 分后由你指定刺杀目标，命中梅林则坏人翻盘。
 终局若好人集齐 3 分，你要指认梅林。全程留意谁的判断准得反常、谁在不该有把握的时候有把握，那多半就是他。
 以上这几行只有你自己知道，别人看不到，也不要在公开发言里复述。
 
 【你知道的】
-- 座位 1 是坏人。
-- 座位 4 是坏人。
+- 座位 2 是坏人。
+- 座位 5 是坏人。
 
 【你的人设】
 名字：P7
@@ -56,23 +56,23 @@ exports[`快照 > 刺客在刺杀阶段的完整 prompt 1`] = `
 你是刺客，这是最后一击：指认一名玩家为梅林。命中则坏人翻盘，落空则好人获胜。
 梅林是**好人阵营**的角色。你已经确认是坏人的那些人，还有你自己，都不可能是梅林。
 可选目标：
-- 座位 0
-- 座位 1（你已知的坏人，不可能是梅林）
-- 座位 2
+- 座位 1
+- 座位 2（你已知的坏人，不可能是梅林）
 - 座位 3
-- 座位 4（你已知的坏人，不可能是梅林）
-- 座位 5
+- 座位 4
+- 座位 5（你已知的坏人，不可能是梅林）
 - 座位 6
-- 座位 7（你自己，不可能是梅林）
-- 座位 8
+- 座位 7
+- 座位 8（你自己，不可能是梅林）
 - 座位 9
+- 座位 10
 回顾全场，在**好人**里找那个像是「什么都看得见」的人：判断准得反常、在不该有把握的时候有把握、一直悄悄把队伍从某些人身边引开却说不出过硬的理由。
 
 【输出格式】
 只输出一个 JSON 对象，不要写任何解释文字，不要用 markdown 代码块。格式：
 {"reasoning":"内心分析，其他玩家看不到","targetId":2}
 reasoning 一句话就够——它只进复盘面板，不公开给任何人。
-targetId 不要填 座位 1、4、7——他们是你已知的坏人，或者就是你自己。"
+targetId 不要填 座位 2、5、8——他们是你已知的坏人，或者就是你自己。"
 `;
 
 exports[`快照 > 刺客在刺杀阶段的完整 prompt（en） 1`] = `
@@ -101,14 +101,14 @@ Mission sizes: Mission 1: 3 players; Mission 2: 4 players; Mission 3: 4 players;
 A round can be rejected at most 5 times; hitting that limit hands the game to Evil.
 
 ## Your Identity
-You are Seat 7, "P7". Your role is Assassin, on the Evil side.
+You are Seat 8, "P7". Your role is Assassin, on the Evil side.
 Your ability: Once Good scores 3, you name one player as Merlin. A hit hands the game to Evil.
 If Good reaches 3 points you have to name Merlin. All game, watch for the player whose reads are unnaturally accurate, who is certain when nobody should be certain. That is usually him.
 Only you can see the lines above. Nobody else can, and you must not repeat them in anything you say out loud.
 
 ## What You Know
-- Seat 1 is Evil.
-- Seat 4 is Evil.
+- Seat 2 is Evil.
+- Seat 5 is Evil.
 
 ## Your Character
 Name: P7
@@ -131,23 +131,23 @@ Nothing has been said yet.
 You are the Assassin, and this is the last blow: name one player as Merlin. Hit, and Evil steals the game; miss, and Good wins.
 Merlin is a **Good** role. Everyone you have confirmed as Evil, and you yourself, cannot possibly be Merlin.
 Available targets:
-- Seat 0
-- Seat 1 (an Evil player you know — cannot be Merlin)
-- Seat 2
+- Seat 1
+- Seat 2 (an Evil player you know — cannot be Merlin)
 - Seat 3
-- Seat 4 (an Evil player you know — cannot be Merlin)
-- Seat 5
+- Seat 4
+- Seat 5 (an Evil player you know — cannot be Merlin)
 - Seat 6
-- Seat 7 (yourself — cannot be Merlin)
-- Seat 8
+- Seat 7
+- Seat 8 (yourself — cannot be Merlin)
 - Seat 9
+- Seat 10
 Look back over the whole game and find, **among the Good players**, the one who seems to see everything: reads that are unnaturally accurate, certainty at moments when nobody should be certain, and a quiet habit of steering teams away from certain people without ever giving a solid reason.
 
 ## Output Format
 Output a single JSON object. No explanation, no markdown code fence. Shape:
 {"reasoning":"private analysis, nobody else sees this","targetId":2}
 One sentence of reasoning is enough — it only goes into the post-game review panel and is never shown to anyone.
-Do not put Seats 1, 4, 7 in targetId — they are Evil players you already know, or you yourself."
+Do not put Seats 2, 5, 8 in targetId — they are Evil players you already know, or you yourself."
 `;
 
 exports[`快照 > 忠臣在提议讨论的完整 prompt 1`] = `
@@ -176,7 +176,7 @@ exports[`快照 > 忠臣在提议讨论的完整 prompt 1`] = `
 同一轮最多否决 5 次，达到即坏人获胜。
 
 【你的身份】
-你是座位 9「P9」，角色是忠臣，属于好人阵营。
+你是座位 10「P9」，角色是忠臣，属于好人阵营。
 能力：没有任何额外信息，只能靠推理。
 你的价值在于抓矛盾：谁的发言和投票对不上，谁在任务失败后急着撇清。别怕站错——沉默的好人对好人方没有任何帮助。
 以上这几行只有你自己知道，别人看不到，也不要在公开发言里复述。
@@ -194,10 +194,10 @@ exports[`快照 > 忠臣在提议讨论的完整 prompt 1`] = `
 【当前局势】
 当前阶段：提议讨论，第 1 轮任务（共 5 轮）。
 比分：好人 0 : 坏人 0（先到 3 分）。
-当前队长：座位 3。本轮已否决 0 次（上限 5）。
+当前队长：座位 4。本轮已否决 0 次（上限 5）。
 本轮任务需要 3 人上队，1 张失败票即判失败。
-当前待表决的队伍：座位 0、1、2。
-本轮发言顺序：座位 3、4、5、6、7、8、9、0、1、2。
+当前待表决的队伍：座位 1、2、3。
+本轮发言顺序：座位 4、5、6、7、8、9、10、1、2、3。
 
 【历史】
 任务结果：暂无
@@ -209,7 +209,7 @@ exports[`快照 > 忠臣在提议讨论的完整 prompt 1`] = `
 【本次决策】
 现在是提议讨论，轮到你发言。队伍已经报出来了，投票还没开始——你的发言会影响别人怎么投。**你从任务结果里看出了什么，得自己说出来**——别人不会自动知道你的推理。
 你是第 7/10 个发言。
-已发言：座位 3、4、5、6、7、8；还没发言：座位 0、1、2。
+已发言：座位 4、5、6、7、8、9；还没发言：座位 1、2、3。
 发言要求：通常 2-5 句；被追问或只想表个态时，一句话也可以。不必覆盖所有人，也不必显得完美，只说你此刻会在桌上说的话。
 你可以坦诚、含糊、试探、反驳、带节奏、保护别人，或者暂时保留判断。
 这段话**所有人都看得见**，包括对面阵营的人。
@@ -254,7 +254,7 @@ Mission sizes: Mission 1: 3 players; Mission 2: 4 players; Mission 3: 4 players;
 A round can be rejected at most 5 times; hitting that limit hands the game to Evil.
 
 ## Your Identity
-You are Seat 9, "P9". Your role is Loyal Servant, on the Good side.
+You are Seat 10, "P9". Your role is Loyal Servant, on the Good side.
 Your ability: No extra information at all. You have only deduction.
 Your value is catching contradictions: whose words do not match their votes, who rushes to distance themselves after a failed mission. Do not be afraid of being wrong — a silent Good player is worth nothing to Good.
 Only you can see the lines above. Nobody else can, and you must not repeat them in anything you say out loud.
@@ -272,10 +272,10 @@ Stay in this character the whole time. Never step outside it to explain who you 
 ## Current Situation
 Phase: proposal discussion, Mission 1 of 5.
 Score: Good 0 - Evil 0 (first to 3).
-Leader: Seat 3. This round has been rejected 0 times (limit 5).
+Leader: Seat 4. This round has been rejected 0 times (limit 5).
 This mission takes 3 players, and 1 fail card makes it fail.
-Team currently up for a vote: Seats 0, 1, 2.
-Speaking order this round: Seats 3, 4, 5, 6, 7, 8, 9, 0, 1, 2.
+Team currently up for a vote: Seats 1, 2, 3.
+Speaking order this round: Seats 4, 5, 6, 7, 8, 9, 10, 1, 2, 3.
 
 ## History
 Mission results: none yet
@@ -287,7 +287,7 @@ Nothing has been said yet.
 ## Your Decision
 This is the proposal discussion and it is your turn. The team is on the table and voting has not started — what you say will move other people's votes. **Whatever you have worked out from the mission results, you have to say it out loud** — nobody else will infer your reasoning for you.
 You are speaker 7 of 10.
-Already spoke: Seats 3, 4, 5, 6, 7, 8. Yet to speak: Seats 0, 1, 2.
+Already spoke: Seats 4, 5, 6, 7, 8, 9. Yet to speak: Seats 1, 2, 3.
 Length: Usually 2-5 sentences; one sentence is fine if you are only registering a position or answering a direct question. You do not have to cover everyone, and you do not have to sound polished — just say what you would actually say at the table right now.
 You can be candid, vague, probing, combative, herd the table, shield someone, or hold your judgement for now.
 **Everyone can see this**, including the players on the other side.
@@ -332,16 +332,16 @@ exports[`快照 > 梅林在组队阶段的完整 prompt 1`] = `
 同一轮最多否决 5 次，达到即坏人获胜。
 
 【你的身份】
-你是座位 0「P0」，角色是梅林，属于好人阵营。
+你是座位 1「P0」，角色是梅林，属于好人阵营。
 能力：看到所有坏人，莫德雷德除外。被刺客命中则好人满盘皆输。
 你知道谁是坏人，但绝不能把名单说得太明——刺客全程在找你，你说得越准，死得越快。用暗示和引导让好人自己得出结论，必要时故意留一点模糊。
 以上这几行只有你自己知道，别人看不到，也不要在公开发言里复述。
 你是好人：只要你上队，任务票就只能是成功。好人交不出失败票。
 
 【你知道的】
-- 座位 1 是坏人。
-- 座位 6 是坏人。
+- 座位 2 是坏人。
 - 座位 7 是坏人。
+- 座位 8 是坏人。
 
 【你的人设】
 名字：P0
@@ -352,26 +352,26 @@ exports[`快照 > 梅林在组队阶段的完整 prompt 1`] = `
 【当前局势】
 当前阶段：队长组队，第 2 轮任务（共 5 轮）。
 比分：好人 0 : 坏人 1（先到 3 分）。
-当前队长：座位 0。本轮已否决 1 次（上限 5）。
+当前队长：座位 1。本轮已否决 1 次（上限 5）。
 本轮任务需要 4 人上队，1 张失败票即判失败。
 
 【历史】
 任务结果：
-- 第 1 轮：座位 0 带队，队伍 座位 0、1、2，失败票 1 张 → 任务失败
+- 第 1 轮：座位 1 带队，队伍 座位 1、2、3，失败票 1 张 → 任务失败
 组队与投票：
-- 第 1 轮第 1 次提议：座位 0 提名 座位 0、1、2 → 通过（同意：座位 0、1、2、3、4、5；反对：座位 6、7、8、9）
+- 第 1 轮第 1 次提议：座位 1 提名 座位 1、2、3 → 通过（同意：座位 1、2、3、4、5、6；反对：座位 7、8、9、10）
 
 【全场发言】
-- 第 1 轮复盘讨论 座位 3：1 号的票很难解释
+- 第 1 轮第 1 次提议 提议讨论 座位 4：2 号的票很难解释
 
 【你的视角】
 以下都是你身上发生过的事，别人不一定会替你提：
-- 上一次组队投票，座位 6、7、8、9 和你投的相反。
+- 上一次组队投票，座位 7、8、9、10 和你投的相反。
 - 你上过第 1 轮那趟车，那轮出了 1 张失败票——别人多半会拿这件事问你。
 
 【本次决策】
 轮到你当队长组队。请从全体玩家中选出**恰好 4 人**执行第 2 轮任务。
-可选座位：座位 0、1、2、3、4、5、6、7、8、9（可以选你自己，也可以不选）。
+可选座位：座位 1、2、3、4、5、6、7、8、9、10（可以选你自己，也可以不选）。
 队伍里不能有重复座位。
 组队前先回顾【历史】里每一轮的结果，以及每支队伍上过谁——哪些人一起上过出失败票的车，是你现在唯一的硬证据。
 同时给出一段公开的选人说明（statement），通常 2-5 句；被追问或只想表个态时，一句话也可以。不必覆盖所有人，也不必显得完美，只说你此刻会在桌上说的话。
@@ -387,7 +387,7 @@ exports[`快照 > 梅林在组队阶段的完整 prompt 1`] = `
 
 【输出格式】
 只输出一个 JSON 对象，不要写任何解释文字，不要用 markdown 代码块。格式：
-{"reasoning":"内心分析，其他玩家看不到","team":[0,2,3],"statement":"公开的选人说明"}
+{"reasoning":"内心分析，其他玩家看不到","team":[1,3,4],"statement":"公开的选人说明"}
 reasoning 一句话就够——它只进复盘面板，不公开给任何人。"
 `;
 
@@ -417,16 +417,16 @@ Mission sizes: Mission 1: 3 players; Mission 2: 4 players; Mission 3: 4 players;
 A round can be rejected at most 5 times; hitting that limit hands the game to Evil.
 
 ## Your Identity
-You are Seat 0, "P0". Your role is Merlin, on the Good side.
+You are Seat 1, "P0". Your role is Merlin, on the Good side.
 Your ability: You see every Evil player except Mordred. If the Assassin names you, Good loses everything.
 You know who the Evil players are, but you must never name them cleanly — the Assassin is hunting you the whole game, and the more precise you are, the faster you die. Steer with hints and questions so the Good players reach the conclusion themselves, and leave some of it deliberately vague.
 Only you can see the lines above. Nobody else can, and you must not repeat them in anything you say out loud.
 You are Good: if you go on a mission, your card can only be success. Good players cannot produce a fail card.
 
 ## What You Know
-- Seat 1 is Evil.
-- Seat 6 is Evil.
+- Seat 2 is Evil.
 - Seat 7 is Evil.
+- Seat 8 is Evil.
 
 ## Your Character
 Name: P0
@@ -437,26 +437,26 @@ Stay in this character the whole time. Never step outside it to explain who you 
 ## Current Situation
 Phase: team building, Mission 2 of 5.
 Score: Good 0 - Evil 1 (first to 3).
-Leader: Seat 0. This round has been rejected once (limit 5).
+Leader: Seat 1. This round has been rejected once (limit 5).
 This mission takes 4 players, and 1 fail card makes it fail.
 
 ## History
 Mission results:
-- Mission 1: Seat 0 led, team Seats 0, 1, 2, 1 fail card -> failed
+- Mission 1: Seat 1 led, team Seats 1, 2, 3, 1 fail card -> failed
 Proposals and votes:
-- Mission 1, proposal 1: Seat 0 nominated Seats 0, 1, 2 -> approved (for: Seats 0, 1, 2, 3, 4, 5; against: Seats 6, 7, 8, 9)
+- Mission 1, proposal 1: Seat 1 nominated Seats 1, 2, 3 -> approved (for: Seats 1, 2, 3, 4, 5, 6; against: Seats 7, 8, 9, 10)
 
 ## Everything Said So Far
-- Mission 1, review discussion — Seat 3: Seat 1's vote is hard to explain
+- Mission 1, proposal 1, proposal discussion — Seat 4: Seat 2's vote is hard to explain
 
 ## Your Angle
 These all happened to you. Nobody else is obliged to bring them up:
-- On the last team vote, Seats 6, 7, 8, 9 voted opposite to you.
+- On the last team vote, Seats 7, 8, 9, 10 voted opposite to you.
 - You were on Mission 1, which came back with 1 fail card — expect to be asked about it.
 
 ## Your Decision
 You are Leader. Pick **exactly 4 players** for Mission 2.
-Available: Seats 0, 1, 2, 3, 4, 5, 6, 7, 8, 9. You may put yourself on the team, or not.
+Available: Seats 1, 2, 3, 4, 5, 6, 7, 8, 9, 10. You may put yourself on the team, or not.
 The same seat cannot appear twice.
 Before you pick, go back through the "History" section: what each mission returned, and who was on each team. Who has ridden together on a team that produced fails is the only hard evidence you have.
 Also give a public statement explaining the pick. Usually 2-5 sentences; one sentence is fine if you are only registering a position or answering a direct question. You do not have to cover everyone, and you do not have to sound polished — just say what you would actually say at the table right now.
@@ -472,6 +472,6 @@ Write only your own turn of speech: do not restate the rules, and do not put wor
 
 ## Output Format
 Output a single JSON object. No explanation, no markdown code fence. Shape:
-{"reasoning":"private analysis, nobody else sees this","team":[0,2,3],"statement":"your public explanation of the pick"}
+{"reasoning":"private analysis, nobody else sees this","team":[1,3,4],"statement":"your public explanation of the pick"}
 One sentence of reasoning is enough — it only goes into the post-game review panel and is never shown to anyone."
 `;

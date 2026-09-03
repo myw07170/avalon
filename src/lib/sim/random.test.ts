@@ -222,7 +222,6 @@ describe("整局的信息隔离", () => {
         "TEAM_VOTE",
         "MISSION_EXECUTION",
         "MISSION_RESULT",
-        "REVIEW_DISCUSSION",
         "ASSASSINATION",
       ]),
     );

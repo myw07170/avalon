@@ -137,14 +137,6 @@ function buildPayload(
         suspicions: mockSuspicions(view, rng),
       };
 
-    case "ASSASSIN_OPINION":
-      requireActions(req, "ASSASSIN_OPINION");
-      return {
-        reasoning: mock.reasoningOpinion,
-        content: mockText(req, mock.topicOpinion),
-        suspicions: mockSuspicions(view, rng),
-      };
-
     case "VOTE": {
       const chosen = pick(requireActions(req, "CAST_VOTE"), rng);
       return {

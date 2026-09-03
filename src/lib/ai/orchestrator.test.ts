@@ -59,13 +59,12 @@ function spyClient(rng: RngFn): { client: AiClient; seen: Array<AiDecisionReques
 // ---------------------------------------------------------------------------
 
 describe("动作与决策种类的互译", () => {
-  it("六种候选动作各自对应一种决策", () => {
+  it("五种候选动作各自对应一种决策", () => {
     const pairs: Array<[GameAction, AiDecisionKind]> = [
       [{ type: "PROPOSE_TEAM", playerId: 0, team: [0, 1], statement: "带这几个" }, "TEAM_PROPOSAL"],
       [{ type: "SPEAK", playerId: 0, content: "" }, "SPEECH"],
       [{ type: "CAST_VOTE", playerId: 0, approve: true }, "VOTE"],
       [{ type: "CAST_MISSION_CARD", playerId: 0, success: true }, "MISSION_CARD"],
-      [{ type: "ASSASSIN_OPINION", playerId: 0, content: "" }, "ASSASSIN_OPINION"],
       [{ type: "ASSASSINATE", playerId: 0, targetId: 1 }, "ASSASSINATION"],
     ];
     for (const [action, kind] of pairs) {
@@ -100,11 +99,6 @@ describe("动作与决策种类的互译", () => {
         "MISSION_CARD",
         { reasoning: "", success: true },
         { type: "CAST_MISSION_CARD", playerId: 3, success: true },
-      ],
-      [
-        "ASSASSIN_OPINION",
-        { reasoning: "", content: "梅林是 0 号" },
-        { type: "ASSASSIN_OPINION", playerId: 3, content: "梅林是 0 号" },
       ],
       [
         "ASSASSINATION",
@@ -196,7 +190,7 @@ describe("人类玩家", () => {
         // 固定挑法能让"这一步确实来自人类"在结果里看得出来
         const last = turn.legalActions[turn.legalActions.length - 1];
         if (!last) throw new Error("没有合法动作");
-        if (last.type === "SPEAK" || last.type === "ASSASSIN_OPINION") {
+        if (last.type === "SPEAK") {
           return { ...last, content: "【人类】我先听听" };
         }
         // 人类当队长时也要填选人说明——模板给的是空串，
@@ -590,7 +584,7 @@ describe("只有一个合法动作时不问模型", () => {
       hooks: { onDecision: (r) => void records.push(r) },
     });
 
-    const templates: AiDecisionKind[] = ["SPEECH", "TEAM_PROPOSAL", "ASSASSIN_OPINION"];
+    const templates: AiDecisionKind[] = ["SPEECH", "TEAM_PROPOSAL"];
     for (const kind of templates) {
       const mine = records.filter((r) => r.kind === kind);
       expect(mine.length, kind).toBeGreaterThan(0);
@@ -628,7 +622,7 @@ describe("只有一个合法动作时不问模型", () => {
         return turn.legalActions[0]!;
       },
     });
-    // 0 号在 seed 7 里是好人且上过车，那一手仍然经由 onHumanAction
-    expect(turns.some((t) => t.kind === "MISSION_CARD")).toBe(true);
+    // 发言模板只有一个合法动作，但人类仍应拿到表单自己填写内容。
+    expect(turns.some((t) => t.kind === "SPEECH" && t.legalActions.length === 1)).toBe(true);
   });
 });

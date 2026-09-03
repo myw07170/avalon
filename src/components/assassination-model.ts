@@ -12,7 +12,6 @@
 import type { Messages } from "@/i18n/messages";
 import { countEvil, type PlayerView } from "@/lib/game";
 import type { AssassinationForm, TargetChoice } from "./action-panel-model";
-import { describeFeed, type FeedEntry } from "./speech-feed-model";
 
 export interface StrikeTarget extends TargetChoice {
   /**
@@ -26,20 +25,6 @@ export interface StrikeTarget extends TargetChoice {
 
 export interface StrikeBrief {
   targets: StrikeTarget[];
-  /**
-   * 刚才所有坏人当众说的推测。
-   *
-   * assassination.ts 把它们记进公开的 speeches，不是坏人内部的暗票——
-   * 好人也听得到。搬进这个面板只是省得玩家回去翻发言流。
-   */
-  opinions: FeedEntry[];
-  /**
-   * 一条有内容的推测都没有。
-   *
-   * 引擎允许空发言（见 speech-feed-model 的 isSilent），真会整场都没人开口。
-   * 那时列出四条「（没有开口）」纯属噪音，改用一句话说完。
-   */
-  allSilent: boolean;
   /** 「还有一个队友你也认不出来」。没有奥伯伦时说的是另一句 */
   hiddenAllyHint: string;
 }
@@ -79,12 +64,8 @@ export function describeStrike(
   view: PlayerView,
   msg: Messages,
 ): StrikeBrief {
-  const opinions = describeFeed(view, msg).filter((entry) => entry.kind === "opinion");
-
   return {
     targets: form.targets.map((target) => ({ ...target, risk: riskOf(target, msg) })),
-    opinions,
-    allSilent: opinions.length > 0 && opinions.every((entry) => entry.isSilent),
     hiddenAllyHint: hiddenAllyHintOf(view, msg),
   };
 }

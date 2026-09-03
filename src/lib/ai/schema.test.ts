@@ -17,7 +17,6 @@ const ALL_KINDS: AiDecisionKind[] = [
   "SPEECH",
   "VOTE",
   "MISSION_CARD",
-  "ASSASSIN_OPINION",
   "ASSASSINATION",
 ];
 
@@ -26,7 +25,6 @@ const VALID: { [K in AiDecisionKind]: unknown } = {
   SPEECH: { reasoning: "想了想", content: "我觉得 2 号有问题" },
   VOTE: { reasoning: "想了想", approve: true },
   MISSION_CARD: { reasoning: "想了想", success: false },
-  ASSASSIN_OPINION: { reasoning: "想了想", content: "梅林大概是 4 号" },
   ASSASSINATION: { reasoning: "想了想", targetId: 4 },
 };
 
@@ -35,9 +33,7 @@ describe("AI_SCHEMAS 映射表", () => {
     expect(new Set(Object.keys(AI_SCHEMAS))).toEqual(new Set(ALL_KINDS));
   });
 
-  it("ASSASSIN_OPINION 与 SPEECH 共用同一个 schema", () => {
-    // 不是"内容相同"而是同一个对象：AiDecisionPayload 里它们本就是同一个 AiSpeech
-    expect(AI_SCHEMAS.ASSASSIN_OPINION).toBe(AI_SCHEMAS.SPEECH);
+  it("SPEECH 指向发言 schema", () => {
     expect(AI_SCHEMAS.SPEECH).toBe(aiSpeechSchema);
   });
 

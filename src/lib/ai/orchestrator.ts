@@ -53,8 +53,7 @@ const DEFAULT_MAX_RETRIES = 2;
 /**
  * 候选动作的类型 → 该问模型什么。
  *
- * **由动作类型反推，不由 phase 推**：刺杀阶段的两个子步骤（逐个推测 → 刺客开刀）
- * 因此自动分开，这里不必复制一遍引擎的次序规则。
+ * **由动作类型反推，不由 phase 推**，这里不复制引擎的阶段规则。
  *
  * ACKNOWLEDGE 不在表里——查看身份不需要模型。系统动作（START_GAME / NEXT）
  * 也不在，它们不属于任何玩家。
@@ -64,7 +63,6 @@ const ACTION_KIND: Partial<Record<ActionType, AiDecisionKind>> = {
   SPEAK: "SPEECH",
   CAST_VOTE: "VOTE",
   CAST_MISSION_CARD: "MISSION_CARD",
-  ASSASSIN_OPINION: "ASSASSIN_OPINION",
   ASSASSINATE: "ASSASSINATION",
 };
 
@@ -72,7 +70,7 @@ const ACTION_KIND: Partial<Record<ActionType, AiDecisionKind>> = {
  * legal.ts 把候选**穷举完**了的那几种决策。
  *
  * 【这张表是 autoDecision 的安全前提，不要往里加东西】另外三种是**模板动作**：
- * PROPOSE_TEAM 不穷举 C(10,5)、SPEAK / ASSASSIN_OPINION 不猜你要说什么，
+ * PROPOSE_TEAM 不穷举 C(10,5)、SPEAK 不猜你要说什么，
  * 它们的 legalActions 长度**恒为 1**。把它们放进来，等于整局不再问模型任何问题。
  */
 const ENUMERATED_KINDS: ReadonlySet<AiDecisionKind> = new Set<AiDecisionKind>([
@@ -120,12 +118,6 @@ export function toGameAction<K extends AiDecisionKind>(
         type: "CAST_MISSION_CARD",
         playerId,
         success: (payload as AiDecisionPayload["MISSION_CARD"]).success,
-      };
-    case "ASSASSIN_OPINION":
-      return {
-        type: "ASSASSIN_OPINION",
-        playerId,
-        content: (payload as AiDecisionPayload["ASSASSIN_OPINION"]).content,
       };
     case "ASSASSINATION":
       return {

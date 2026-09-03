@@ -62,7 +62,6 @@ function finished(patch: Partial<GameState> = {}): GameState {
       },
     ],
     assassination: {
-      opinions: [{ playerId: 1, content: "我怀疑 3 号" }],
       assassinId: 4,
       targetId: 3,
       hit: false,
@@ -137,7 +136,7 @@ describe("往返", () => {
     expect(parsed.missions).toEqual([{ round: 1, team: [0, 1], failCount: 0, succeeded: true }]);
 
     expect(parsed.assassination).toEqual({
-      opinions: [{ playerId: 1, name: "AI-2", roleLabel: "莫甘娜", content: "我怀疑 3 号" }],
+      opinions: [],
       target: { playerId: 3, name: "AI-4", roleLabel: "派西维尔" },
       hit: false,
     });
@@ -170,17 +169,12 @@ describe("往返", () => {
     expect(parsed.speeches[0]?.content).toBe("第一句 第二句");
   });
 
-  /**
-   * 不标环节的话，同一轮的提议讨论与复盘讨论在记录里长得一模一样——
-   * real-game-94938.txt 第 1 轮那 10 条就是这么黏在一起的。
-   */
-  it("发言行标出环节；只有组队与提议讨论带提议次数", () => {
+  it("发言行标出环节与提议次数", () => {
     const text = renderTranscript(
       finished({
         speeches: [
           { seq: 0, playerId: 0, phase: "TEAM_BUILDING", missionIndex: 0, attempt: 1, content: "我带 0、1" },
           { seq: 1, playerId: 1, phase: "PROPOSAL_DISCUSSION", missionIndex: 0, attempt: 1, content: "同意" },
-          { seq: 2, playerId: 2, phase: "REVIEW_DISCUSSION", missionIndex: 0, attempt: 1, content: "复盘一下" },
         ],
       }),
       [record()],
@@ -188,12 +182,9 @@ describe("往返", () => {
     );
     const lines = text.split("\n").filter((l) => l.trim().startsWith("[第"));
 
-    expect(lines).toHaveLength(3);
+    expect(lines).toHaveLength(2);
     expect(lines[0]).toContain("[第 1 轮 第 2 次提议 组队]");
     expect(lines[1]).toContain("[第 1 轮 第 2 次提议 提议讨论]");
-    // 复盘的 attempt 是"该轮最后一次提议"，标出来会让人以为复盘也分了好几次
-    expect(lines[2]).toContain("[第 1 轮 复盘讨论]");
-    expect(lines[2]).not.toContain("次提议");
   });
 
   /**
@@ -274,41 +265,30 @@ describe("往返", () => {
     expect(parsed.speeches).toHaveLength(2);
   });
 
-  /**
-   * 【这条是变异测试逼出来的】刺杀推测现在同时是一条公开 Speech
-   * （phases/assassination.ts：不进 speeches 就谁都读不到，包括刺客自己）。
-   * 于是它在对局记录里有两个可能的落点，**必须只印一次**——
-   * 【刺杀】段已经连同目标和结果一起呈现了它。
-   *
-   * 上面那些往返用例都抓不住重复：它们的 fixture 只填了 assassination.opinions，
-   * 没有对应的 ASSASSINATION 发言，而真实对局里两者一定同时存在。
-   * 把过滤去掉后整个文件照样全绿——**变异测试证伪的不是实现，是测试**。
-   */
-  it("刺杀推测只在【刺杀】段出现一次，不重复进【全场发言】", () => {
-    const state = finished({
-      speeches: [
-        speech(0, 0, "我先说两句"),
-        {
-          seq: 1,
-          playerId: 1,
-          phase: "ASSASSINATION",
-          missionIndex: 2,
-          attempt: 0,
-          content: "我怀疑 3 号",
-        },
-      ],
-    });
-    const text = renderTranscript(state, [record()], META);
+  it("新记录的刺杀段只包含刺杀结果", () => {
+    const text = renderTranscript(finished(), [record()], META);
+    const assassination = text.split("=== 刺杀 ===")[1]?.split(/\n=== /)[0] ?? "";
 
-    expect(text.split("我怀疑 3 号").length - 1).toBe(1);
+    expect(assassination.trim().split("\n")).toHaveLength(1);
+    expect(assassination).toContain("刺客指认");
+  });
 
-    const spoken = text.slice(text.indexOf("=== 全场发言 ==="), text.indexOf("=== 任务与提议 ==="));
-    expect(spoken).not.toContain("我怀疑 3 号");
-    // 统计口径也只算讨论发言，四份记录之间的数字才可比
-    expect(text).toContain("共 1 条发言");
+  it("旧记录中的复盘发言与刺杀意见仍可解析", () => {
+    const legacy = renderTranscript(finished(), [record()], META)
+      .replace(
+        "=== 任务与提议 ===",
+        "  [第 1 轮 复盘讨论] 2 号「AI-3」（忠臣）：复盘一下\n\n=== 任务与提议 ===",
+      )
+      .replace(
+        "  刺客指认 3 号「AI-4」（派西维尔） → 落空",
+        "  1 号「AI-2」（莫甘娜）：我怀疑 3 号\n  刺客指认 3 号「AI-4」（派西维尔） → 落空",
+      );
+    const parsed = parseTranscript(legacy);
 
-    // 格式没变，照样读得回来
-    expect(parseTranscript(text).speeches).toHaveLength(1);
+    expect(parsed.speeches.at(-1)).toMatchObject({ phaseLabel: "复盘讨论", content: "复盘一下" });
+    expect(parsed.assassination?.opinions).toEqual([
+      { playerId: 1, name: "AI-2", roleLabel: "莫甘娜", content: "我怀疑 3 号" },
+    ]);
   });
 
   it("没有刺杀阶段（坏人靠任务失败赢）时 assassination 是 null", () => {

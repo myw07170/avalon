@@ -30,6 +30,7 @@ import { SpectatorTable } from "./SpectatorTable";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { TutorialModal } from "./TutorialModal";
 import { TeamDraftProvider } from "./TeamDraftContext";
+import { AssassinationDraftProvider } from "./AssassinationDraftContext";
 import { VoteMatrix } from "./VoteMatrix";
 
 /**
@@ -90,30 +91,32 @@ function Table() {
 
   return (
     <TeamDraftProvider>
-      <InGameLayout
-        overview={
-          <>
-            <SeatTable />
-            <MissionTrack />
-            <VoteMatrix />
-          </>
-        }
-        conversation={<SpeechFeed enableActions />}
-        controls={
-          <>
-            {/* 没轮到你时这里是全屏唯一会动的东西——不给的话，慢和卡死长得一样 */}
-            <ThinkingIndicator />
+      <AssassinationDraftProvider>
+        <InGameLayout
+          overview={
+            <>
+              <SeatTable />
+              <MissionTrack />
+              <VoteMatrix />
+            </>
+          }
+          conversation={<SpeechFeed enableActions />}
+          controls={
+            <>
+              {/* 没轮到你时这里是全屏唯一会动的东西——不给的话，慢和卡死长得一样 */}
+              <ThinkingIndicator />
 
-            {error && (
-              <p role="alert" className="max-w-md text-center text-sm text-mordred">
-                {error}
-              </p>
-            )}
+              {error && (
+                <p role="alert" className="max-w-md text-center text-sm text-mordred">
+                  {error}
+                </p>
+              )}
 
-            <SecondaryButton onClick={() => reset()}>{msg.shell.restart}</SecondaryButton>
-          </>
-        }
-      />
+              <SecondaryButton onClick={() => reset()}>{msg.shell.restart}</SecondaryButton>
+            </>
+          }
+        />
+      </AssassinationDraftProvider>
     </TeamDraftProvider>
   );
 }

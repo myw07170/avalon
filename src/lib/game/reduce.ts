@@ -43,9 +43,7 @@ export function reduce(
       return reduceRoleReveal(state, action);
     case "TEAM_BUILDING":
       return reduceTeamBuilding(state, action);
-    // 两个讨论阶段的调度完全一致，只有"说完去哪"不同，共用一个分支
     case "PROPOSAL_DISCUSSION":
-    case "REVIEW_DISCUSSION":
       return reduceDiscussion(state, action);
     case "TEAM_VOTE":
       return reduceTeamVote(state, action);

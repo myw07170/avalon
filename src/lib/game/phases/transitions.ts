@@ -64,21 +64,16 @@ export function speakingOrderFrom(
  * legal.ts 只在讨论阶段读 pending.speakingOrder，提前算会让一份过期的顺序
  * 在 TEAM_BUILDING / TEAM_VOTE 期间躺在 pending 里，与规矩 1 直接冲突。
  *
- * startIndex 是游标起点，不是排序方式：两个讨论阶段的 speakingOrder 完全一样
- * （都是从队长起的整圈），差别只在队长那一格算不算已经用掉。
+ * 队长的选人说明已经占掉第一格，所以游标从 1 开始。
  */
-function enterDiscussion(
-  state: GameState,
-  phase: "PROPOSAL_DISCUSSION" | "REVIEW_DISCUSSION",
-  startIndex: number,
-): GameState {
+export function enterProposalDiscussion(state: GameState): GameState {
   return {
     ...state,
-    phase,
+    phase: "PROPOSAL_DISCUSSION",
     pending: {
       ...createPending(),
       speakingOrder: speakingOrderFrom(state.currentLeaderId, state.players.length),
-      speakerIndex: startIndex,
+      speakerIndex: 1,
     },
   };
 }
@@ -93,15 +88,6 @@ function enterDiscussion(
  *   得再去改一处本来完全正确的代码。
  * 保留整圈 + 游标起点为 1，"队长已发言 1/n"这件事在视角层自然就是对的。
  */
-export function enterProposalDiscussion(state: GameState): GameState {
-  return enterDiscussion(state, "PROPOSAL_DISCUSSION", 1);
-}
-
-/** 复盘讨论没有前置发言，队长自己也要说，游标从 0 起步 */
-export function enterReviewDiscussion(state: GameState): GameState {
-  return enterDiscussion(state, "REVIEW_DISCUSSION", 0);
-}
-
 // ---------------------------------------------------------------------------
 // 投票与提议结算
 // ---------------------------------------------------------------------------

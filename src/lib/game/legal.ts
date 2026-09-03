@@ -37,8 +37,7 @@ const PHASE_ACTIONS: Record<Phase, ReadonlySet<ActionType>> = {
   TEAM_VOTE: new Set<ActionType>(["CAST_VOTE"]),
   MISSION_EXECUTION: new Set<ActionType>(["CAST_MISSION_CARD"]),
   MISSION_RESULT: new Set<ActionType>(["NEXT"]),
-  REVIEW_DISCUSSION: new Set<ActionType>(["SPEAK"]),
-  ASSASSINATION: new Set<ActionType>(["ASSASSIN_OPINION", "ASSASSINATE"]),
+  ASSASSINATION: new Set<ActionType>(["ASSASSINATE"]),
   GAME_OVER: new Set<ActionType>([]),
 };
 
@@ -89,25 +88,7 @@ function requireAssassinId(state: GameState): PlayerId {
   return assassin.id;
 }
 
-/**
- * 刺杀阶段的两个子步骤。
- *
- * rules.md §4.5：先让所有坏人各发表一次推测，再由刺客做最终选择。
- * "所有坏人"含奥伯伦——他也是坏人，只是不认识队友。
- * 发言次序取座位号升序，phases/assassination.ts 必须按同一个次序结算。
- */
-type AssassinationStage =
-  | { kind: "OPINION"; playerId: PlayerId }
-  | { kind: "STRIKE"; playerId: PlayerId };
-
-function getAssassinationStage(state: GameState): AssassinationStage {
-  const spoken = new Set(state.pending.assassinOpinions.map((o) => o.playerId));
-  const pendingEvil = state.players.find((p) => isEvil(p) && !spoken.has(p.id));
-  if (pendingEvil) return { kind: "OPINION", playerId: pendingEvil.id };
-  return { kind: "STRIKE", playerId: requireAssassinId(state) };
-}
-
-/** 讨论阶段的当前发言人。游标走到头表示本阶段发言完毕，等 reduce 转阶段 */
+/** 提议讨论的当前发言人。游标走到头表示本阶段发言完毕，等 reduce 转阶段 */
 function currentSpeakerId(state: GameState): PlayerId | undefined {
   return state.pending.speakingOrder[state.pending.speakerIndex];
 }
@@ -138,8 +119,7 @@ export function getAwaitingPlayerIds(state: GameState): PlayerId[] {
     case "TEAM_BUILDING":
       return [state.currentLeaderId];
 
-    case "PROPOSAL_DISCUSSION":
-    case "REVIEW_DISCUSSION": {
+    case "PROPOSAL_DISCUSSION": {
       const speaker = currentSpeakerId(state);
       return speaker === undefined ? [] : [speaker];
     }
@@ -160,7 +140,7 @@ export function getAwaitingPlayerIds(state: GameState): PlayerId[] {
     }
 
     case "ASSASSINATION":
-      return [getAssassinationStage(state).playerId];
+      return [requireAssassinId(state)];
   }
 }
 
@@ -234,7 +214,7 @@ function proposalTemplate(state: GameState, leaderId: PlayerId): GameAction {
 /**
  * 某玩家此刻可以做什么。不该他行动时返回 `[]`。
  *
- * 自由文本动作（SPEAK / ASSASSIN_OPINION）给的是 content 为空串的模板：
+ * 自由文本动作 SPEAK 给的是 content 为空串的模板：
  * 内容由 AI 或人类填，引擎不校验文本本身，只校验"轮没轮到你"。
  */
 export function getLegalActions(
@@ -261,7 +241,6 @@ export function getLegalActions(
       return [proposalTemplate(state, playerId)];
 
     case "PROPOSAL_DISCUSSION":
-    case "REVIEW_DISCUSSION":
       return [{ type: "SPEAK", playerId, content: "" }];
 
     case "TEAM_VOTE":
@@ -281,9 +260,6 @@ export function getLegalActions(
         : [{ type: "CAST_MISSION_CARD", playerId, success: true }];
 
     case "ASSASSINATION": {
-      if (getAssassinationStage(state).kind === "OPINION") {
-        return [{ type: "ASSASSIN_OPINION", playerId, content: "" }];
-      }
       // 目标可以是任何人，含坏人队友和刺客自己
       //（rules.md §4.5 明确允许，就是为了避免"没有合法目标"的死循环）
       return state.players.map((p) => ({
@@ -334,12 +310,12 @@ export function assertLegal(state: GameState, action: GameAction): void {
     });
   }
 
-  assertIsActor(state, actor, action.type);
+  assertIsActor(state, actor);
   assertPayload(state, actor, action);
 }
 
 /** 重复提交与"没轮到你"。累积型阶段先判重复，诊断才准 */
-function assertIsActor(state: GameState, actor: Player, type: ActionType): void {
+function assertIsActor(state: GameState, actor: Player): void {
   const duplicate = (what: string): never => {
     throw new EngineError(
       `座位 ${actor.id} 已经${what}过了`,
@@ -370,30 +346,11 @@ function assertIsActor(state: GameState, actor: Player, type: ActionType): void 
       }
       break;
 
-    case "ASSASSINATION":
-      if (
-        type === "ASSASSIN_OPINION" &&
-        state.pending.assassinOpinions.some((o) => o.playerId === actor.id)
-      ) {
-        duplicate("发表推测");
-      }
-      // 刺客本人也是要发言的坏人之一。他若在推测阶段就直接开刀，
-      // awaiting 里正好有他，只靠下面那道检查会放过去，必须在这里单独拦一次
-      if (
-        type === "ASSASSINATE" &&
-        getAssassinationStage(state).kind !== "STRIKE"
-      ) {
-        throw new EngineError("尚有坏人未发表推测，还不能刺杀", "NOT_YOUR_TURN", {
-          playerId: actor.id,
-        });
-      }
-      break;
-
     case "SETUP":
     case "TEAM_BUILDING":
     case "PROPOSAL_DISCUSSION":
-    case "REVIEW_DISCUSSION":
     case "MISSION_RESULT":
+    case "ASSASSINATION":
     case "GAME_OVER":
       break;
   }
@@ -447,7 +404,6 @@ function assertPayload(
     case "ACKNOWLEDGE":
     case "SPEAK":
     case "CAST_VOTE":
-    case "ASSASSIN_OPINION":
     case "START_GAME":
     case "NEXT":
       break;

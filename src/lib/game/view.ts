@@ -93,8 +93,7 @@ function submissionOf(state: GameState, selfId: PlayerId | null): Submission {
       // 只等队长一个人出名单
       return { progress: { submitted: 0, required: 1 }, selfSubmitted: false };
 
-    case "PROPOSAL_DISCUSSION":
-    case "REVIEW_DISCUSSION": {
+    case "PROPOSAL_DISCUSSION": {
       // selfId 为 null 时 indexOf 给 -1，下面那条判断本来就要求 index >= 0
       const index = selfId === null ? -1 : pending.speakingOrder.indexOf(selfId);
       return {
@@ -123,15 +122,8 @@ function submissionOf(state: GameState, selfId: PlayerId | null): Submission {
       };
     }
 
-    case "ASSASSINATION": {
-      // 坏人数量由人数表决定（rules.md §2），是公开信息，不构成泄漏
-      const evilCount = state.players.filter((p) => ROLE_TEAM[p.role] === "EVIL").length;
-      return {
-        progress: { submitted: pending.assassinOpinions.length, required: evilCount },
-        selfSubmitted:
-          selfId !== null && pending.assassinOpinions.some((o) => o.playerId === selfId),
-      };
-    }
+    case "ASSASSINATION":
+      return { progress: { submitted: 0, required: 1 }, selfSubmitted: false };
 
     // 等系统推进的阶段，没有任何人需要提交
     case "SETUP":
@@ -182,7 +174,6 @@ function revealOf(state: GameState): PlayerView["reveal"] {
     ),
     assassination: state.assassination
       ? ({
-          opinions: state.assassination.opinions.map((o) => ({ ...o })),
           assassinId: state.assassination.assassinId,
           targetId: state.assassination.targetId,
           hit: state.assassination.hit,
@@ -209,8 +200,7 @@ export function toPlayerView(state: GameState, playerId: PlayerId): PlayerView {
   }
 
   const { progress, selfSubmitted } = submissionOf(state, playerId);
-  const isDiscussion =
-    state.phase === "PROPOSAL_DISCUSSION" || state.phase === "REVIEW_DISCUSSION";
+  const isDiscussion = state.phase === "PROPOSAL_DISCUSSION";
 
   return {
     selfId: self.id,
@@ -275,8 +265,7 @@ export function toPlayerView(state: GameState, playerId: PlayerId): PlayerView {
  */
 export function toSpectatorView(state: GameState): SpectatorView {
   const { progress } = submissionOf(state, null);
-  const isDiscussion =
-    state.phase === "PROPOSAL_DISCUSSION" || state.phase === "REVIEW_DISCUSSION";
+  const isDiscussion = state.phase === "PROPOSAL_DISCUSSION";
 
   return {
     selfId: null,

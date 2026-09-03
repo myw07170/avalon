@@ -7,7 +7,7 @@
  * view.selfTeam 自己判断该给几个按钮，等于把引擎规则在 UI 里再实现一遍——
  * 两处迟早不一致，而不一致的那一次就是一张本不该存在的失败票。
  *
- * 【两个例外是模板动作】PROPOSE_TEAM 和 SPEAK / ASSASSIN_OPINION 的候选项是占位模板
+ * 【两个例外是模板动作】PROPOSE_TEAM 和 SPEAK 的候选项是占位模板
  * （legal.ts 不穷举 C(10,5)=252 种队伍，也不猜你要说什么）。这两种要填内容，
  * 但 type 和 playerId 仍然沿用模板，不在 UI 里手写。
  *
@@ -62,11 +62,11 @@ export interface TeamForm extends FormBase {
 }
 
 export interface SpeechForm extends FormBase {
-  kind: "SPEECH" | "ASSASSIN_OPINION";
+  kind: "SPEECH";
   placeholder: string;
   /** 空发言是合法的，所以明写一个"不说"的出口，而不是让玩家提交空文本框 */
   skipLabel: string;
-  template: Extract<GameAction, { type: "SPEAK" | "ASSASSIN_OPINION" }>;
+  template: Extract<GameAction, { type: "SPEAK" }>;
 }
 
 export interface VoteForm extends FormBase {
@@ -178,31 +178,14 @@ function teamForm(turn: HumanTurn, msg: Messages): TeamForm | null {
 }
 
 function speechForm(turn: HumanTurn, msg: Messages): SpeechForm | null {
-  const template =
-    pick(turn.legalActions, "SPEAK") ?? pick(turn.legalActions, "ASSASSIN_OPINION");
+  const template = pick(turn.legalActions, "SPEAK");
   if (!template) return null;
 
-  if (template.type === "ASSASSIN_OPINION") {
-    return {
-      kind: "ASSASSIN_OPINION",
-      title: msg.turn.opinion.title,
-      // assassination.ts 把这段话记进公开的 speeches，不是坏人内部的暗票。
-      // 不说清楚，玩家会以为只有队友听得见
-      hint: msg.turn.opinion.hint,
-      placeholder: msg.turn.opinion.placeholder,
-      skipLabel: msg.turn.opinion.skipLabel,
-      template,
-    };
-  }
-
-  const review = turn.view.phase === "REVIEW_DISCUSSION";
   return {
     kind: "SPEECH",
     title: msg.turn.speech.title,
-    hint: review ? msg.turn.speech.hintReview : msg.turn.speech.hintProposal,
-    placeholder: review
-      ? msg.turn.speech.placeholderReview
-      : msg.turn.speech.placeholderProposal,
+    hint: msg.turn.speech.hintProposal,
+    placeholder: msg.turn.speech.placeholderProposal,
     skipLabel: msg.turn.speech.skipLabel,
     template,
   };
@@ -313,7 +296,6 @@ export function describeTurn(turn: HumanTurn, msg: Messages): TurnForm | null {
     case "TEAM_PROPOSAL":
       return teamForm(turn, msg);
     case "SPEECH":
-    case "ASSASSIN_OPINION":
       return speechForm(turn, msg);
     case "VOTE":
       return voteForm(turn, msg);
@@ -339,7 +321,7 @@ export function proposeAction(
   return { ...form.template, team: [...team].sort((a, b) => a - b), statement };
 }
 
-/** 发言提交。SPEAK 与 ASSASSIN_OPINION 走同一条路——type 由模板带着 */
+/** 发言提交。type 与 playerId 都由合法动作模板带着。 */
 export function speakAction(form: SpeechForm, content: string): GameAction {
   return { ...form.template, content };
 }

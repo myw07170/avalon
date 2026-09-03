@@ -19,6 +19,7 @@
  * 那些注释不是解释代码，是解释**为什么这句话必须这么说**。
  */
 import type { AiDecisionKind, Phase, PlayerId, Role } from "../game/types";
+import { toDisplaySeatNumber } from "../seat-number";
 
 // ---------------------------------------------------------------------------
 // 分节
@@ -69,10 +70,10 @@ export const zhPrompt = {
   // -------------------------------------------------------------------------
 
   /** 座位一律用号，从不用名字——名字只在【你的人设】里出现一次 */
-  seat: (id: PlayerId) => `座位 ${id}`,
-  /** 「座位 0、1、2」。前缀只写一次——十个座位各带一次"座位"既啰嗦又烧 token */
+  seat: (id: PlayerId) => `座位 ${toDisplaySeatNumber(id)}`,
+  /** 「座位 1、2、3」。前缀只写一次——十个座位各带一次"座位"既啰嗦又烧 token */
   seatList: (ids: readonly PlayerId[]) =>
-    ids.length === 0 ? "无" : `座位 ${ids.join("、")}`,
+    ids.length === 0 ? "无" : `座位 ${ids.map(toDisplaySeatNumber).join("、")}`,
   nth: (missionIndex: number) => `第 ${missionIndex + 1} 轮`,
   /** 座位后面那个「（你）」。见 speechLine 的注释：不标会让模型跟着怀疑自己 */
   selfMark: (seatText: string) => `${seatText}（你）`,
@@ -88,7 +89,6 @@ export const zhPrompt = {
     TEAM_VOTE: "组队投票",
     MISSION_EXECUTION: "执行任务",
     MISSION_RESULT: "任务结算",
-    REVIEW_DISCUSSION: "复盘讨论",
     ASSASSINATION: "刺杀",
     GAME_OVER: "终局",
   } as Record<Phase, string>,
@@ -332,7 +332,6 @@ export const zhPrompt = {
       proposal:
         "现在是提议讨论，轮到你发言。队伍已经报出来了，投票还没开始——你的发言会影响别人怎么投。" +
         "**你从任务结果里看出了什么，得自己说出来**——别人不会自动知道你的推理。",
-      review: "现在是复盘讨论，轮到你发言。任务结果已经公布，指认、辩解、拉票都可以。",
       requirement: (speechLength: string) => `发言要求：${speechLength}`,
       freedom: "你可以坦诚、含糊、试探、反驳、带节奏、保护别人，或者暂时保留判断。",
     },
@@ -375,17 +374,6 @@ export const zhPrompt = {
       cannotFail: "填 false 是非法动作，引擎会直接拒绝，你并不能靠它破坏任务。",
     },
 
-    opinion: {
-      lead: "好人已经集齐 3 分，进入刺杀环节。刺客动手之前，每个坏人各公开发表一次推测。",
-      ask: (merlin: string) => `说出你认为谁是${merlin}，以及你的依据。`,
-      /** 推测阶段用：一句话说清哪些人不用再猜了 */
-      excludedSelfOnly: (own: string, merlin: string) =>
-        `所以别把票投给自己：${own} 不可能是${merlin}。`,
-      excluded: (evil: string, own: string) =>
-        `所以不用再猜这些人：${evil}（你已知的坏人）、${own}。`,
-      ownSeat: (seatText: string) => `${seatText}（你自己）`,
-    },
-
     assassination: {
       lead: (merlin: string) =>
         `你是刺客，这是最后一击：指认一名玩家为${merlin}。命中则坏人翻盘，落空则好人获胜。`,
@@ -414,13 +402,11 @@ export const zhPrompt = {
    */
   outputExamples: {
     TEAM_PROPOSAL:
-      '{"reasoning":"内心分析，其他玩家看不到","team":[0,2,3],"statement":"公开的选人说明"}',
+      '{"reasoning":"内心分析，其他玩家看不到","team":[1,3,4],"statement":"公开的选人说明"}',
     SPEECH:
       '{"reasoning":"内心分析，其他玩家看不到","content":"你要公开说出来的话","suspicions":[{"playerId":1,"score":0.8}]}',
     VOTE: '{"reasoning":"内心分析，其他玩家看不到","approve":true}',
     MISSION_CARD: '{"reasoning":"内心分析，其他玩家看不到","success":true}',
-    ASSASSIN_OPINION:
-      '{"reasoning":"内心分析，其他玩家看不到","content":"你要公开说出来的话","suspicions":[{"playerId":1,"score":0.8}]}',
     ASSASSINATION: '{"reasoning":"内心分析，其他玩家看不到","targetId":2}',
   } as Record<AiDecisionKind, string>,
 
@@ -477,11 +463,9 @@ export const zhPrompt = {
       `当前好人 ${good} 比 ${evil}，本轮已否决 ${rejectCount} 次。`,
     topicProposal: "组队说明",
     topicSpeech: "发言",
-    topicOpinion: "刺杀前推测",
     reasoningTeam: (playerCount: number, teamSize: number) =>
       `[mock] 从 ${playerCount} 人里随机挑 ${teamSize} 人`,
     reasoningSpeech: "[mock] 没有策略，按模板发言",
-    reasoningOpinion: "[mock] 没有策略，按模板发表推测",
     reasoningVote: (approve: boolean) => `[mock] 随机${approve ? "同意" : "否决"}`,
     reasoningCard: (count: number) => `[mock] 在 ${count} 个合法选项里随机取一个`,
     reasoningStrike: "[mock] 随机指一个座位",

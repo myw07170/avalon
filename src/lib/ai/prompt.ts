@@ -288,16 +288,11 @@ function historySection(view: PlayerView, copy: Copy): string {
 /**
  * 发言归属的第几次提议。
  *
- * **只有组队与提议讨论标它**：复盘讨论的 attempt 按 types.ts 的约定是"该轮最后一次
- * 提议"，那是给复盘定位用的，渲染成"第 3 次提议"会让模型以为复盘也分了好几次。
- *
  * 不标的话，一轮里被否决两次的三批发言在【全场发言】里糊成一片，
  * 模型分不清哪句是冲着哪个队伍说的。
  */
 function attemptLabel(speech: Speech, { c }: Copy): string {
-  const numbered =
-    speech.phase === "TEAM_BUILDING" || speech.phase === "PROPOSAL_DISCUSSION";
-  return numbered ? c.speeches.attempt(speech.attempt + 1) : "";
+  return c.speeches.attempt(speech.attempt + 1);
 }
 
 /**
@@ -308,12 +303,10 @@ function attemptLabel(speech: Speech, { c }: Copy): string {
  * seed 52848 那局的莫甘娜（座位 0）从第 2 轮起就在用第三人称追问"座0，你刚才说……"，
  * 到刺杀阶段直接说"我现在最怀疑的是座0"，全场的刀最后就递到了她自己头上。
  *
- * 【刺杀阶段不渲染轮次】任务已经打完了，"第 3 轮 刺杀"只会让模型分神——
- * 与 situationSection 里"刺杀阶段不报队长和队伍规模"是同一条口径。
  */
 function speechLine(speech: Speech, selfId: PlayerId, copy: Copy): string {
   const { c } = copy;
-  const round = speech.phase === "ASSASSINATION" ? "" : c.nth(speech.missionIndex);
+  const round = c.nth(speech.missionIndex);
   const seatText = c.seat(speech.playerId);
   const who = speech.playerId === selfId ? c.selfMark(seatText) : seatText;
   return c.speeches.line(
@@ -414,15 +407,6 @@ function knownEvilSeats(view: PlayerView): PlayerId[] {
   return view.knowledge.flatMap((item) => (item.kind === "IS_EVIL" ? [item.playerId] : []));
 }
 
-/** 推测阶段用：一句话说清哪些人不用再猜了 */
-function excludedLine(view: PlayerView, { c, roles }: Copy): string {
-  const evil = knownEvilSeats(view);
-  const own = c.decision.opinion.ownSeat(c.seat(view.selfId));
-  return evil.length === 0
-    ? c.decision.opinion.excludedSelfOnly(own, roles.MERLIN.label)
-    : c.decision.opinion.excluded(c.seatList(evil), own);
-}
-
 /** 刺杀阶段用：目标逐行列出并就地标注，删减一个都不行 */
 function annotatedTargets(
   view: PlayerView,
@@ -473,7 +457,7 @@ function decisionSection(req: AnyRequest, copy: Copy): string {
         copy,
         "decision",
         [
-          view.phase === "PROPOSAL_DISCUSSION" ? d.speech.proposal : d.speech.review,
+          d.speech.proposal,
           ...speakOrderLines(view, copy),
           d.speech.requirement(c.speechLength),
           d.speech.freedom,
@@ -510,20 +494,6 @@ function decisionSection(req: AnyRequest, copy: Copy): string {
       return section(copy, "decision", lines.join("\n"));
     }
 
-    case "ASSASSIN_OPINION":
-      return section(
-        copy,
-        "decision",
-        [
-          d.opinion.lead,
-          d.opinion.ask(roles.MERLIN.label),
-          c.merlinIsGood(roles.MERLIN.label),
-          excludedLine(view, copy),
-          c.whatMerlinLooksLike,
-          d.speech.requirement(c.speechLength),
-        ].join("\n"),
-      );
-
     case "ASSASSINATION": {
       const targets = actionsOfType(legalActions, "ASSASSINATE").map((a) => a.targetId);
       return section(
@@ -549,8 +519,7 @@ function decisionSection(req: AnyRequest, copy: Copy): string {
 
 function outputSection(req: AnyRequest, copy: Copy): string {
   const { c } = copy;
-  const extra =
-    req.kind === "SPEECH" || req.kind === "ASSASSIN_OPINION" ? c.output.suspicions : "";
+  const extra = req.kind === "SPEECH" ? c.output.suspicions : "";
 
   /**
    * 只有一个合法值的字段，在**最后读到的这一段**再钉一次。

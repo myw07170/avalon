@@ -26,6 +26,7 @@ import type {
   Team,
   WinReason,
 } from "@/lib/game/types";
+import { toDisplaySeatNumber } from "@/lib/seat-number";
 
 /**
  * 每个 code 一个函数，形参是它自己那一支。
@@ -53,7 +54,6 @@ const PHASE: Record<Phase, string> = {
   TEAM_VOTE: "组队投票",
   MISSION_EXECUTION: "执行任务",
   MISSION_RESULT: "任务结算",
-  REVIEW_DISCUSSION: "复盘讨论",
   ASSASSINATION: "刺杀",
   GAME_OVER: "对局结束",
 };
@@ -93,8 +93,8 @@ export const zh = {
    * 说的也是座位号（见 prompt.ts 的 seat()）。名字放括号里，两边口径才对得上。
    */
   seat: {
-    short: (id: number) => `${id} 号`,
-    named: (id: number, name: string) => `${id} 号（${name}）`,
+    short: (id: number) => `${toDisplaySeatNumber(id)} 号`,
+    named: (id: number, name: string) => `${toDisplaySeatNumber(id)} 号（${name}）`,
     /** 给已经拼好的座位串加上「（你）」 */
     withYou: (base: string) => `${base}（你）`,
     you: "你",
@@ -171,7 +171,7 @@ export const zh = {
           "通常 1 张失败票就会让任务失败；7 人及以上的第 4 轮需要 2 张。即使只有 1 张而任务成功，那张失败票仍证明车上有坏人。",
         assassinationTitle: "三次成功之后：刺杀",
         assassinationBody:
-          "坏人会公开讨论谁最像梅林，最后由刺客指定一人。命中梅林，坏人翻盘；刺错，好人才真正获胜。",
+          "第三次成功后不再发言，直接由刺客指定一人。命中梅林，坏人翻盘；刺错，好人才真正获胜。",
       },
 
       roles: {
@@ -193,7 +193,6 @@ export const zh = {
       SPEECH: "在想说什么",
       VOTE: "在决定投票",
       MISSION_CARD: "在决定这一票",
-      ASSASSIN_OPINION: "在想推测",
       ASSASSINATION: "在决定刺谁",
     } as Record<AiDecisionKind, string>,
     seconds: (n: number) => `（${n} 秒）`,
@@ -216,8 +215,8 @@ export const zh = {
     deckTitle: "身份牌",
     faceDown: "未翻开",
     faceDownHint: "点一下看身份",
-    flipAria: (id: number) => `翻开 ${id} 号的身份`,
-    hideAria: (id: number) => `盖上 ${id} 号的身份`,
+    flipAria: (id: number) => `翻开 ${toDisplaySeatNumber(id)} 号的身份`,
+    hideAria: (id: number) => `盖上 ${toDisplaySeatNumber(id)} 号的身份`,
     revealAll: "全部翻开",
     hideAll: "全部盖上",
     revealedCount: (n: number, total: number) => `已翻开 ${n} / ${total}`,
@@ -276,7 +275,6 @@ export const zh = {
       ROLE_REVEAL: "确认身份",
       TEAM_BUILDING: "出名单",
       PROPOSAL_DISCUSSION: "发言",
-      REVIEW_DISCUSSION: "发言",
       TEAM_VOTE: "投票",
       MISSION_EXECUTION: "出任务票",
       ASSASSINATION: "决定",
@@ -285,7 +283,6 @@ export const zh = {
     counter: {
       ROLE_REVEAL: "已确认",
       PROPOSAL_DISCUSSION: "已发言",
-      REVIEW_DISCUSSION: "已发言",
       TEAM_VOTE: "已投",
       MISSION_EXECUTION: "已出票",
     } as Partial<Record<Phase, string>>,
@@ -334,7 +331,8 @@ export const zh = {
 
     // 以下是 RoleCard.tsx 的
     noSeat: "这一局没有你的座位，观战界面要等阶段 6。",
-    seatLine: (count: number, id: number) => `${count} 人局 · 你坐 ${id} 号`,
+    seatLine: (count: number, id: number) =>
+      `${count} 人局 · 你坐 ${toDisplaySeatNumber(id)} 号`,
     start: "记住了，开始",
     tapToReveal: "点击查看身份",
     flipToFront: "翻开查看身份",
@@ -346,16 +344,14 @@ export const zh = {
   feed: {
     groupProposal: (round: number, attempt: number) =>
       `第 ${round} 轮 · 第 ${attempt} 次组队`,
-    groupReview: (round: number) => `第 ${round} 轮 · 复盘`,
-    groupAssassination: PHASE.ASSASSINATION,
 
     // 以下是 SpeechFeed.tsx 的
     title: "发言",
     empty: "还没有人开口。",
     silent: SILENT,
-    /** 三种发言在流里要分得开。普通发言不加标 */
-    kind: { proposal: "选人说明", opinion: "刺杀讨论" },
-    speaker: (id: number, name: string) => `${id} 号 · ${name}`,
+    /** 队长的选人说明需要与普通发言分开标记 */
+    kind: { proposal: "选人说明" },
+    speaker: (id: number, name: string) => `${toDisplaySeatNumber(id)} 号 · ${name}`,
   },
 
   /**
@@ -425,19 +421,9 @@ export const zh = {
       placeholder: "为什么是这几个人？",
     },
 
-    opinion: {
-      title: "刺杀前的推测",
-      // assassination.ts 把这段话记进公开的 speeches，不是坏人内部的暗票
-      hint: `说说你觉得谁是${R.MERLIN.label}。这是公开发言，全场都听得到。`,
-      placeholder: `${R.MERLIN.label}最可能是谁？为什么？`,
-      skipLabel: SKIP_LABEL,
-    },
-
     speech: {
       title: "轮到你发言",
-      hintReview: "任务结果出来了，说说你怎么看这一轮。",
       hintProposal: "对这支队伍表个态：该不该上，为什么。",
-      placeholderReview: "这一轮说明了什么？",
       placeholderProposal: "你怎么看这份名单？",
       skipLabel: SKIP_LABEL,
     },
@@ -484,18 +470,13 @@ export const zh = {
       `本局有 ${total} 个坏人：你、你认得的 ${known} 个队友，` +
       `还有 ${unknown} 个你也认不出来的——${R.OBERON.label}在场，他同样不可能是${R.MERLIN.label}。`,
     pickSomeone: "先选一个人",
-    confirm: (id: number, name: string) => `就是他：${id} 号（${name}）`,
+    confirm: (id: number, name: string) =>
+      `就是他：${toDisplaySeatNumber(id)} 号（${name}）`,
     yourself: "你自己",
 
-    // 以下是 AssassinationModal.tsx 的
-    openPanel: "打开刺杀面板",
-    reopenNote: "关掉面板可以回去重读发言，随时能再打开；选好的目标会留着。",
-    lastStep: "最后一步",
     pickOne: "选一个人",
-    thinkAgain: "再想想",
-    opinionsTitle: "刚才的推测",
-    allSilent: (n: number) => `${n} 个队友都没有开口，这一刀只能靠你自己。`,
-    silent: SILENT,
+    pickOnTable: "点击左侧圆桌头像选定刺杀目标，再在这里确认。",
+    targetPreview: "刺杀目标",
   },
 
   /** game-over-model.ts */
@@ -513,7 +494,6 @@ export const zh = {
       SPEECH: "发言",
       VOTE: "投票",
       MISSION_CARD: "任务票",
-      ASSASSIN_OPINION: "刺杀推测",
       ASSASSINATION: "刺杀",
     } as Record<AiDecisionKind, string>,
     hit: `刺中了${R.MERLIN.label}`,
@@ -521,7 +501,6 @@ export const zh = {
     unknownRole: "身份不明",
     noMerlin: `本局没有${R.MERLIN.label}`,
     merlinIs: (who: string) => `${R.MERLIN.label}是 ${who}`,
-    silent: SILENT,
     missionSuccess: "成功",
     missionSuccessWithFails: (failCount: number) => `成功 · ${failCount} 张失败票`,
     missionFail: (failCount: number) => `失败 · ${failCount} 张失败票`,
@@ -578,13 +557,13 @@ export const zh = {
   actionProblem: {
     WRONG_ACTION: (p) => `现在不能做 ${p.got}，可做的是 ${p.allowed.join(" / ")}`,
     SYSTEM_ACTION: (p) => `${p.got} 不该由界面提交`,
-    NOT_YOUR_SEAT: (p) => `不能替座位 ${p.seat} 行动`,
+    NOT_YOUR_SEAT: (p) => `不能替座位 ${toDisplaySeatNumber(p.seat)} 行动`,
     TEAM_SIZE: (p) => `本轮任务需要 ${p.need} 人，当前选了 ${p.got} 人`,
     TEAM_DUPLICATE: () => "队伍里有重复座位",
-    SEAT_MISSING: (p) => `座位 ${p.seat} 不存在`,
+    SEAT_MISSING: (p) => `座位 ${toDisplaySeatNumber(p.seat)} 不存在`,
     VOTE_NOT_OFFERED: () => "这张票不在可选项里",
     GOOD_CANNOT_FAIL: () => "你的阵营不能打失败票",
-    BAD_TARGET: (p) => `座位 ${p.seat} 不是合法的刺杀目标`,
+    BAD_TARGET: (p) => `座位 ${toDisplaySeatNumber(p.seat)} 不是合法的刺杀目标`,
     NO_GAME: () => "没有可运行的对局",
   } satisfies ActionProblemMessages as ActionProblemMessages,
 
@@ -668,26 +647,29 @@ export const zh = {
     personaNote: "可逐座指定；留作“随机”的座位会在开局时从剩余人设中补齐。",
     personaCount: (selected: number, total: number) => `已指定 ${selected}/${total}`,
     personaClearAll: "全部随机",
-    personaSeat: (id: number) => `${id} 号 AI`,
+    personaSeat: (id: number) => `${toDisplaySeatNumber(id)} 号 AI`,
     personaRandom: "随机指派",
     personaRandomNote: "开局时从尚未使用的人设中抽取，不会与其他座位重复。",
-    personaChooseAria: (id: number, name: string) => `${id} 号 AI，当前人设：${name}`,
-    personaDialogTitle: (id: number) => `为 ${id} 号 AI 挑选人设`,
+    personaChooseAria: (id: number, name: string) =>
+      `${toDisplaySeatNumber(id)} 号 AI，当前人设：${name}`,
+    personaDialogTitle: (id: number) =>
+      `为 ${toDisplaySeatNumber(id)} 号 AI 挑选人设`,
     personaDialogDescription: "这本名册只决定 AI 的名字、语气与思考习惯，不会透露或改变他的身份牌。",
     personaCloseAria: "关闭人设库",
     personaSearchAria: "搜索人设",
     personaSearchPlaceholder: "搜索姓名、性格、说话风格或推理倾向…",
     personaEmpty: "没有符合条件的人设。",
-    personaUsedBy: (id: number) => `${id} 号已选`,
+    personaUsedBy: (id: number) => `${toDisplaySeatNumber(id)} 号已选`,
     personaReasoning: "先看什么：",
     submit: "入座",
     spectate: "开始观战",
-    seatAriaSelf: (id: number) => `你的座位，${id} 号`,
-    seatAria: (id: number) => `${id} 号座位`,
+    seatAriaSelf: (id: number) => `你的座位，${toDisplaySeatNumber(id)} 号`,
+    seatAria: (id: number) => `${toDisplaySeatNumber(id)} 号座位`,
     goodCount: (n: number) => `好人 ${n}`,
     evilCount: (n: number) => `坏人 ${n}`,
     seatHintIdle: "点击任意座位落座，或者直接开始观战",
-    seatHintSeated: (id: number) => `点击落座 · 你坐 ${id} 号 · 再点一次起身`,
+    seatHintSeated: (id: number) =>
+      `点击落座 · 你坐 ${toDisplaySeatNumber(id)} 号 · 再点一次起身`,
     missionsNote: "数字是该轮出任务的人数。",
     doubleFailNote: "带 ✳ 的那轮要 2 张失败票才算失败。",
   },
