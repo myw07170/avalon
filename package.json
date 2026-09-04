@@ -18,6 +18,8 @@
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-popover": "^1.1.23",
     "@radix-ui/react-tooltip": "^1.2.16",
+    "@supabase/ssr": "0.12.5",
+    "@supabase/supabase-js": "2.114.0",
     "clsx": "^2.1.1",
     "framer-motion": "^13.1.1",
     "jotai": "^2.20.2",

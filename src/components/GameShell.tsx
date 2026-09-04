@@ -31,6 +31,7 @@ import { TutorialModal } from "./TutorialModal";
 import { TeamDraftProvider } from "./TeamDraftContext";
 import { AssassinationDraftProvider } from "./AssassinationDraftContext";
 import { VoteMatrix } from "./VoteMatrix";
+import { AuthGate } from "./AuthGate";
 
 /**
  * 【语言与主题这三样挂在这里，而不是 layout.tsx】layout.tsx 与 page.tsx 都是
@@ -54,7 +55,9 @@ export function GameShell() {
       </div>
       {/* 窄屏标题会横跨工具组所在的右半边；留出一小行，只在首屏把内容压到按钮下方 */}
       <div aria-hidden className="h-5 shrink-0 sm:hidden" />
-      <Screen />
+      <AuthGate>
+        <Screen />
+      </AuthGate>
     </>
   );
 }

@@ -1724,7 +1724,7 @@ Vercel Hobby 只允许个人、非商业用途。**任何真实收款、公开�
       - 浏览器 client 只拿 `NEXT_PUBLIC_SUPABASE_URL` + publishable key
       - 服务端会话 client 按 `@supabase/ssr` 的约定读写会话 Cookie，用于验证当前请求的用户
       - admin client 只在 Route Handler 中使用 `SUPABASE_SECRET_KEY`，绝不进入客户端模块
-- [ ] 按 Next.js 16 的约定新增 `src/proxy.ts`，只负责刷新 Supabase 会话 Cookie；
+- [ ] 按 Next.js 16 的约定新增 `proxy.ts`，只负责刷新 Supabase 会话 Cookie；
       **Proxy 不是授权边界**，每个 Route Handler 仍须独立验证用户
 - [ ] 账号流程齐全：注册、确认邮箱回跳、登录、退出、忘记密码、设置新密码；
       注册成功但未确认时明确显示“去邮箱确认”，不能伪装成已经登录
@@ -1796,9 +1796,9 @@ Vercel Hobby 只允许个人、非商业用途。**任何真实收款、公开�
       - 全部通过后，在调用 provider **之前**用单条原子更新增加请求计数
       - `used < limit` 必须写进更新条件；10 个并发决策也不能一起穿过第 250 次
       - provider 返回可用结果后再增加成功计数；校验失败不能占调用数
-- [ ] 默认 `MAX_AI_REQUESTS_PER_GAME=250`、`GAME_SESSION_TTL_HOURS=6`；计数单位是受保护的
+- [ ] 默认 `MAX_AI_CALLS_PER_GAME=250`；计数单位是受保护的
       HTTP 路由请求，provider 内部重试仍受现有 `LLM_MAX_RETRIES` 的服务端上限约束；
-      最坏成本按 `MAX_AI_REQUESTS_PER_GAME * (1 + LLM_MAX_RETRIES)` 估算，不能把 250
+      最坏成本按 `MAX_AI_CALLS_PER_GAME * (1 + LLM_MAX_RETRIES)` 估算，不能把 250
       误当成真实上游尝试次数上限
 - [ ] `DELETE /api/game-sessions/[id]`：关闭本人 session。只有 `successful_requests = 0`
       且尚未退过款时，才在一个事务里写 refund 流水并加回 1；同一 session 最多退一次
@@ -1807,9 +1807,9 @@ Vercel Hobby 只允许个人、非商业用途。**任何真实收款、公开�
 - [ ] session id 只放运营层的私有状态或请求 header，不放进 `GameState` / `PlayerView`，
       不作为对局导出的一部分
 
-错误边界固定为：未登录 `401 AUTH_REQUIRED`，余额不足 `402 CREDIT_EXHAUSTED`，
+错误边界固定为：未登录 `401 AUTH_REQUIRED`，余额不足 `402 QUOTA_EXHAUSTED`，
 不存在或不属于本人的 session 统一按不存在处理，过期 `410 GAME_SESSION_EXPIRED`，
-达到上限 `429 GAME_SESSION_LIMIT`。所有分支都要断言 **provider 调用次数为 0**。
+达到上限 `429 AI_CALL_LIMIT`。所有分支都要断言 **provider 调用次数为 0**。
 
 ### 7.4 账号、余额与开局 UI
 
@@ -1868,10 +1868,8 @@ interface PaymentProvider {
   SUPABASE_SECRET_KEY=
 
   APP_DEPLOYMENT_STAGE=invited
-  FREE_GAMES_PER_ACCOUNT=1
-  MAX_AI_REQUESTS_PER_GAME=250
-  GAME_SESSION_TTL_HOURS=6
   PAYMENT_PROVIDER=
+  MAX_AI_CALLS_PER_GAME=250
   ```
 
   legacy `ANON_KEY` / `SERVICE_ROLE_KEY` 只用于迁移旧项目，不作为新实现的变量名。
@@ -1993,7 +1991,7 @@ interface PaymentProvider {
 - `next.config.ts` 保持 `productionBrowserSourceMaps: false`；以后接错误监控时也不得为了方便
   把原始客户端 source map 发布到公共静态目录
 
-如果为了扣费而让引擎认识 `userId`，或者为了省一次验证而只在 `src/proxy.ts` 里鉴权，
+如果为了扣费而让引擎认识 `userId`，或者为了省一次验证而只在 `proxy.ts` 里鉴权，
 都说明边界已经被破坏，退回去重做。
 
 ---

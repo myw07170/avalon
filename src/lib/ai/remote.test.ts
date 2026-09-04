@@ -96,6 +96,23 @@ describe("正常路径", () => {
 
     expect(calls).toEqual(["/custom/ai"]);
   });
+
+  it("有 gameSessionId 时只放进请求头，不写进请求体", async () => {
+    const calls: RequestInit[] = [];
+    const fetchFn: FetchFn = (_url, init) => {
+      calls.push(init);
+      return Promise.resolve(Response.json(RESULT));
+    };
+
+    await createRemoteAiClient({ fetchFn, gameSessionId: "session-1" }).decide(makeReq());
+
+    expect(calls[0]?.headers).toMatchObject({
+      "Content-Type": "application/json",
+      "X-Game-Session-Id": "session-1",
+    });
+    const sent = JSON.parse(typeof calls[0]?.body === "string" ? calls[0].body : "{}");
+    expect(sent).not.toHaveProperty("gameSessionId");
+  });
 });
 
 describe("失败就抛，不兜底", () => {

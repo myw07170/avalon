@@ -152,6 +152,10 @@ type ErrorSource =
 
 const errorSourceAtom = atom<ErrorSource | null>(null);
 
+export const setRawErrorAtom = atom(null, (_get, set, text: string) => {
+  set(errorSourceAtom, { kind: "raw", text });
+});
+
 /**
  * 给玩家看的一句话错误。非法提交与循环崩溃都落在这里。
  *
@@ -664,9 +668,13 @@ export interface CreateGameInput {
   avatarSeed: number;
   /** null 表示全 AI 观战局 */
   humanSeat: PlayerId | null;
+  /** 远程模型局的服务端额度 session。mock 局为空 */
+  gameSessionId?: string | null;
   /** 缺省只供测试与内部调用回退；正常 UI 始终从静态人设库传入完整数组 */
   personas?: Persona[];
 }
+
+const gameSessionIdAtom = atom<string | null>(null);
 
 /**
  * 建局，停在 SETUP。
@@ -686,6 +694,7 @@ export const createGameAtom = atom(null, (_get, set, input: CreateGameInput) => 
     const state = createGame({ config, humanSeat, personas, rng });
     set(gameStateAtom, state);
     set(mySeatAtom, humanSeat);
+    set(gameSessionIdAtom, input.gameSessionId ?? null);
     set(seatAvatarSeedStateAtom, avatarSeed);
     set(rngAtom, () => rng);
     set(runStatusAtom, "ready");
@@ -723,7 +732,7 @@ export const runGameAtom = atom(null, async (get, set) => {
   // 在途的那次请求仍在跑，服务端也仍在向 provider 要结果（见 remote.ts 的说明）
   const client: AiClient = withThinking(
     get(aiModeAtom) === "remote"
-      ? createRemoteAiClient({ signal })
+      ? createRemoteAiClient({ signal, gameSessionId: get(gameSessionIdAtom) })
       : createMockAiClient(rng),
     set,
   );
@@ -814,6 +823,7 @@ export const resetGameAtom = atom(null, (get, set) => {
   set(decisionsAtom, []);
   set(thinkingAtom, EMPTY_THINKING);
   set(rngAtom, null);
+  set(gameSessionIdAtom, null);
   set(runStatusAtom, "idle");
   set(errorSourceAtom, null);
 });

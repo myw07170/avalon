@@ -11,10 +11,11 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useState } from "react";
 import { useLocale, useMessages } from "@/i18n/useMessages";
 import { MAX_PLAYERS, MIN_PLAYERS, type MissionConfig } from "@/lib/game";
+import { isClientAuthRequired } from "@/lib/supabase/config";
 import { cn } from "@/lib/utils";
 import { assignPersonas } from "@/lib/persona-catalog";
 import { createSeatAvatarSeed, PREVIEW_AVATAR_SEED } from "@/lib/seat-avatar";
-import { aiModeAtom, createGameAtom, errorAtom } from "@/store/game";
+import { aiModeAtom, createGameAtom, errorAtom, setRawErrorAtom } from "@/store/game";
 import { SeatRing } from "./SeatRing";
 import { PersonaLibrary } from "./PersonaLibrary";
 import {
@@ -40,8 +41,10 @@ const PLAYER_COUNTS = Array.from(
 
 export function SetupScreen() {
   const [draft, setDraft] = useState<SetupDraft>(defaultDraft);
+  const [starting, setStarting] = useState(false);
   const [aiMode, setAiMode] = useAtom(aiModeAtom);
   const createGame = useSetAtom(createGameAtom);
+  const setRawError = useSetAtom(setRawErrorAtom);
   const storeError = useAtomValue(errorAtom);
   const msg = useMessages();
   // 开局时按界面语言解析同一组双语条目，之后随 Persona 一起锁进本局。
@@ -55,7 +58,9 @@ export function SetupScreen() {
    * 人设来自随代码发布的静态库；用户手选优先，其余座位用独立随机源补齐。
    * 它不推进引擎 RNG，所以选择人设不会改变同一 seed 下的发牌与首任队长。
    */
-  function start() {
+  async function start() {
+    if (starting) return;
+
     // 【种子在点击时才取】放进 useState 初值会让 SSR 与 hydration 对不上。
     // 不显式传的话 createConfig 的缺省 seed 是 0，每一局发的牌完全一样。
     const config = finalizeConfig(draft, Date.now() >>> 0);
@@ -70,7 +75,19 @@ export function SetupScreen() {
       locale,
       seed: config.seed,
     });
-    createGame({ config, avatarSeed, humanSeat, personas });
+
+    setStarting(true);
+    try {
+      const gameSessionId =
+        aiMode === "remote" && isClientAuthRequired
+          ? await requestGameSession(msg.setup.startRemoteFailed)
+          : null;
+      createGame({ config, avatarSeed, humanSeat, personas, gameSessionId });
+    } catch (error) {
+      setRawError(error instanceof Error ? error.message : msg.setup.startRemoteFailed);
+    } finally {
+      setStarting(false);
+    }
   }
 
   return (
@@ -223,7 +240,7 @@ export function SetupScreen() {
         <button
           type="button"
           onClick={start}
-          disabled={!preview.canStart}
+          disabled={!preview.canStart || starting}
           className={cn(
             "mt-1 w-full rounded-lg px-6 py-3.5 font-display text-lg tracking-[var(--track-3)] transition-colors",
             "bg-brass text-on-brass hover:bg-brass/85",
@@ -231,12 +248,39 @@ export function SetupScreen() {
           )}
         >
           <span className="-mr-[var(--track-3)]">
-            {seated ? msg.setup.submit : msg.setup.spectate}
+            {starting ? msg.setup.starting : seated ? msg.setup.submit : msg.setup.spectate}
           </span>
         </button>
       </div>
     </main>
   );
+}
+
+async function requestGameSession(fallbackMessage: string): Promise<string> {
+  const response = await fetch("/api/game-sessions", { method: "POST" });
+  const body: unknown = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const detail =
+      typeof body === "object" &&
+      body !== null &&
+      "error" in body &&
+      typeof body.error === "string"
+        ? body.error
+        : fallbackMessage;
+    throw new Error(detail);
+  }
+
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    "gameSessionId" in body &&
+    typeof body.gameSessionId === "string"
+  ) {
+    return body.gameSessionId;
+  }
+
+  throw new Error(fallbackMessage);
 }
 
 // ---------------------------------------------------------------------------

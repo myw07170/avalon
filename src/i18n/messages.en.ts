@@ -72,6 +72,28 @@ export const en: Messages = {
     restart: "Restart",
   },
 
+  auth: {
+    title: "Sign in to play",
+    description:
+      "The public deployment uses the remote model. Each email account starts with one free game after email confirmation.",
+    loading: "Checking your session...",
+    modeLabel: "Sign in or sign up",
+    signInTab: "Sign in",
+    signUpTab: "Sign up",
+    email: "Email",
+    password: "Password",
+    signInSubmit: "Sign in",
+    signUpSubmit: "Sign up",
+    submitting: "Submitting...",
+    confirmEmail:
+      "The confirmation email has been sent. Open it to confirm your account, then come back and sign in.",
+    signedIn: "Signed in.",
+    signOut: "Sign out",
+    signingOut: "Signing out...",
+    unknownEmail: "Signed-in account",
+    errorPrefix: (message) => `Authentication failed: ${message}`,
+  },
+
   tutorial: {
     trigger: "Guide",
     triggerAria: "Open the beginner guide",
@@ -505,10 +527,14 @@ export const en: Messages = {
     CONFIG_MISSING:
       "The server has no real model configured. Set a provider and key in .env.local, or switch to mock",
     PROVIDER_REJECTED:
-      "The model service refused the call — usually the key, the model name, or the balance",
+      "The model service refused the call; usually the key, the model name, or the balance",
     PROVIDER_UNAVAILABLE:
       "Could not reach the model service, or it is temporarily down. Try again shortly",
     BAD_REQUEST: "The model service could not process this request; details are in the browser console",
+    AUTH_REQUIRED: "Sign in before starting a remote model game",
+    GAME_SESSION_REQUIRED: "This remote game session is no longer valid. Start a new game",
+    QUOTA_EXHAUSTED: "This account has no game credits left",
+    AI_CALL_LIMIT: "This game has reached its model call limit. Start a new game",
   },
 
   configIssue: {
@@ -575,6 +601,8 @@ export const en: Messages = {
     personaReasoning: "Notices first: ",
     submit: "Take the seat",
     spectate: "Start watching",
+    starting: "Starting...",
+    startRemoteFailed: "Could not create a remote model game",
     seatAriaSelf: (id) => `Your seat, Seat ${toDisplaySeatNumber(id)}`,
     seatAria: (id) => `Seat ${toDisplaySeatNumber(id)}`,
     goodCount: (n) => `Good ${n}`,

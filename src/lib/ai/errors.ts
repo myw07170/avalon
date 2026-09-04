@@ -16,7 +16,7 @@
  * （"缺少环境变量 LLM_PROVIDER"、"上游返回 HTTP 429"），玩家看不懂也帮不上忙，
  * 所以界面上显示的是按 code 写的一句人话，原文只进 console。
  *
- * 这四档也是 `/api/ai` 响应体里那个 `code` 字段的取值——**不另造一套**：
+ * 这些也是 `/api/ai` 响应体里那个 `code` 字段的取值——**不另造一套**：
  * 两套错误码迟早会对不上，而这一套的分界（改配置 / 改请求 / 等一等）本来就够用。
  */
 export type AiErrorCode =
@@ -27,7 +27,15 @@ export type AiErrorCode =
   /** 429 / 5xx / 网络不通 / 超时。重试过了仍然不行 */
   | "PROVIDER_UNAVAILABLE"
   /** 传进来的 AiDecisionRequest 形状不对。只可能来自 HTTP 边界的外部输入 */
-  | "BAD_REQUEST";
+  | "BAD_REQUEST"
+  /** 公开部署要求先登录 */
+  | "AUTH_REQUIRED"
+  /** 远程模型局必须先创建服务端对局 session */
+  | "GAME_SESSION_REQUIRED"
+  /** 账号没有可用对局额度 */
+  | "QUOTA_EXHAUSTED"
+  /** 单局模型调用次数已经达到上限 */
+  | "AI_CALL_LIMIT";
 
 export class AiError extends Error {
   constructor(

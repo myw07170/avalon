@@ -114,6 +114,26 @@ export const zh = {
     restart: "重开",
   },
 
+  auth: {
+    title: "登录后开局",
+    description: "公开部署使用远程模型。每个邮箱账号默认有 1 局免费额度，确认邮箱后即可开始。",
+    loading: "正在确认登录状态…",
+    modeLabel: "登录或注册",
+    signInTab: "登录",
+    signUpTab: "注册",
+    email: "邮箱",
+    password: "密码",
+    signInSubmit: "登录",
+    signUpSubmit: "注册",
+    submitting: "提交中…",
+    confirmEmail: "确认邮件已经发出。请打开邮箱完成确认，然后回到这里登录。",
+    signedIn: "已登录。",
+    signOut: "登出",
+    signingOut: "登出中…",
+    unknownEmail: "已登录账号",
+    errorPrefix: (message: string) => `认证失败：${message}`,
+  },
+
   /** TutorialModal.tsx。角色逐条说明仍然只来自 roles / describeRole */
   tutorial: {
     trigger: "玩法",
@@ -608,6 +628,10 @@ export const zh = {
     PROVIDER_REJECTED: "模型服务拒绝了这次调用，多半是 key、模型名或余额的问题",
     PROVIDER_UNAVAILABLE: "连不上模型服务，或者它暂时不可用。过一会儿再试",
     BAD_REQUEST: "这次请求模型服务没法处理，详情在浏览器控制台",
+    AUTH_REQUIRED: "请先登录，再开始远程模型局",
+    GAME_SESSION_REQUIRED: "这局远程模型 session 已失效，请回到开局页重新开始",
+    QUOTA_EXHAUSTED: "当前账号没有可用对局额度",
+    AI_CALL_LIMIT: "本局模型调用次数已达上限，请重新开局",
   } as Record<AiErrorCode, string>,
 
   /**
@@ -674,6 +698,8 @@ export const zh = {
     personaReasoning: "先看什么：",
     submit: "入座",
     spectate: "开始观战",
+    starting: "开局中…",
+    startRemoteFailed: "无法创建远程模型对局",
     seatAriaSelf: (id: number) => `你的座位，${toDisplaySeatNumber(id)} 号`,
     seatAria: (id: number) => `${toDisplaySeatNumber(id)} 号座位`,
     goodCount: (n: number) => `好人 ${n}`,

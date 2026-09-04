@@ -12,6 +12,9 @@
 import { createAiClient, readMaxRetries, readProviderConfig } from "@/lib/ai/client";
 import { AiError, type AiErrorCode } from "@/lib/ai/errors";
 import { aiDecisionRequestSchema } from "@/lib/ai/schema";
+import { AuthError, requireAuthenticatedUser } from "@/lib/supabase/auth";
+import { isAuthRequired } from "@/lib/supabase/config";
+import { consumeAiCall, QuotaError } from "@/lib/supabase/quota";
 
 /** 一次请求内可能跑到 3 次模型调用，平台默认的 10s 不够 */
 export const maxDuration = 60;
@@ -26,15 +29,37 @@ export const maxDuration = 60;
  * 两者都不含任何密钥：client.ts 那条「抛出的错误里不含 apiKey，也不含上游原始
  * 响应体」的断言罩着 message，这里只是把它转出去。
  */
-const fail = (status: number, code: AiErrorCode, error: string): Response =>
-  Response.json({ code, error }, { status });
+const fail = (status: number, code: AiErrorCode, error: string, headers?: Headers): Response =>
+  Response.json({ code, error }, { status, headers });
 
 export async function POST(request: Request): Promise<Response> {
+  let responseHeaders: Headers | undefined;
+  let authenticatedUserId: string | null = null;
+  let gameSessionId: string | null = null;
+
+  if (isAuthRequired()) {
+    try {
+      const auth = await requireAuthenticatedUser(request);
+      responseHeaders = auth.responseHeaders;
+      authenticatedUserId = auth.userId;
+    } catch (error) {
+      if (error instanceof AuthError) {
+        return fail(401, "AUTH_REQUIRED", "请先登录后再调用模型");
+      }
+      throw error;
+    }
+
+    gameSessionId = request.headers.get("X-Game-Session-Id");
+    if (!gameSessionId) {
+      return fail(403, "GAME_SESSION_REQUIRED", "缺少对局 session", responseHeaders);
+    }
+  }
+
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return fail(400, "BAD_REQUEST", "请求体不是合法 JSON");
+    return fail(400, "BAD_REQUEST", "请求体不是合法 JSON", responseHeaders);
   }
 
   const parsed = aiDecisionRequestSchema.safeParse(body);
@@ -42,7 +67,7 @@ export async function POST(request: Request): Promise<Response> {
     const detail = parsed.error.issues
       .map((issue) => `${issue.path.join(".") || "(根)"}: ${issue.message}`)
       .join("; ");
-    return fail(400, "BAD_REQUEST", `请求体不合法：${detail}`);
+    return fail(400, "BAD_REQUEST", `请求体不合法：${detail}`, responseHeaders);
   }
 
   let config;
@@ -54,7 +79,7 @@ export async function POST(request: Request): Promise<Response> {
     if (error instanceof AiError) {
       // 服务端没配好。消息里只有变量名，没有任何密钥
       console.error("[api/ai] 配置错误：", error.message);
-      return fail(503, error.code, error.message);
+      return fail(503, error.code, error.message, responseHeaders);
     }
     throw error;
   }
@@ -66,13 +91,25 @@ export async function POST(request: Request): Promise<Response> {
   };
 
   try {
-    return Response.json(await createAiClient(config).decide(req));
+    if (authenticatedUserId && gameSessionId) {
+      await consumeAiCall(authenticatedUserId, gameSessionId);
+    }
+    return Response.json(await createAiClient(config).decide(req), { headers: responseHeaders });
   } catch (error) {
+    if (error instanceof QuotaError) {
+      if (error.code === "AI_CALL_LIMIT") {
+        return fail(429, error.code, "本局模型调用次数已达上限", responseHeaders);
+      }
+      if (error.code === "CONFIG_MISSING") {
+        return fail(503, error.code, error.message, responseHeaders);
+      }
+      return fail(403, error.code, error.message, responseHeaders);
+    }
     if (error instanceof AiError) {
       // 详情（状态码、provider 名）留在服务端日志里。
       // 响应体只给一句话，不原样回传 provider 的响应体
       console.error("[api/ai] 上游失败：", error.code, error.message, error.context);
-      return fail(502, error.code, `上游模型调用失败（${error.code}）`);
+      return fail(502, error.code, `上游模型调用失败（${error.code}）`, responseHeaders);
     }
     // 剩下的一律算 400。这个边界上只有两种输入：请求体和服务端环境变量，
     // 而后者的问题上面已经以 AiError 的形式拦掉了。所以走到这里基本都是
@@ -80,6 +117,6 @@ export async function POST(request: Request): Promise<Response> {
     //（EngineError 是其中最常见的一种，畸形到取不到字段时则是 TypeError）。
     // 真是本地 bug 的话，下面这行日志留在服务端，不会被 400 盖掉
     console.error("[api/ai] 无法用这份请求做决策：", error);
-    return fail(400, "BAD_REQUEST", "无法用这份请求做决策，请检查 view 与 legalActions");
+    return fail(400, "BAD_REQUEST", "无法用这份请求做决策，请检查 view 与 legalActions", responseHeaders);
   }
 }

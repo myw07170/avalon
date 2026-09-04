@@ -7,6 +7,40 @@ import { toPlayerView } from "@/lib/game/view";
 import { createPending, type GameState, type Role } from "@/lib/game/types";
 import { POST } from "./route";
 
+const supabaseMocks = vi.hoisted(() => {
+  class MockAuthError extends Error {}
+  class MockQuotaError extends Error {
+    constructor(
+      readonly code: "QUOTA_EXHAUSTED" | "GAME_SESSION_REQUIRED" | "AI_CALL_LIMIT" | "CONFIG_MISSING",
+      message: string,
+    ) {
+      super(message);
+    }
+  }
+
+  return {
+    authRequired: false,
+    AuthError: MockAuthError,
+    QuotaError: MockQuotaError,
+    requireAuthenticatedUser: vi.fn(),
+    consumeAiCall: vi.fn(),
+  };
+});
+
+vi.mock("@/lib/supabase/config", () => ({
+  isAuthRequired: () => supabaseMocks.authRequired,
+}));
+
+vi.mock("@/lib/supabase/auth", () => ({
+  AuthError: supabaseMocks.AuthError,
+  requireAuthenticatedUser: supabaseMocks.requireAuthenticatedUser,
+}));
+
+vi.mock("@/lib/supabase/quota", () => ({
+  QuotaError: supabaseMocks.QuotaError,
+  consumeAiCall: supabaseMocks.consumeAiCall,
+}));
+
 // ---------------------------------------------------------------------------
 // 夹具
 //
@@ -57,11 +91,11 @@ function validBody(maxRetries = 2): Record<string, unknown> {
   };
 }
 
-const post = (body: unknown): Promise<Response> =>
+const post = (body: unknown, headers: Record<string, string> = {}): Promise<Response> =>
   POST(
     new Request("http://localhost/api/ai", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...headers },
       body: typeof body === "string" ? body : JSON.stringify(body),
     }),
   );
@@ -96,6 +130,9 @@ function stubProvider(content: string, status = 200): { calls: number } {
 const VOTE_JSON = '{"reasoning":"想了想","approve":true}';
 
 afterEach(() => {
+  supabaseMocks.authRequired = false;
+  supabaseMocks.requireAuthenticatedUser.mockReset();
+  supabaseMocks.consumeAiCall.mockReset();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -267,6 +304,72 @@ describe("502：上游失败", () => {
     const text = await response.text();
     expect(text).not.toContain(SECRET);
     expect(text).not.toContain("上游的原始错误体");
+  });
+});
+
+describe("公开部署鉴权与额度", () => {
+  it("未登录时 401，且不读模型配置", async () => {
+    supabaseMocks.authRequired = true;
+    supabaseMocks.requireAuthenticatedUser.mockRejectedValue(new supabaseMocks.AuthError("no session"));
+
+    const response = await post(validBody());
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({ code: "AUTH_REQUIRED" });
+    expect(supabaseMocks.consumeAiCall).not.toHaveBeenCalled();
+  });
+
+  it("登录但没有 X-Game-Session-Id 时 403", async () => {
+    supabaseMocks.authRequired = true;
+    supabaseMocks.requireAuthenticatedUser.mockResolvedValue({
+      userId: "user-1",
+      email: "user@example.com",
+      responseHeaders: new Headers(),
+    });
+
+    const response = await post(validBody());
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({ code: "GAME_SESSION_REQUIRED" });
+    expect(supabaseMocks.consumeAiCall).not.toHaveBeenCalled();
+  });
+
+  it("有效 session 会先扣一次 AI 调用额度再请求 provider", async () => {
+    supabaseMocks.authRequired = true;
+    supabaseMocks.requireAuthenticatedUser.mockResolvedValue({
+      userId: "user-1",
+      email: "user@example.com",
+      responseHeaders: new Headers(),
+    });
+    supabaseMocks.consumeAiCall.mockResolvedValue(1);
+    configureEnv();
+    const provider = stubProvider(VOTE_JSON);
+
+    const response = await post(validBody(), { "X-Game-Session-Id": "session-1" });
+
+    expect(response.status).toBe(200);
+    expect(supabaseMocks.consumeAiCall).toHaveBeenCalledWith("user-1", "session-1");
+    expect(provider.calls).toBe(1);
+  });
+
+  it("单局 AI 调用达到上限时 429，且不请求 provider", async () => {
+    supabaseMocks.authRequired = true;
+    supabaseMocks.requireAuthenticatedUser.mockResolvedValue({
+      userId: "user-1",
+      email: "user@example.com",
+      responseHeaders: new Headers(),
+    });
+    supabaseMocks.consumeAiCall.mockRejectedValue(
+      new supabaseMocks.QuotaError("AI_CALL_LIMIT", "AI_CALL_LIMIT_REACHED"),
+    );
+    configureEnv();
+    const provider = stubProvider(VOTE_JSON);
+
+    const response = await post(validBody(), { "X-Game-Session-Id": "session-1" });
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toMatchObject({ code: "AI_CALL_LIMIT" });
+    expect(provider.calls).toBe(0);
   });
 });
 

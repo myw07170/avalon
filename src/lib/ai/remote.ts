@@ -21,6 +21,8 @@ export type FetchFn = (url: string, init: RequestInit) => Promise<Response>;
 export interface RemoteAiClientOptions {
   /** 默认 /api/ai */
   endpoint?: string;
+  /** 服务端创建的对局额度 session；只放 header，不进入 prompt schema */
+  gameSessionId?: string | null;
   /** 注入点：测试里不发真网络 */
   fetchFn?: FetchFn;
   /**
@@ -36,6 +38,8 @@ export interface RemoteAiClientOptions {
 
 export function createRemoteAiClient(options: RemoteAiClientOptions = {}): AiClient {
   const endpoint = options.endpoint ?? "/api/ai";
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (options.gameSessionId) headers["X-Game-Session-Id"] = options.gameSessionId;
 
   return {
     async decide<K extends AiDecisionKind>(
@@ -47,7 +51,7 @@ export function createRemoteAiClient(options: RemoteAiClientOptions = {}): AiCli
       try {
         response = await fetchFn(endpoint, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify(req),
           // 没配 signal 时整个字段不出现，而不是发个 undefined
           ...(options.signal ? { signal: options.signal } : {}),
@@ -82,6 +86,10 @@ const AI_ERROR_CODES: readonly AiErrorCode[] = [
   "PROVIDER_REJECTED",
   "PROVIDER_UNAVAILABLE",
   "BAD_REQUEST",
+  "AUTH_REQUIRED",
+  "GAME_SESSION_REQUIRED",
+  "QUOTA_EXHAUSTED",
+  "AI_CALL_LIMIT",
 ];
 
 /**
