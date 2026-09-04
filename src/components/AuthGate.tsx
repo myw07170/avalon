@@ -1,41 +1,118 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { isClientAuthRequired } from "@/lib/supabase/config";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { CreditsSnapshot } from "@/lib/supabase/quota";
+import { GAME_CREDITS_CHANGED_EVENT } from "@/lib/credits/events";
 import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
 
 type AuthMode = "signIn" | "signUp";
+type PendingAuthAction = "password" | "google";
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const msg = useMessages();
   const [user, setUser] = useState<User | null>(null);
+  const [credits, setCredits] = useState<CreditsSnapshot | null>(null);
+  const [creditsLoading, setCreditsLoading] = useState(false);
+  const [creditsError, setCreditsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(isClientAuthRequired);
+
+  const refreshCredits = useCallback(async () => {
+    setCreditsLoading(true);
+    setCreditsError(null);
+    try {
+      const response = await fetch("/api/credits", { cache: "no-store" });
+      const body: unknown = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const detail =
+          typeof body === "object" &&
+          body !== null &&
+          "error" in body &&
+          typeof body.error === "string"
+            ? body.error
+            : msg.auth.creditsUnavailable;
+        throw new Error(detail);
+      }
+
+      if (
+        typeof body === "object" &&
+        body !== null &&
+        "freeGamesRemaining" in body &&
+        "purchasedGamesRemaining" in body &&
+        "totalGamesRemaining" in body &&
+        typeof body.freeGamesRemaining === "number" &&
+        typeof body.purchasedGamesRemaining === "number" &&
+        typeof body.totalGamesRemaining === "number"
+      ) {
+        setCredits({
+          freeGamesRemaining: body.freeGamesRemaining,
+          purchasedGamesRemaining: body.purchasedGamesRemaining,
+          totalGamesRemaining: body.totalGamesRemaining,
+        });
+        return;
+      }
+
+      throw new Error(msg.auth.creditsUnavailable);
+    } catch (error) {
+      setCredits(null);
+      setCreditsError(error instanceof Error ? error.message : msg.auth.creditsUnavailable);
+    } finally {
+      setCreditsLoading(false);
+    }
+  }, [msg.auth.creditsUnavailable]);
 
   useEffect(() => {
     if (!isClientAuthRequired) return;
 
     const supabase = createSupabaseBrowserClient();
     let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
 
-    supabase.auth.getUser().then(({ data }) => {
+    const scheduleCreditsRefresh = () => {
+      window.setTimeout(() => {
+        void refreshCredits();
+      }, 0);
+    };
+
+    async function initializeSession() {
+      const { data } = await supabase.auth.getUser();
       if (cancelled) return;
       setUser(data.user);
+      if (data.user) scheduleCreditsRefresh();
       setLoading(false);
-    });
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+      const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+        const nextUser = session?.user ?? null;
+        setUser(nextUser);
+        if (nextUser) {
+          scheduleCreditsRefresh();
+        } else {
+          setCredits(null);
+          setCreditsError(null);
+          setCreditsLoading(false);
+        }
+        setLoading(false);
+      });
+      unsubscribe = () => subscription.subscription.unsubscribe();
+    }
+
+    void initializeSession();
+
+    const handleCreditsChanged = () => {
+      void refreshCredits();
+    };
+    window.addEventListener(GAME_CREDITS_CHANGED_EVENT, handleCreditsChanged);
 
     return () => {
       cancelled = true;
-      subscription.subscription.unsubscribe();
+      unsubscribe?.();
+      window.removeEventListener(GAME_CREDITS_CHANGED_EVENT, handleCreditsChanged);
     };
-  }, []);
+  }, [refreshCredits]);
 
   if (!isClientAuthRequired) return <>{children}</>;
 
@@ -52,7 +129,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   return (
     <>
       {children}
-      <AccountPanel email={user.email ?? msg.auth.unknownEmail} />
+      <AccountPanel
+        email={user.email ?? msg.auth.unknownEmail}
+        credits={credits}
+        creditsLoading={creditsLoading}
+        creditsError={creditsError}
+      />
     </>
   );
 }
@@ -62,13 +144,14 @@ function AuthPanel() {
   const [mode, setMode] = useState<AuthMode>("signIn");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PendingAuthAction | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const busy = pendingAction !== null;
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
+    setPendingAction("password");
     setError(null);
     setNotice(null);
 
@@ -82,7 +165,7 @@ function AuthPanel() {
           })
         : await supabase.auth.signInWithPassword({ email, password });
 
-    setBusy(false);
+    setPendingAction(null);
 
     if (result.error) {
       setError(result.error.message);
@@ -95,6 +178,22 @@ function AuthPanel() {
     }
 
     setNotice(msg.auth.signedIn);
+  }
+
+  async function signInWithGoogle() {
+    setPendingAction("google");
+    setError(null);
+    setNotice(null);
+
+    const { error: signInError } = await createSupabaseBrowserClient().auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+
+    if (signInError) {
+      setPendingAction(null);
+      setError(signInError.message);
+    }
   }
 
   return (
@@ -114,6 +213,24 @@ function AuthPanel() {
           <ModeButton checked={mode === "signUp"} onClick={() => setMode("signUp")}>
             {msg.auth.signUpTab}
           </ModeButton>
+        </div>
+
+        <button
+          type="button"
+          disabled={busy}
+          onClick={signInWithGoogle}
+          className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg border border-ink-line bg-ink px-5 py-3 text-sm text-vellum transition-colors hover:border-brass disabled:cursor-not-allowed disabled:text-muted"
+        >
+          <span className="flex size-5 items-center justify-center rounded-full bg-vellum font-semibold text-ink">
+            G
+          </span>
+          {pendingAction === "google" ? msg.auth.googleSubmitting : msg.auth.googleSignIn}
+        </button>
+
+        <div className="mt-5 flex items-center gap-3 text-[10px] uppercase tracking-[var(--track-3)] text-muted">
+          <span className="h-px flex-1 bg-ink-line" />
+          {msg.auth.passwordDivider}
+          <span className="h-px flex-1 bg-ink-line" />
         </div>
 
         <form className="mt-5 space-y-4" onSubmit={submit}>
@@ -168,7 +285,17 @@ function AuthPanel() {
   );
 }
 
-function AccountPanel({ email }: { email: string }) {
+function AccountPanel({
+  email,
+  credits,
+  creditsLoading,
+  creditsError,
+}: {
+  email: string;
+  credits: CreditsSnapshot | null;
+  creditsLoading: boolean;
+  creditsError: string | null;
+}) {
   const msg = useMessages();
   const [busy, setBusy] = useState(false);
 
@@ -181,6 +308,25 @@ function AccountPanel({ email }: { email: string }) {
   return (
     <div className="fixed bottom-3 left-3 z-30 max-w-[calc(100vw-1.5rem)] rounded-lg border border-ink-line bg-ink-raised px-3 py-2 text-xs text-muted shadow-lg">
       <p className="max-w-56 truncate">{email}</p>
+      <div className="mt-1 space-y-0.5">
+        {creditsLoading ? (
+          <p>{msg.auth.creditsLoading}</p>
+        ) : credits ? (
+          <>
+            <p className="tabular text-vellum">
+              {msg.auth.creditsTotal(credits.totalGamesRemaining)}
+            </p>
+            <p className="tabular">
+              {msg.auth.creditsBreakdown(
+                credits.freeGamesRemaining,
+                credits.purchasedGamesRemaining,
+              )}
+            </p>
+          </>
+        ) : (
+          <p>{creditsError ?? msg.auth.creditsUnavailable}</p>
+        )}
+      </div>
       <button
         type="button"
         disabled={busy}

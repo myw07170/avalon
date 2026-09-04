@@ -11,6 +11,7 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useState } from "react";
 import { useLocale, useMessages } from "@/i18n/useMessages";
 import { MAX_PLAYERS, MIN_PLAYERS, type MissionConfig } from "@/lib/game";
+import { GAME_CREDITS_CHANGED_EVENT } from "@/lib/credits/events";
 import { isClientAuthRequired } from "@/lib/supabase/config";
 import { cn } from "@/lib/utils";
 import { assignPersonas } from "@/lib/persona-catalog";
@@ -277,6 +278,7 @@ async function requestGameSession(fallbackMessage: string): Promise<string> {
     "gameSessionId" in body &&
     typeof body.gameSessionId === "string"
   ) {
+    window.dispatchEvent(new Event(GAME_CREDITS_CHANGED_EVENT));
     return body.gameSessionId;
   }
 

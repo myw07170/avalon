@@ -1,6 +1,7 @@
 import { createServerClient, parseCookieHeader, serializeCookieHeader } from "@supabase/ssr";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { readSupabasePublicConfig, readSupabaseSecretKey } from "./config";
+import { supabaseCookieOptions } from "./cookies";
 
 export interface RouteSupabaseClient {
   supabase: SupabaseClient;
@@ -12,16 +13,20 @@ export function createRouteSupabaseClient(request: Request): RouteSupabaseClient
   const responseHeaders = new Headers();
 
   const supabase = createServerClient(url, publishableKey, {
+    cookieOptions: supabaseCookieOptions,
     cookies: {
       getAll() {
         return parseCookieHeader(request.headers.get("Cookie") ?? "");
       },
-      setAll(cookies) {
+      setAll(cookies, headers) {
         for (const cookie of cookies) {
           responseHeaders.append(
             "Set-Cookie",
             serializeCookieHeader(cookie.name, cookie.value, cookie.options),
           );
+        }
+        for (const [key, value] of Object.entries(headers)) {
+          responseHeaders.set(key, value);
         }
       },
     },
