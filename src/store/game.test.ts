@@ -5,7 +5,7 @@
  * `createStore()` 就能在 node 里把整条链路跑起来。组件测试是后面的事。
  */
 import { createStore } from "jotai";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { zh } from "@/i18n/messages.zh";
 import { createConfig } from "@/lib/game/config";
 import { createRng } from "@/lib/game/rng";
@@ -75,6 +75,10 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
  * 正常一局的宏任务数约等于人类回合数，离这个数很远。
  */
 const MAX_TICKS = 5000;
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 /** 第一个合法动作。组队那一项是 legal.ts 给的模板队伍，本身就合法 */
 function firstLegal(turn: HumanTurn): GameAction {
@@ -230,6 +234,69 @@ describe("跑完整一局", () => {
 
     expect(store.get(runStatusAtom)).toBe("finished");
     expect(store.get(gameStateAtom)).toBe(final);
+  });
+
+  it("有远程对局 session 时，终局后自动保存复盘", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: "session-1" }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const store = createStore();
+    store.set(aiModeAtom, "mock");
+    store.set(paceMsAtom, 0);
+    store.set(createGameAtom, {
+      config: createConfig(5, { seed: 42 }),
+      avatarSeed: AVATAR_SEED,
+      humanSeat: SEAT,
+      gameSessionId: "session-1",
+    });
+
+    await drive(store, store.set(runGameAtom));
+
+    expect(store.get(runStatusAtom)).toBe("finished");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/game-sessions/session-1/review",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const [, init] = fetchMock.mock.calls[0]!;
+    const parsed = JSON.parse(String(init.body)) as { review: { schemaVersion: number } };
+    expect(parsed.review.schemaVersion).toBe(1);
+  });
+
+  it("没有远程对局 session 时，mock 局终局不保存复盘", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const store = newStore();
+
+    await drive(store, store.set(runGameAtom));
+
+    expect(store.get(runStatusAtom)).toBe("finished");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("复盘保存失败不改变终局状态，只显示非致命提示", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: "database unavailable" }), { status: 503 }),
+      ),
+    );
+    const store = createStore();
+    store.set(aiModeAtom, "mock");
+    store.set(paceMsAtom, 0);
+    store.set(createGameAtom, {
+      config: createConfig(5, { seed: 42 }),
+      avatarSeed: AVATAR_SEED,
+      humanSeat: SEAT,
+      gameSessionId: "session-1",
+    });
+
+    await drive(store, store.set(runGameAtom));
+
+    expect(store.get(runStatusAtom)).toBe("finished");
+    expect(store.get(viewAtom)?.phase).toBe("GAME_OVER");
+    expect(store.get(errorAtom)).toBe("database unavailable");
   });
 });
 

@@ -17,6 +17,7 @@ import { LocaleGate } from "@/i18n/LocaleGate";
 import { useMessages } from "@/i18n/useMessages";
 import { LocaleSwitcher } from "@/i18n/LocaleSwitcher";
 import { ThemeSwitcher } from "@/theme/ThemeSwitcher";
+import { isClientAuthRequired } from "@/lib/supabase/config";
 import { errorAtom, isSpectatingAtom, resetGameAtom, runStatusAtom } from "@/store/game";
 import { GameOverPanel } from "./GameOverPanel";
 import { InGameLayout } from "./InGameLayout";
@@ -32,6 +33,7 @@ import { TeamDraftProvider } from "./TeamDraftContext";
 import { AssassinationDraftProvider } from "./AssassinationDraftContext";
 import { VoteMatrix } from "./VoteMatrix";
 import { AuthGate } from "./AuthGate";
+import { AccountSidebar } from "./AccountSidebar";
 
 /**
  * 【语言与主题这三样挂在这里，而不是 layout.tsx】layout.tsx 与 page.tsx 都是
@@ -70,7 +72,13 @@ function Screen() {
     // 配置报错也留在设置页：玩家要能看着报错把配置改对
     case "idle":
     case "error":
-      return <SetupScreen />;
+      if (!isClientAuthRequired) return <SetupScreen />;
+      return (
+        <div className="grid w-full flex-1 lg:grid-cols-[18rem_minmax(0,1fr)]">
+          <AccountSidebar />
+          <SetupScreen />
+        </div>
+      );
 
     case "ready":
       return spectating ? <SpectatorIntro /> : <RoleCard />;

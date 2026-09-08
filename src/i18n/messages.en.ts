@@ -93,12 +93,42 @@ export const en: Messages = {
     signedIn: "Signed in.",
     signOut: "Sign out",
     signingOut: "Signing out...",
+    changePassword: "Change password",
+    sendingPasswordReset: "Sending email...",
+    passwordResetSent: "Password reset email sent. Open your inbox to continue.",
+    updatePasswordTitle: "Change password",
+    updatePasswordDescription:
+      "After opening the reset link from your email, set your new password here.",
+    newPassword: "New password",
+    confirmPassword: "Confirm new password",
+    updatePasswordSubmit: "Save new password",
+    updatingPassword: "Saving...",
+    passwordMismatch: "The two passwords do not match",
+    passwordUpdated: "Password updated. Use the new password next time you sign in.",
     unknownEmail: "Signed-in account",
     creditsLoading: "Loading credits...",
     creditsTotal: (n) => `${plural(n, "1 game", `${n} games`)} left`,
     creditsBreakdown: (free, purchased) => `free ${free} · purchased ${purchased}`,
     creditsUnavailable: "Credits unavailable",
     errorPrefix: (message) => `Authentication failed: ${message}`,
+  },
+
+  history: {
+    title: "Past games",
+    loading: "Loading history...",
+    loadingReview: "Loading replay...",
+    empty: "Finished remote games will be saved here automatically.",
+    unavailable: "Replay history is unavailable",
+    saveFailed: "The game ended, but its replay could not be saved",
+    backHome: "Back to home",
+    itemTitle: (endedAt, winner) => `${endedAt} · ${winner} won`,
+    score: (good, evil) => `Good ${good} / Evil ${evil}`,
+    calls: (count) => `${plural(count, "1 model call", `${count} model calls`)}`,
+    spectated: (playerCount) => `${playerCount} players · watched`,
+    seated: (playerCount, humanSeat) =>
+      `${playerCount} players · Seat ${toDisplaySeatNumber(humanSeat)}`,
+    itemAria: (endedAt, winner, score, playerLine) =>
+      `Replay from ${endedAt}, ${winner} won, ${score}, ${playerLine}`,
   },
 
   tutorial: {

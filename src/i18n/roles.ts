@@ -25,35 +25,35 @@ export const ROLE_TEXT: Record<Locale, Record<Role, RoleText>> = {
   zh: {
     MERLIN: {
       label: "梅林",
-      ability: "看到所有坏人，莫德雷德除外。被刺客命中则好人满盘皆输。",
+      ability: "“好人头头”：看到除了莫德雷德以外的所有坏人。被刺客命中则好人阵营失败。",
     },
     PERCIVAL: {
       label: "派西维尔",
-      ability: "看到梅林和莫甘娜两人，但无法区分谁是谁。",
+      ability: "“梅林的骑士”：看到梅林和莫甘娜两人，但无法区分谁是谁。",
     },
     LOYAL_SERVANT: {
       label: "忠臣",
-      ability: "没有任何额外信息，只能靠推理。",
+      ability: "没有任何视野信息。",
     },
     MORGANA: {
       label: "莫甘娜",
-      ability: "在派西维尔眼中与梅林混淆。认识除奥伯伦外的所有坏人。",
+      ability: "看到除了奥伯伦以外的所有坏人。在派西维尔眼中与梅林混淆。",
     },
     ASSASSIN: {
       label: "刺客",
-      ability: "好人集齐 3 分后由你指定刺杀目标，命中梅林则坏人翻盘。",
+      ability: "看到除了奥伯伦以外的所有坏人。3次任务成功后由你指定刺杀目标，命中梅林则坏人阵营获胜。",
     },
     MORDRED: {
       label: "莫德雷德",
-      ability: "梅林看不到你。认识除奥伯伦外的所有坏人。",
+      ability: "看到除了奥伯伦以外的所有坏人。是唯一不被梅林看到的坏人。",
     },
     OBERON: {
       label: "奥伯伦",
-      ability: "不认识任何队友，队友也不认识你；但梅林看得到你。",
+      ability: "看不到坏人队友，队友也看不到你；但会被梅林看得到。",
     },
     MINION: {
       label: "爪牙",
-      ability: "普通坏人，认识除奥伯伦外的所有坏人。",
+      ability: "看到除了奥伯伦以外的所有坏人。",
     },
   },
 

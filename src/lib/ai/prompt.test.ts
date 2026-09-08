@@ -822,7 +822,7 @@ describe("角色专属提醒", () => {
     const servant = sectionsOf(promptFor(state, 9, "SPEECH")).get("你的身份") ?? "";
     expect(merlin).toContain("说得越准，死得越快");
     expect(servant).not.toContain("说得越准，死得越快");
-    expect(servant).toContain("没有任何额外信息");
+    expect(servant).toContain("没有任何视野信息");
   });
 
   it("每个角色拿到的提醒各不相同", () => {

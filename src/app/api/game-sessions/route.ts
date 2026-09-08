@@ -1,6 +1,7 @@
 import type { AiErrorCode } from "@/lib/ai/errors";
 import { AuthError, requireAuthenticatedUser } from "@/lib/supabase/auth";
 import { QuotaError, startGameSession } from "@/lib/supabase/quota";
+import { listGameReviewSummaries, ReviewError } from "@/lib/supabase/reviews";
 
 export const maxDuration = 10;
 
@@ -28,5 +29,23 @@ export async function POST(request: Request): Promise<Response> {
     }
     console.error("[api/game-sessions] 开局失败：", error);
     return fail(503, "CONFIG_MISSING", "无法创建远程模型对局", auth?.responseHeaders);
+  }
+}
+
+export async function GET(request: Request): Promise<Response> {
+  let auth;
+  try {
+    auth = await requireAuthenticatedUser(request);
+    const summaries = await listGameReviewSummaries(auth.userId);
+    return Response.json({ reviews: summaries }, { headers: auth.responseHeaders });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return fail(401, "AUTH_REQUIRED", "请先登录后再查看历史对局");
+    }
+    if (error instanceof ReviewError) {
+      return fail(503, "CONFIG_MISSING", error.message, auth?.responseHeaders);
+    }
+    console.error("[api/game-sessions] 读取历史对局失败：", error);
+    return fail(503, "CONFIG_MISSING", "无法读取历史对局", auth?.responseHeaders);
   }
 }

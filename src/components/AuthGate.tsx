@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { createContext, useContext } from "react";
 import type { User } from "@supabase/supabase-js";
 import { isClientAuthRequired } from "@/lib/supabase/config";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -11,6 +12,23 @@ import { cn } from "@/lib/utils";
 
 type AuthMode = "signIn" | "signUp";
 type PendingAuthAction = "password" | "google";
+
+interface AuthContextValue {
+  user: User;
+  email: string;
+  credits: CreditsSnapshot | null;
+  creditsLoading: boolean;
+  creditsError: string | null;
+  refreshCredits: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+export function useAuthSession(): AuthContextValue {
+  const value = useContext(AuthContext);
+  if (!value) throw new Error("useAuthSession must be used under AuthGate");
+  return value;
+}
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const msg = useMessages();
@@ -127,15 +145,18 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (!user) return <AuthPanel />;
 
   return (
-    <>
+    <AuthContext.Provider
+      value={{
+        user,
+        email: user.email ?? msg.auth.unknownEmail,
+        credits,
+        creditsLoading,
+        creditsError,
+        refreshCredits,
+      }}
+    >
       {children}
-      <AccountPanel
-        email={user.email ?? msg.auth.unknownEmail}
-        credits={credits}
-        creditsLoading={creditsLoading}
-        creditsError={creditsError}
-      />
-    </>
+    </AuthContext.Provider>
   );
 }
 
@@ -282,60 +303,6 @@ function AuthPanel() {
         </form>
       </section>
     </main>
-  );
-}
-
-function AccountPanel({
-  email,
-  credits,
-  creditsLoading,
-  creditsError,
-}: {
-  email: string;
-  credits: CreditsSnapshot | null;
-  creditsLoading: boolean;
-  creditsError: string | null;
-}) {
-  const msg = useMessages();
-  const [busy, setBusy] = useState(false);
-
-  async function signOut() {
-    setBusy(true);
-    await createSupabaseBrowserClient().auth.signOut();
-    setBusy(false);
-  }
-
-  return (
-    <div className="fixed bottom-3 left-3 z-30 max-w-[calc(100vw-1.5rem)] rounded-lg border border-ink-line bg-ink-raised px-3 py-2 text-xs text-muted shadow-lg">
-      <p className="max-w-56 truncate">{email}</p>
-      <div className="mt-1 space-y-0.5">
-        {creditsLoading ? (
-          <p>{msg.auth.creditsLoading}</p>
-        ) : credits ? (
-          <>
-            <p className="tabular text-vellum">
-              {msg.auth.creditsTotal(credits.totalGamesRemaining)}
-            </p>
-            <p className="tabular">
-              {msg.auth.creditsBreakdown(
-                credits.freeGamesRemaining,
-                credits.purchasedGamesRemaining,
-              )}
-            </p>
-          </>
-        ) : (
-          <p>{creditsError ?? msg.auth.creditsUnavailable}</p>
-        )}
-      </div>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={signOut}
-        className="mt-1 text-brass transition-colors hover:text-vellum disabled:text-muted"
-      >
-        {busy ? msg.auth.signingOut : msg.auth.signOut}
-      </button>
-    </div>
   );
 }
 

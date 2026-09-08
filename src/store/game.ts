@@ -19,6 +19,7 @@
  * - `seatAvatarSeedStateAtom` 头像 seed，只给组件一个只读派生 atom
  */
 import { atom } from "jotai";
+import type { Getter, Setter } from "jotai/vanilla";
 import {
   EngineError,
   createGame,
@@ -52,6 +53,8 @@ import {
 } from "@/lib/ai/orchestrator";
 import { createRemoteAiClient } from "@/lib/ai/remote";
 import { PREVIEW_AVATAR_SEED } from "@/lib/seat-avatar";
+import { createSavedReviewSnapshot } from "@/lib/reviews";
+import { GAME_REVIEWS_CHANGED_EVENT } from "@/lib/credits/events";
 
 // ---------------------------------------------------------------------------
 // 全知状态与视角
@@ -792,6 +795,7 @@ export const runGameAtom = atom(null, async (get, set) => {
     });
     set(gameStateAtom, final);
     set(runStatusAtom, "finished");
+    await saveFinishedReview(get, set);
   } catch (error) {
     // 主动中止不是错误，不该在界面上弹红字。状态已由 resetGameAtom 归位
     if (signal.aborted) return;
@@ -807,6 +811,47 @@ export const runGameAtom = atom(null, async (get, set) => {
     }
   }
 });
+
+async function saveFinishedReview(get: Getter, set: Setter): Promise<void> {
+  const gameSessionId = get(gameSessionIdAtom);
+  if (!gameSessionId) return;
+
+  const msg = MESSAGES[get(localeAtom)];
+  const snapshot = createSavedReviewSnapshot({
+    view: get(viewAtom),
+    decisions: get(reviewDecisionsAtom),
+    avatarSeed: get(seatAvatarSeedAtom),
+  });
+  if (!snapshot) return;
+
+  try {
+    const response = await fetch(`/api/game-sessions/${gameSessionId}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ review: snapshot }),
+    });
+    if (!response.ok) {
+      const body: unknown = await response.json().catch(() => null);
+      const detail =
+        typeof body === "object" &&
+        body !== null &&
+        "error" in body &&
+        typeof body.error === "string"
+          ? body.error
+          : msg.history.saveFailed;
+      throw new Error(detail);
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event(GAME_REVIEWS_CHANGED_EVENT));
+    }
+  } catch (error) {
+    console.error("[store] 保存复盘失败：", error);
+    set(errorSourceAtom, {
+      kind: "raw",
+      text: error instanceof Error ? error.message : msg.history.saveFailed,
+    });
+  }
+}
 
 /** 回到开局前。跑着的循环会被中止，挂起的人类动作会被拒绝 */
 export const resetGameAtom = atom(null, (get, set) => {

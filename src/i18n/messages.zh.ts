@@ -133,6 +133,17 @@ export const zh = {
     signedIn: "已登录。",
     signOut: "登出",
     signingOut: "登出中…",
+    changePassword: "修改密码",
+    sendingPasswordReset: "正在发送邮件…",
+    passwordResetSent: "修改密码邮件已经发出，请打开邮箱继续。",
+    updatePasswordTitle: "修改密码",
+    updatePasswordDescription: "从邮箱里的重置链接进入后，在这里设置新密码。",
+    newPassword: "新密码",
+    confirmPassword: "确认新密码",
+    updatePasswordSubmit: "保存新密码",
+    updatingPassword: "保存中…",
+    passwordMismatch: "两次输入的密码不一致",
+    passwordUpdated: "密码已更新。下次登录请使用新密码。",
     unknownEmail: "已登录账号",
     creditsLoading: "正在读取额度…",
     creditsTotal: (n: number) => `剩余额度：${n} 局`,
@@ -140,6 +151,24 @@ export const zh = {
       `免费 ${free} · 购买 ${purchased}`,
     creditsUnavailable: "额度暂时不可用",
     errorPrefix: (message: string) => `认证失败：${message}`,
+  },
+
+  history: {
+    title: "历史复盘",
+    loading: "正在读取历史…",
+    loadingReview: "正在读取复盘…",
+    empty: "remote 对局结束后会自动保存到这里。",
+    unavailable: "历史复盘暂时不可用",
+    saveFailed: "对局已结束，但复盘保存失败",
+    backHome: "回到首页",
+    itemTitle: (endedAt: string, winner: string) => `${endedAt} · ${winner}获胜`,
+    score: (good: number, evil: number) => `好人 ${good} / 坏人 ${evil}`,
+    calls: (count: number) => `模型调用 ${count} 次`,
+    spectated: (playerCount: number) => `${playerCount} 人 · 观战`,
+    seated: (playerCount: number, humanSeat: number) =>
+      `${playerCount} 人 · 坐 ${toDisplaySeatNumber(humanSeat)} 号`,
+    itemAria: (endedAt: string, winner: string, score: string, playerLine: string) =>
+      `${endedAt} 的复盘，${winner}获胜，${score}，${playerLine}`,
   },
 
   /** TutorialModal.tsx。角色逐条说明仍然只来自 roles / describeRole */
@@ -161,14 +190,13 @@ export const zh = {
       goal: {
         tab: "胜负",
         eyebrow: "先认清终点",
-        title: "三次任务，只是好人的第一道门",
+        title: "2个阵营的获胜条件",
         intro: "两边争的不只是任务比分。梅林能否藏到最后，决定好人拿到的三分算不算数。",
         goodTitle: "好人阵营",
-        goodBody: "先成功完成 3 次任务，再让梅林躲过刺客的最终指认。两件都做到才算赢。",
+        goodBody: "3次任务成功，并且梅林没有被刺客找出。",
         evilTitle: "坏人阵营",
-        evilBody:
-          "破坏 3 次任务、让同一轮的组队否决达到上限，或在终局刺中梅林，任一条都能获胜。",
-        note: "所以好人率先拿到 3 分时，对局不会立刻结束——桌上还剩最后一刀。",
+        evilBody: "3次任务失败；或者让同一轮的组队否决达到上限；或者刺客正确找出梅林，任一条都能获胜。",
+        note: "“组队”和“任务”的概念请看2和3。所以好人率先拿到 3 分时，对局不会立刻结束——桌上还剩最后一刀。",
       },
 
       proposal: {
@@ -203,11 +231,10 @@ export const zh = {
       },
 
       roles: {
-        tab: "视野",
+        tab: "角色牌与视野",
         eyebrow: "角色视野实验台",
         title: "换一个身份，整张桌子就变了",
-        intro:
-          "选择任意角色，下面直接展示他开局时拿到的真实受限视角。角色能力与逐条说明和正式对局完全共用。",
+        intro:"蓝色为好人阵营的角色，红色为坏人阵营的角色。下面直接展示他开局时拿到的真实受限视角。角色能力与逐条说明和正式对局完全共用。",
         pickerLabel: "选择要查看的角色",
         sampleNote: "这是独立的十人示例桌，不会读取或改变正在进行的对局。",
       },

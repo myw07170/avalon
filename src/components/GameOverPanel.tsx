@@ -13,6 +13,7 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { useMemo } from "react";
 import {
+  errorAtom,
   viewAtom,
   resetGameAtom,
   reviewDecisionsAtom,
@@ -21,6 +22,8 @@ import {
 import { useMessages } from "@/i18n/useMessages";
 import { toDisplaySeatNumber } from "@/lib/seat-number";
 import { cn } from "@/lib/utils";
+import type { AnyView } from "@/lib/game";
+import type { DecisionRecord } from "@/lib/ai/orchestrator";
 import { SeatRing } from "./SeatRing";
 import { MissionTrack } from "./MissionTrack";
 import { VoteMatrix } from "./VoteMatrix";
@@ -39,9 +42,47 @@ export function GameOverPanel() {
   const view = useAtomValue(viewAtom);
   const avatarSeed = useAtomValue(seatAvatarSeedAtom);
   const decisions = useAtomValue(reviewDecisionsAtom);
+  const error = useAtomValue(errorAtom);
   const reset = useSetAtom(resetGameAtom);
   const msg = useMessages();
 
+  return (
+    <GameOverReview
+      view={view}
+      decisions={decisions}
+      avatarSeed={avatarSeed}
+      footer={
+        <>
+          {error && (
+            <p role="alert" className="max-w-md text-center text-sm text-mordred">
+              {error}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => reset()}
+            className="rounded-lg border border-ink-line bg-ink-raised min-h-11 px-6 py-2.5 text-sm text-muted transition-colors hover:border-muted hover:text-vellum"
+          >
+            {msg.gameOver.again}
+          </button>
+        </>
+      }
+    />
+  );
+}
+
+export function GameOverReview({
+  view,
+  decisions,
+  avatarSeed,
+  footer,
+}: {
+  view: AnyView | null;
+  decisions: readonly DecisionRecord[];
+  avatarSeed: number;
+  footer?: React.ReactNode;
+}) {
+  const msg = useMessages();
   const brief = useMemo(
     () => describeGameOver(view, decisions, msg),
     [view, decisions, msg],
@@ -51,15 +92,12 @@ export function GameOverPanel() {
     // 【比对局中那一屏宽】这一屏的主角是长自由文本——完整对话与心证。
     // 对局中的 GameShell 仍是 max-w-3xl，那边是圆桌和表单，不需要这个宽度
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center gap-8 px-5 py-10 sm:py-14">
-      {brief ? <Result brief={brief} avatarSeed={avatarSeed} /> : <NoReveal />}
-
-      <button
-        type="button"
-        onClick={() => reset()}
-        className="rounded-lg border border-ink-line bg-ink-raised min-h-11 px-6 py-2.5 text-sm text-muted transition-colors hover:border-muted hover:text-vellum"
-      >
-        {msg.gameOver.again}
-      </button>
+      {brief && view ? (
+        <Result brief={brief} view={view} avatarSeed={avatarSeed} />
+      ) : (
+        <NoReveal />
+      )}
+      {footer}
     </main>
   );
 }
@@ -80,7 +118,15 @@ function NoReveal() {
   );
 }
 
-function Result({ brief, avatarSeed }: { brief: GameOverBrief; avatarSeed: number }) {
+function Result({
+  brief,
+  view,
+  avatarSeed,
+}: {
+  brief: GameOverBrief;
+  view: AnyView;
+  avatarSeed: number;
+}) {
   return (
     <>
       <Banner brief={brief} />
@@ -89,7 +135,7 @@ function Result({ brief, avatarSeed }: { brief: GameOverBrief; avatarSeed: numbe
 
       {/* 任务条是 5 个格子的图形，不是文本。在 1024px 里拉满会稀得难看 */}
       <div className="flex w-full max-w-2xl justify-center">
-        <MissionTrack />
+        <MissionTrack view={view} />
       </div>
 
       <Identities brief={brief} avatarSeed={avatarSeed} />

@@ -7,6 +7,7 @@
  */
 import { useAtomValue } from "jotai";
 import { useMessages } from "@/i18n/useMessages";
+import type { AnyView } from "@/lib/game";
 import { cn } from "@/lib/utils";
 import { viewAtom } from "@/store/game";
 import { describeTrack, type MissionNode, type MissionOutcome } from "./mission-track-model";
@@ -18,9 +19,10 @@ const OUTCOME_CLASS: Record<MissionOutcome, string> = {
   upcoming: "border-ink-line bg-ink-raised text-muted",
 };
 
-export function MissionTrack() {
-  const view = useAtomValue(viewAtom);
+export function MissionTrack({ view: explicitView }: { view?: AnyView } = {}) {
+  const currentView = useAtomValue(viewAtom);
   const msg = useMessages();
+  const view = explicitView ?? currentView;
   if (!view) return null;
 
   const track = describeTrack(view, msg);
