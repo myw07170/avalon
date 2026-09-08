@@ -13,6 +13,7 @@ import {
   withEvilOption,
   withHumanSeat,
   withPersonaSelection,
+  withRolePreference,
   withSeat,
   withSpectator,
   withPlayerCount,
@@ -115,6 +116,7 @@ describe("previewSetup", () => {
         playerCount: count,
         humanSeat: 0,
         evilOptionIndex: 0,
+        rolePreference: null,
         personaSelections: {},
       });
       expect(preview.errors).toHaveLength(1);
@@ -153,13 +155,16 @@ describe("草稿变更", () => {
     let draft: SetupDraft = defaultDraft(10);
     draft = withEvilOption(draft, 3); // 爪牙+爪牙，9 人局装不下
     draft = withHumanSeat(draft, 8); // 座位 8 在 6 人局越界
+    draft = withRolePreference(draft, "MINION");
     draft = withPersonaSelection(draft, 1, "persona-01");
     expect(draft.evilOptionIndex).toBe(3);
     expect(draft.humanSeat).toBe(8);
+    expect(draft.rolePreference).toBe("MINION");
 
     const next = withPlayerCount(draft, 6);
     expect(next.humanSeat).toBe(0);
     expect(next.evilOptionIndex).toBe(presetOptionIndex(6));
+    expect(next.rolePreference).toBeNull();
     expect(next.personaSelections).toEqual({});
     expect(previewSetup(next).canStart).toBe(true);
   });
@@ -265,6 +270,24 @@ describe("草稿变更", () => {
   it("越界的自由位下标退回第一项", () => {
     expect(withEvilOption(defaultDraft(7), 99).evilOptionIndex).toBe(0);
     expect(withEvilOption(defaultDraft(7), -1).evilOptionIndex).toBe(0);
+  });
+
+  it("角色偏好默认随机，也只能选当前牌池里存在的角色", () => {
+    expect(defaultDraft().rolePreference).toBeNull();
+
+    const draft = withRolePreference(defaultDraft(7), "MERLIN");
+    expect(draft.rolePreference).toBe("MERLIN");
+    // 默认 7 人局是奥伯伦自由位，莫德雷德不在牌池里
+    expect(withRolePreference(defaultDraft(7), "MORDRED").rolePreference).toBeNull();
+  });
+
+  it("坏人自由位变化后会清掉不再存在的角色偏好", () => {
+    const draft = withRolePreference(defaultDraft(10), "MORDRED");
+    expect(draft.rolePreference).toBe("MORDRED");
+
+    const next = withEvilOption(draft, 2); // 奥伯伦 + 爪牙，没有莫德雷德
+    expect(previewSetup(next).selectedEvil).toEqual(["OBERON", "MINION"]);
+    expect(next.rolePreference).toBeNull();
   });
 });
 

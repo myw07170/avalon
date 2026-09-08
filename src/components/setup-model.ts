@@ -35,6 +35,8 @@ export interface SetupDraft {
   humanSeat: PlayerId | null;
   /** getEvilOptions(playerCount) 的下标 */
   evilOptionIndex: number;
+  /** 人类玩家偏好的角色；null 表示仍按随机发牌 */
+  rolePreference: Role | null;
   /** 只记录用户明确指定的 AI 人设；缺席的座位在开局时随机补齐 */
   personaSelections: PersonaSelectionMap;
 }
@@ -86,6 +88,7 @@ export function defaultDraft(playerCount: number = DEFAULT_PLAYER_COUNT): SetupD
     playerCount,
     humanSeat: 0,
     evilOptionIndex: presetOptionIndex(playerCount),
+    rolePreference: null,
     personaSelections: {},
   };
 }
@@ -107,7 +110,14 @@ export function withEvilOption(draft: SetupDraft, index: number): SetupDraft {
     ? getEvilOptions(draft.playerCount)
     : [];
   const safe = index >= 0 && index < options.length ? index : 0;
-  return { ...draft, evilOptionIndex: safe };
+  const next = { ...draft, evilOptionIndex: safe };
+  return { ...next, rolePreference: normalizeRolePreference(next) };
+}
+
+/** 设置人类角色偏好。不存在于当前牌池里的角色视为随机 */
+export function withRolePreference(draft: SetupDraft, role: Role | null): SetupDraft {
+  const next = { ...draft, rolePreference: role };
+  return { ...next, rolePreference: normalizeRolePreference(next) };
 }
 
 /**
@@ -184,6 +194,16 @@ export function clearPersonaSelections(draft: SetupDraft): SetupDraft {
   return Object.keys(draft.personaSelections).length === 0
     ? draft
     : { ...draft, personaSelections: {} };
+}
+
+function normalizeRolePreference(draft: SetupDraft): Role | null {
+  if (draft.rolePreference === null || !isSupportedPlayerCount(draft.playerCount)) {
+    return null;
+  }
+
+  const options = getEvilOptions(draft.playerCount);
+  const roles = composeRoles(draft.playerCount, selectedEvilOf(draft, options));
+  return roles.includes(draft.rolePreference) ? draft.rolePreference : null;
 }
 
 /** 当前草稿选中的那一组自由位。配置固定或人数非法时是空数组 */

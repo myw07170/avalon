@@ -91,6 +91,9 @@ export const en: Messages = {
     confirmEmail:
       "The confirmation email has been sent. Open it to confirm your account, then come back and sign in.",
     signedIn: "Signed in.",
+    accountInfo: "Account info",
+    localMode: "Local mode",
+    localModeNote: "No account enabled",
     signOut: "Sign out",
     signingOut: "Signing out...",
     changePassword: "Change password",
@@ -115,9 +118,13 @@ export const en: Messages = {
 
   history: {
     title: "Past games",
+    collapseSidebar: "Collapse sidebar",
+    expandSidebar: "Expand sidebar",
+    expandHistory: "Expand past games",
     loading: "Loading history...",
     loadingReview: "Loading replay...",
     empty: "Finished remote games will be saved here automatically.",
+    localModeEmpty: "Enable account sign-in to show remote game replays here.",
     unavailable: "Replay history is unavailable",
     saveFailed: "The game ended, but its replay could not be saved",
     delete: "Delete replay",
@@ -645,6 +652,8 @@ export const en: Messages = {
     personaEmpty: "No personas match that search.",
     personaUsedBy: (id) => `Used by Seat ${toDisplaySeatNumber(id)}`,
     personaReasoning: "Notices first: ",
+    rolePreferenceField: "Role preference",
+    rolePreferenceRandom: "Random role",
     submit: "Take the seat",
     spectate: "Start watching",
     starting: "Starting...",

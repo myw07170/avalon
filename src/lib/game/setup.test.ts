@@ -9,18 +9,23 @@ import {
 } from "./config";
 import { createRng } from "./rng";
 import { createGame, makePlaceholderPersonas } from "./setup";
-import { EngineError, ROLE_TEAM, createPending, type GameState } from "./types";
+import { EngineError, ROLE_TEAM, createPending, type GameState, type Role } from "./types";
 
 const ALL_COUNTS = [5, 6, 7, 8, 9, 10];
 
 const build = (
   playerCount: number,
   seed: number,
-  opts: { humanSeat?: number | null; roles?: ReturnType<typeof composeRoles> } = {},
+  opts: {
+    humanSeat?: number | null;
+    preferredHumanRole?: Role | null;
+    roles?: ReturnType<typeof composeRoles>;
+  } = {},
 ): GameState =>
   createGame({
     config: createConfig(playerCount, opts.roles ? { roles: opts.roles } : undefined),
     humanSeat: opts.humanSeat === undefined ? 0 : opts.humanSeat,
+    preferredHumanRole: opts.preferredHumanRole,
     personas: makePlaceholderPersonas(playerCount),
     rng: createRng(seed),
   });
@@ -232,6 +237,40 @@ describe("人类座位与人设", () => {
         config: createConfig(7),
         humanSeat: null,
         personas: makePlaceholderPersonas(6),
+        rng: createRng(1),
+      }),
+    ).toThrow(EngineError);
+  });
+
+  it("指定人类角色偏好时，人类座位拿到该角色", () => {
+    const state = build(7, 1, { humanSeat: 3, preferredHumanRole: "MERLIN" });
+    expect(state.players[3]?.role).toBe("MERLIN");
+    expect(state.players.filter((p) => p.role === "MERLIN")).toHaveLength(1);
+  });
+
+  it("指定偏好后，AI 从剩余牌堆随机分配", () => {
+    const expected = rolesToCounts(createConfig(7).roles);
+    const assassinSeats = new Set<number>();
+
+    for (let seed = 0; seed < 80; seed += 1) {
+      const state = build(7, seed, { humanSeat: 0, preferredHumanRole: "MERLIN" });
+      expect(state.players[0]?.role).toBe("MERLIN");
+      expect(rolesToCounts(state.players.map((p) => p.role))).toEqual(expected);
+      const assassin = state.players.find((p) => p.role === "ASSASSIN");
+      expect(assassin?.id).not.toBe(0);
+      if (assassin) assassinSeats.add(assassin.id);
+    }
+
+    expect(assassinSeats.size).toBeGreaterThan(1);
+  });
+
+  it("偏好角色不在本局牌池时抛 EngineError", () => {
+    expect(() =>
+      createGame({
+        config: createConfig(5),
+        humanSeat: 0,
+        preferredHumanRole: "MORDRED",
+        personas: makePlaceholderPersonas(4),
         rng: createRng(1),
       }),
     ).toThrow(EngineError);

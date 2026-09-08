@@ -671,6 +671,8 @@ export interface CreateGameInput {
   avatarSeed: number;
   /** null 表示全 AI 观战局 */
   humanSeat: PlayerId | null;
+  /** 人类玩家偏好的角色；null/undefined 表示正常随机发牌 */
+  preferredHumanRole?: Role | null;
   /** 远程模型局的服务端额度 session。mock 局为空 */
   gameSessionId?: string | null;
   /** 缺省只供测试与内部调用回退；正常 UI 始终从静态人设库传入完整数组 */
@@ -694,7 +696,13 @@ export const createGameAtom = atom(null, (_get, set, input: CreateGameInput) => 
   const personas = input.personas ?? makePlaceholderPersonas(aiSeatCount);
 
   try {
-    const state = createGame({ config, humanSeat, personas, rng });
+    const state = createGame({
+      config,
+      humanSeat,
+      preferredHumanRole: input.preferredHumanRole ?? null,
+      personas,
+      rng,
+    });
     set(gameStateAtom, state);
     set(mySeatAtom, humanSeat);
     set(gameSessionIdAtom, input.gameSessionId ?? null);

@@ -204,6 +204,22 @@ describe("建局", () => {
     expect(store.get(errorAtom)).toContain("CONFIG_INVALID");
     expect(store.get(gameStateAtom)).toBeNull();
   });
+
+  it("建局输入里的角色偏好会固定人类身份，但不会进入视角字段", () => {
+    const store = createStore();
+    store.set(createGameAtom, {
+      config: createConfig(7, { seed: 12 }),
+      avatarSeed: AVATAR_SEED,
+      humanSeat: 2,
+      preferredHumanRole: "MERLIN",
+    });
+
+    const view = store.get(viewAtom);
+    expect(view?.selfId).toBe(2);
+    expect(view?.selfRole).toBe("MERLIN");
+    expect(Object.keys(view ?? {})).not.toContain("preferredHumanRole");
+    expect(JSON.stringify(view)).not.toContain("rolePreference");
+  });
 });
 
 describe("跑完整一局", () => {

@@ -16,12 +16,15 @@ import {
   type Player,
   type PlayerId,
   type RngFn,
+  type Role,
 } from "./types";
 
 export interface CreateGameOptions {
   config: GameConfig;
   /** 人类玩家的座位号，null 表示全 AI 观战局 */
   humanSeat: PlayerId | null;
+  /** 人类玩家偏好的角色；null/undefined 表示正常随机发牌，观战局忽略 */
+  preferredHumanRole?: Role | null;
   /** AI 人设，数量需覆盖所有非人类座位。多余的会被忽略 */
   personas: Persona[];
   rng: RngFn;
@@ -50,7 +53,7 @@ export function makePlaceholderPersonas(count: number): Persona[] {
  * 洗的是 config.roles 而不是 ROLE_PRESETS——用户可能自定义过角色构成。
  */
 export function createGame(options: CreateGameOptions): GameState {
-  const { config, humanSeat, personas, rng } = options;
+  const { config, humanSeat, personas, preferredHumanRole, rng } = options;
 
   validateConfig(config);
 
@@ -75,7 +78,7 @@ export function createGame(options: CreateGameOptions): GameState {
     );
   }
 
-  const dealt = shuffle(config.roles, rng);
+  const dealt = dealRoles(config.roles, humanSeat, preferredHumanRole ?? null, rng);
   let personaCursor = 0;
   const players: Player[] = dealt.map((role, seat) => {
     if (seat === humanSeat) {
@@ -119,4 +122,32 @@ export function createGame(options: CreateGameOptions): GameState {
 
     log: [],
   };
+}
+
+function dealRoles(
+  roles: readonly Role[],
+  humanSeat: PlayerId | null,
+  preferredHumanRole: Role | null,
+  rng: RngFn,
+): Role[] {
+  if (humanSeat === null || preferredHumanRole === null) return shuffle(roles, rng);
+
+  const preferredIndex = roles.indexOf(preferredHumanRole);
+  if (preferredIndex < 0) {
+    throw new EngineError(
+      `偏好角色 ${preferredHumanRole} 不在本局角色池中`,
+      "CONFIG_INVALID",
+      { preferredHumanRole },
+    );
+  }
+
+  const remaining = roles.filter((_, index) => index !== preferredIndex);
+  const shuffled = shuffle(remaining, rng);
+  let cursor = 0;
+  return Array.from({ length: roles.length }, (_, seat) => {
+    if (seat === humanSeat) return preferredHumanRole;
+    const role = shuffled[cursor];
+    cursor += 1;
+    return role as Role;
+  });
 }

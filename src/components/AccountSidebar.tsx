@@ -4,7 +4,16 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Popover from "@radix-ui/react-popover";
-import { History, KeyRound, LoaderCircle, LogOut, Trash2, UserCircle } from "lucide-react";
+import {
+  History,
+  KeyRound,
+  LoaderCircle,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Trash2,
+  UserCircle,
+} from "lucide-react";
 import { useLocale, useMessages } from "@/i18n/useMessages";
 import { GAME_REVIEWS_CHANGED_EVENT } from "@/lib/credits/events";
 import type { ReviewSummary } from "@/lib/reviews";
@@ -13,7 +22,12 @@ import { cn } from "@/lib/utils";
 import { useAuthSession } from "./AuthGate";
 import { describeHistoryItem } from "./account-sidebar-model";
 
-export function AccountSidebar() {
+interface AccountSidebarProps {
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+}
+
+export function AccountSidebar({ collapsed, onToggleCollapsed }: AccountSidebarProps) {
   const msg = useMessages();
   const locale = useLocale();
   const { email, credits, creditsLoading, creditsError } = useAuthSession();
@@ -93,14 +107,91 @@ export function AccountSidebar() {
     }
   }, [deleteTarget, msg.history.deleteFailed]);
 
+  const accountPopover = (
+    <AccountPopover
+      collapsed={collapsed}
+      email={email}
+      credits={credits}
+      creditsLoading={creditsLoading}
+      creditsError={creditsError}
+    />
+  );
+
+  if (collapsed) {
+    return (
+      <>
+        <aside
+          className={cn(
+            "flex min-h-0 items-center gap-2 border-b border-ink-line bg-ink-raised/70 px-3 py-2",
+            "transition-all duration-200 lg:sticky lg:top-0 lg:h-dvh lg:flex-col lg:border-b-0 lg:border-r lg:py-4",
+          )}
+        >
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-expanded={false}
+            aria-label={msg.history.expandSidebar}
+            title={msg.history.expandSidebar}
+            className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-ink-line bg-ink text-muted transition-colors hover:border-brass hover:text-vellum"
+          >
+            <PanelLeftOpen className="size-4" aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-label={msg.history.expandHistory}
+            title={msg.history.expandHistory}
+            className="relative flex size-10 shrink-0 items-center justify-center rounded-lg border border-ink-line bg-ink text-muted transition-colors hover:border-brass hover:text-vellum"
+          >
+            {loading ? (
+              <LoaderCircle className="size-4 animate-spin" aria-hidden />
+            ) : (
+              <History className="size-4" aria-hidden />
+            )}
+            {!loading && reviews.length > 0 && (
+              <span className="absolute right-1 top-1 size-1.5 rounded-full bg-brass" />
+            )}
+          </button>
+          <div className="min-w-0 flex-1 lg:min-h-0" />
+          {accountPopover}
+        </aside>
+
+        <DeleteReviewDialog
+          review={deleteTarget}
+          deleting={deletingId !== null}
+          error={deleteError}
+          onClose={() => {
+            if (deletingId === null) {
+              setDeleteTarget(null);
+              setDeleteError(null);
+            }
+          }}
+          onConfirm={deleteReview}
+        />
+      </>
+    );
+  }
+
   return (
     <>
       <aside className="flex min-h-0 flex-col border-b border-ink-line bg-ink-raised/70 px-4 py-4 lg:sticky lg:top-0 lg:h-dvh lg:border-b-0 lg:border-r">
-      <header className="mb-3 flex items-center gap-2 text-muted">
-        <History className="size-4" aria-hidden />
-        <h2 className="font-display text-xs tracking-[var(--track-3)]">
-          {msg.history.title}
-        </h2>
+      <header className="mb-3 flex items-center justify-between gap-2 text-muted">
+        <div className="flex min-w-0 items-center gap-2">
+          <History className="size-4 shrink-0" aria-hidden />
+          <h2 className="truncate font-display text-xs tracking-[var(--track-3)]">
+            {msg.history.title}
+          </h2>
+        </div>
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          aria-expanded={true}
+          aria-label={msg.history.collapseSidebar}
+          title={msg.history.collapseSidebar}
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-ink-line bg-ink text-muted transition-colors hover:border-brass hover:text-vellum"
+        >
+          <PanelLeftClose className="size-4" aria-hidden />
+        </button>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto pr-1">
@@ -152,12 +243,7 @@ export function AccountSidebar() {
         )}
       </div>
 
-      <AccountPopover
-        email={email}
-        credits={credits}
-        creditsLoading={creditsLoading}
-        creditsError={creditsError}
-      />
+      {accountPopover}
       </aside>
 
       <DeleteReviewDialog
@@ -173,6 +259,93 @@ export function AccountSidebar() {
         onConfirm={deleteReview}
       />
     </>
+  );
+}
+
+export function LocalAccountSidebar({
+  collapsed,
+  onToggleCollapsed,
+}: AccountSidebarProps) {
+  const msg = useMessages();
+
+  if (collapsed) {
+    return (
+      <aside
+        className={cn(
+          "flex min-h-0 items-center gap-2 border-b border-ink-line bg-ink-raised/70 px-3 py-2",
+          "transition-all duration-200 lg:sticky lg:top-0 lg:h-dvh lg:flex-col lg:border-b-0 lg:border-r lg:py-4",
+        )}
+      >
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          aria-expanded={false}
+          aria-label={msg.history.expandSidebar}
+          title={msg.history.expandSidebar}
+          className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-ink-line bg-ink text-muted transition-colors hover:border-brass hover:text-vellum"
+        >
+          <PanelLeftOpen className="size-4" aria-hidden />
+        </button>
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          aria-label={msg.history.expandHistory}
+          title={msg.history.expandHistory}
+          className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-ink-line bg-ink text-muted transition-colors hover:border-brass hover:text-vellum"
+        >
+          <History className="size-4" aria-hidden />
+        </button>
+        <div className="min-w-0 flex-1 lg:min-h-0" />
+        <button
+          type="button"
+          disabled
+          aria-label={msg.auth.localMode}
+          title={msg.auth.localMode}
+          className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-ink-line bg-ink text-muted opacity-70"
+        >
+          <UserCircle className="size-5 text-brass" aria-hidden />
+        </button>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="flex min-h-0 flex-col border-b border-ink-line bg-ink-raised/70 px-4 py-4 lg:sticky lg:top-0 lg:h-dvh lg:border-b-0 lg:border-r">
+      <header className="mb-3 flex items-center justify-between gap-2 text-muted">
+        <div className="flex min-w-0 items-center gap-2">
+          <History className="size-4 shrink-0" aria-hidden />
+          <h2 className="truncate font-display text-xs tracking-[var(--track-3)]">
+            {msg.history.title}
+          </h2>
+        </div>
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          aria-expanded={true}
+          aria-label={msg.history.collapseSidebar}
+          title={msg.history.collapseSidebar}
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-ink-line bg-ink text-muted transition-colors hover:border-brass hover:text-vellum"
+        >
+          <PanelLeftClose className="size-4" aria-hidden />
+        </button>
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+        <p className="text-xs leading-relaxed text-muted">{msg.history.localModeEmpty}</p>
+      </div>
+
+      <button
+        type="button"
+        disabled
+        className="mt-4 flex w-full items-center gap-3 rounded-lg border border-ink-line bg-ink px-3 py-2 text-left opacity-70"
+      >
+        <UserCircle className="size-5 shrink-0 text-brass" aria-hidden />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-xs text-vellum">{msg.auth.localMode}</span>
+          <span className="block truncate text-[11px] text-muted">{msg.auth.localModeNote}</span>
+        </span>
+      </button>
+    </aside>
   );
 }
 
@@ -243,11 +416,13 @@ function DeleteReviewDialog({
 }
 
 function AccountPopover({
+  collapsed = false,
   email,
   credits,
   creditsLoading,
   creditsError,
 }: {
+  collapsed?: boolean;
   email: string;
   credits: ReturnType<typeof useAuthSession>["credits"];
   creditsLoading: boolean;
@@ -293,13 +468,22 @@ function AccountPopover({
       <Popover.Trigger asChild>
         <button
           type="button"
-          className="mt-4 flex w-full items-center gap-3 rounded-lg border border-ink-line bg-ink px-3 py-2 text-left transition-colors hover:border-muted"
+          aria-label={msg.auth.accountInfo}
+          title={collapsed ? msg.auth.accountInfo : undefined}
+          className={cn(
+            "flex border border-ink-line bg-ink text-left transition-colors hover:border-muted",
+            collapsed
+              ? "size-10 shrink-0 items-center justify-center rounded-lg"
+              : "mt-4 w-full items-center gap-3 rounded-lg px-3 py-2",
+          )}
         >
           <UserCircle className="size-5 shrink-0 text-brass" aria-hidden />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-xs text-vellum">{email}</span>
-            <span className="tabular block truncate text-[11px] text-muted">{creditLine}</span>
-          </span>
+          {!collapsed && (
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xs text-vellum">{email}</span>
+              <span className="tabular block truncate text-[11px] text-muted">{creditLine}</span>
+            </span>
+          )}
         </button>
       </Popover.Trigger>
 

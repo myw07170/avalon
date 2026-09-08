@@ -12,6 +12,7 @@
  * 所以分岔是二维的：先按 runStatus 取生命周期，再在三档里各自按
  * isSpectatingAtom 二选一。switch 仍然是穷尽的。
  */
+import { useCallback, useEffect, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { LocaleGate } from "@/i18n/LocaleGate";
 import { useMessages } from "@/i18n/useMessages";
@@ -33,7 +34,11 @@ import { TeamDraftProvider } from "./TeamDraftContext";
 import { AssassinationDraftProvider } from "./AssassinationDraftContext";
 import { VoteMatrix } from "./VoteMatrix";
 import { AuthGate } from "./AuthGate";
-import { AccountSidebar } from "./AccountSidebar";
+import { AccountSidebar, LocalAccountSidebar } from "./AccountSidebar";
+import {
+  readSavedAccountSidebarCollapsed,
+  saveAccountSidebarCollapsed,
+} from "./account-sidebar-state";
 
 /**
  * 【语言与主题这三样挂在这里，而不是 layout.tsx】layout.tsx 与 page.tsx 都是
@@ -67,15 +72,46 @@ export function GameShell() {
 function Screen() {
   const status = useAtomValue(runStatusAtom);
   const spectating = useAtomValue(isSpectatingAtom);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSidebarCollapsed(readSavedAccountSidebarCollapsed(window.localStorage));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const toggleSidebarCollapsed = useCallback(() => {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      saveAccountSidebarCollapsed(window.localStorage, next);
+      return next;
+    });
+  }, []);
 
   switch (status) {
     // 配置报错也留在设置页：玩家要能看着报错把配置改对
     case "idle":
     case "error":
-      if (!isClientAuthRequired) return <SetupScreen />;
       return (
-        <div className="grid w-full flex-1 lg:grid-cols-[18rem_minmax(0,1fr)]">
-          <AccountSidebar />
+        <div
+          className={
+            sidebarCollapsed
+              ? "grid w-full flex-1 transition-[grid-template-columns] duration-200 lg:grid-cols-[4.25rem_minmax(0,1fr)]"
+              : "grid w-full flex-1 transition-[grid-template-columns] duration-200 lg:grid-cols-[18rem_minmax(0,1fr)]"
+          }
+        >
+          {isClientAuthRequired ? (
+            <AccountSidebar
+              collapsed={sidebarCollapsed}
+              onToggleCollapsed={toggleSidebarCollapsed}
+            />
+          ) : (
+            <LocalAccountSidebar
+              collapsed={sidebarCollapsed}
+              onToggleCollapsed={toggleSidebarCollapsed}
+            />
+          )}
           <SetupScreen />
         </div>
       );

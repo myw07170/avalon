@@ -30,6 +30,7 @@ import {
   withHumanSeat,
   withPersonaSelection,
   withPlayerCount,
+  withRolePreference,
   withSeat,
   withSpectator,
   type SetupDraft,
@@ -53,6 +54,7 @@ export function SetupScreen() {
 
   const preview = previewSetup(draft);
   const seated = draft.humanSeat !== null;
+  const roleTallies = tallyRoles(preview.roles);
 
   /**
    * 开局。落座与观战走同一条路——差别只有 humanSeat 是不是 null，
@@ -83,7 +85,14 @@ export function SetupScreen() {
         aiMode === "remote" && isClientAuthRequired
           ? await requestGameSession(msg.setup.startRemoteFailed)
           : null;
-      createGame({ config, avatarSeed, humanSeat, personas, gameSessionId });
+      createGame({
+        config,
+        avatarSeed,
+        humanSeat,
+        preferredHumanRole: humanSeat === null ? null : draft.rolePreference,
+        personas,
+        gameSessionId,
+      });
     } catch (error) {
       setRawError(error instanceof Error ? error.message : msg.setup.startRemoteFailed);
     } finally {
@@ -176,7 +185,7 @@ export function SetupScreen() {
 
       <Field label={msg.setup.rolesField}>
         <ul className="flex flex-wrap gap-2">
-          {tallyRoles(preview.roles).map((entry) => (
+          {roleTallies.map((entry) => (
             <li
               key={entry.role}
               className={cn(
@@ -191,6 +200,34 @@ export function SetupScreen() {
             </li>
           ))}
         </ul>
+        {seated && (
+          <div className="mt-5">
+            <h3 className="mb-3 text-xs text-muted">{msg.setup.rolePreferenceField}</h3>
+            <div
+              role="radiogroup"
+              aria-label={msg.setup.rolePreferenceField}
+              className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+            >
+              <Choice
+                checked={draft.rolePreference === null}
+                onSelect={() => setDraft((d) => withRolePreference(d, null))}
+                className="min-h-11 px-3 py-2.5 text-sm"
+              >
+                {msg.setup.rolePreferenceRandom}
+              </Choice>
+              {roleTallies.map((entry) => (
+                <Choice
+                  key={entry.role}
+                  checked={draft.rolePreference === entry.role}
+                  onSelect={() => setDraft((d) => withRolePreference(d, entry.role))}
+                  className="min-h-11 px-3 py-2.5 text-sm"
+                >
+                  {msg.roles[entry.role].label}
+                </Choice>
+              ))}
+            </div>
+          </div>
+        )}
       </Field>
 
       <Field label={msg.setup.missionsField}>
