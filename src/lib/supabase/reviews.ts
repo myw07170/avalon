@@ -5,13 +5,24 @@ import { createSupabaseAdminClient } from "./route";
 
 export class ReviewError extends Error {
   constructor(
-    readonly code: "NOT_FOUND" | "CONFIG_MISSING",
+    readonly code: "NOT_FOUND" | "CONFIG_MISSING" | "SCHEMA_MISSING",
     message: string,
   ) {
     super(message);
     this.name = "ReviewError";
   }
 }
+
+const REVIEW_COLUMN_NAMES = [
+  "review_version",
+  "review_snapshot",
+  "player_count",
+  "human_seat",
+  "winner",
+  "win_reason",
+  "good_score",
+  "evil_score",
+] as const;
 
 interface GameSessionReviewRow {
   id: string;
@@ -38,7 +49,12 @@ export async function listGameReviewSummaries(userId: string): Promise<ReviewSum
     .not("review_snapshot", "is", null)
     .order("ended_at", { ascending: false });
 
-  if (error) throw new ReviewError("CONFIG_MISSING", error.message);
+  if (error) {
+    throw new ReviewError(
+      isMissingReviewColumnsError(error) ? "SCHEMA_MISSING" : "CONFIG_MISSING",
+      error.message,
+    );
+  }
   return (data ?? []).flatMap(summaryFromRow);
 }
 
@@ -100,6 +116,37 @@ export async function readGameReview(
   return snapshot;
 }
 
+export async function deleteGameReview({
+  userId,
+  sessionId,
+}: {
+  userId: string;
+  sessionId: string;
+}): Promise<{ id: string }> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("game_sessions")
+    .update({
+      review_version: null,
+      review_snapshot: null,
+      player_count: null,
+      human_seat: null,
+      winner: null,
+      win_reason: null,
+      good_score: null,
+      evil_score: null,
+    })
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .not("review_snapshot", "is", null)
+    .select("id")
+    .single();
+
+  if (error) throw new ReviewError(error.code === "PGRST116" ? "NOT_FOUND" : "CONFIG_MISSING", error.message);
+  if (!data?.id) throw new ReviewError("NOT_FOUND", "review snapshot not found");
+  return { id: data.id };
+}
+
 function summaryFromRow(row: GameSessionReviewRow): ReviewSummary[] {
   if (
     !row.ended_at ||
@@ -126,4 +173,12 @@ function summaryFromRow(row: GameSessionReviewRow): ReviewSummary[] {
       aiCallsUsed: row.ai_calls_used,
     },
   ];
+}
+
+export function isMissingReviewColumnsError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const candidate = error as { code?: unknown; message?: unknown };
+  if (candidate.code !== "42703" || typeof candidate.message !== "string") return false;
+  const message = candidate.message.toLowerCase();
+  return REVIEW_COLUMN_NAMES.some((column) => message.includes(`game_sessions.${column}`));
 }

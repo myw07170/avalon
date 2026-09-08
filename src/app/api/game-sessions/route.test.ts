@@ -13,7 +13,7 @@ const routeMocks = vi.hoisted(() => {
   }
   class MockReviewError extends Error {
     constructor(
-      readonly code: "NOT_FOUND" | "CONFIG_MISSING",
+      readonly code: "NOT_FOUND" | "CONFIG_MISSING" | "SCHEMA_MISSING",
       message: string,
     ) {
       super(message);
@@ -134,5 +134,24 @@ describe("/api/game-sessions", () => {
       reviews: [{ id: "session-1", winner: "GOOD" }],
     });
     expect(routeMocks.listGameReviewSummaries).toHaveBeenCalledWith("user-1");
+  });
+
+  it("历史复盘列未迁移时返回空列表", async () => {
+    routeMocks.requireAuthenticatedUser.mockResolvedValue({
+      userId: "user-1",
+      email: "user@example.com",
+      responseHeaders: new Headers(),
+    });
+    routeMocks.listGameReviewSummaries.mockRejectedValue(
+      new routeMocks.ReviewError(
+        "SCHEMA_MISSING",
+        "column game_sessions.player_count does not exist",
+      ),
+    );
+
+    const response = await get();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ reviews: [] });
   });
 });

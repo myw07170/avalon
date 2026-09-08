@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import * as Dialog from "@radix-ui/react-dialog";
 import * as Popover from "@radix-ui/react-popover";
-import { History, KeyRound, LoaderCircle, LogOut, UserCircle } from "lucide-react";
+import { History, KeyRound, LoaderCircle, LogOut, Trash2, UserCircle } from "lucide-react";
 import { useLocale, useMessages } from "@/i18n/useMessages";
 import { GAME_REVIEWS_CHANGED_EVENT } from "@/lib/credits/events";
 import type { ReviewSummary } from "@/lib/reviews";
@@ -19,6 +20,9 @@ export function AccountSidebar() {
   const [reviews, setReviews] = useState<ReviewSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ReviewSummary | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const refreshReviews = useCallback(async () => {
     setLoading(true);
@@ -48,7 +52,8 @@ export function AccountSidebar() {
       throw new Error(msg.history.unavailable);
     } catch (reviewError) {
       setReviews([]);
-      setError(reviewError instanceof Error ? reviewError.message : msg.history.unavailable);
+      console.warn("[AccountSidebar] 历史复盘读取失败：", reviewError);
+      setError(msg.history.unavailable);
     } finally {
       setLoading(false);
     }
@@ -64,8 +69,33 @@ export function AccountSidebar() {
     };
   }, [refreshReviews]);
 
+  const deleteReview = useCallback(async () => {
+    if (!deleteTarget) return;
+    setDeletingId(deleteTarget.id);
+    setDeleteError(null);
+    try {
+      const response = await fetch(`/api/game-sessions/${deleteTarget.id}/review`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const body: unknown = await response.json().catch(() => null);
+        console.warn("[AccountSidebar] 删除复盘失败：", body);
+        throw new Error(msg.history.deleteFailed);
+      }
+      setReviews((current) => current.filter((review) => review.id !== deleteTarget.id));
+      window.dispatchEvent(new Event(GAME_REVIEWS_CHANGED_EVENT));
+      setDeleteTarget(null);
+    } catch (reviewError) {
+      console.warn("[AccountSidebar] 删除复盘失败：", reviewError);
+      setDeleteError(msg.history.deleteFailed);
+    } finally {
+      setDeletingId(null);
+    }
+  }, [deleteTarget, msg.history.deleteFailed]);
+
   return (
-    <aside className="flex min-h-0 flex-col border-b border-ink-line bg-ink-raised/70 px-4 py-4 lg:sticky lg:top-0 lg:h-dvh lg:border-b-0 lg:border-r">
+    <>
+      <aside className="flex min-h-0 flex-col border-b border-ink-line bg-ink-raised/70 px-4 py-4 lg:sticky lg:top-0 lg:h-dvh lg:border-b-0 lg:border-r">
       <header className="mb-3 flex items-center gap-2 text-muted">
         <History className="size-4" aria-hidden />
         <h2 className="font-display text-xs tracking-[var(--track-3)]">
@@ -91,15 +121,30 @@ export function AccountSidebar() {
               const brief = describeHistoryItem(review, msg, locale);
               return (
                 <li key={review.id}>
-                  <Link
-                    href={`/reviews/${review.id}`}
-                    aria-label={brief.ariaLabel}
-                    className="block rounded-lg border border-ink-line bg-ink px-3 py-2 transition-colors hover:border-brass"
-                  >
-                    <p className="truncate text-sm text-vellum">{brief.title}</p>
-                    <p className="mt-1 truncate text-xs text-muted">{brief.detail}</p>
-                    <p className="tabular mt-1 text-[11px] text-brass">{brief.meta}</p>
-                  </Link>
+                  <div className="flex rounded-lg border border-ink-line bg-ink transition-colors hover:border-brass">
+                    <Link
+                      href={`/reviews/${review.id}`}
+                      aria-label={brief.ariaLabel}
+                      className="min-w-0 flex-1 px-3 py-2"
+                    >
+                      <p className="truncate text-sm text-vellum">{brief.title}</p>
+                      <p className="mt-1 truncate text-xs text-muted">{brief.detail}</p>
+                      <p className="tabular mt-1 text-[11px] text-brass">{brief.meta}</p>
+                    </Link>
+                    <button
+                      type="button"
+                      disabled={deletingId !== null}
+                      onClick={() => {
+                        setDeleteTarget(review);
+                        setDeleteError(null);
+                      }}
+                      aria-label={msg.history.deleteAria(brief.title)}
+                      title={msg.history.delete}
+                      className="m-1 flex size-9 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-ink-raised hover:text-mordred disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Trash2 className="size-4" aria-hidden />
+                    </button>
+                  </div>
                 </li>
               );
             })}
@@ -113,7 +158,87 @@ export function AccountSidebar() {
         creditsLoading={creditsLoading}
         creditsError={creditsError}
       />
-    </aside>
+      </aside>
+
+      <DeleteReviewDialog
+        review={deleteTarget}
+        deleting={deletingId !== null}
+        error={deleteError}
+        onClose={() => {
+          if (deletingId === null) {
+            setDeleteTarget(null);
+            setDeleteError(null);
+          }
+        }}
+        onConfirm={deleteReview}
+      />
+    </>
+  );
+}
+
+function DeleteReviewDialog({
+  review,
+  deleting,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  review: ReviewSummary | null;
+  deleting: boolean;
+  error: string | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const msg = useMessages();
+  const locale = useLocale();
+  const brief = review ? describeHistoryItem(review, msg, locale) : null;
+
+  return (
+    <Dialog.Root open={review !== null} onOpenChange={(open) => !open && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-veil fixed inset-0 z-40 bg-scrim backdrop-blur-sm" />
+        <Dialog.Content
+          className={cn(
+            "dialog-rise fixed left-1/2 top-1/2 z-50 w-[min(24rem,calc(100vw-1rem))]",
+            "-translate-x-1/2 -translate-y-1/2",
+            "rounded-lg border border-ink-line bg-ink-raised p-5 shadow-2xl outline-none",
+          )}
+        >
+          <Dialog.Title className="font-display text-xl tracking-[var(--track-1)] text-vellum">
+            {msg.history.deleteTitle}
+          </Dialog.Title>
+          <Dialog.Description className="mt-2 text-sm leading-relaxed text-muted">
+            {brief ? msg.history.deleteDescription(brief.title) : msg.history.deleteDescription("")}
+          </Dialog.Description>
+
+          {error && (
+            <p role="alert" className="mt-3 text-xs leading-relaxed text-mordred">
+              {error}
+            </p>
+          )}
+
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Dialog.Close asChild>
+              <button
+                type="button"
+                disabled={deleting}
+                className="min-h-11 rounded-lg border border-ink-line px-4 text-sm text-muted transition-colors hover:border-muted hover:text-vellum disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {msg.history.deleteCancel}
+              </button>
+            </Dialog.Close>
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={onConfirm}
+              className="min-h-11 rounded-lg border border-mordred px-4 text-sm text-mordred transition-colors hover:bg-mordred hover:text-vellum disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {deleting ? msg.history.deleting : msg.history.deleteConfirm}
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

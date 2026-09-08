@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { REVIEW_SCHEMA_VERSION, type SavedReviewSnapshot } from "@/lib/reviews";
-import { GET, POST } from "./route";
+import { DELETE, GET, POST } from "./route";
 
 const routeMocks = vi.hoisted(() => {
   class MockAuthError extends Error {}
   class MockReviewError extends Error {
     constructor(
-      readonly code: "NOT_FOUND" | "CONFIG_MISSING",
+      readonly code: "NOT_FOUND" | "CONFIG_MISSING" | "SCHEMA_MISSING",
       message: string,
     ) {
       super(message);
@@ -17,6 +17,7 @@ const routeMocks = vi.hoisted(() => {
     AuthError: MockAuthError,
     ReviewError: MockReviewError,
     requireAuthenticatedUser: vi.fn(),
+    deleteGameReview: vi.fn(),
     readGameReview: vi.fn(),
     saveGameReview: vi.fn(),
   };
@@ -29,6 +30,7 @@ vi.mock("@/lib/supabase/auth", () => ({
 
 vi.mock("@/lib/supabase/reviews", () => ({
   ReviewError: routeMocks.ReviewError,
+  deleteGameReview: routeMocks.deleteGameReview,
   readGameReview: routeMocks.readGameReview,
   saveGameReview: routeMocks.saveGameReview,
 }));
@@ -54,6 +56,7 @@ const snapshot: SavedReviewSnapshot = {
 
 afterEach(() => {
   routeMocks.requireAuthenticatedUser.mockReset();
+  routeMocks.deleteGameReview.mockReset();
   routeMocks.readGameReview.mockReset();
   routeMocks.saveGameReview.mockReset();
 });
@@ -155,6 +158,58 @@ describe("/api/game-sessions/[id]/review", () => {
     );
 
     const response = await GET(new Request("http://localhost/api/game-sessions/session-1/review"), context);
+
+    expect(response.status).toBe(404);
+  });
+
+  it("未登录删除复盘时 401", async () => {
+    routeMocks.requireAuthenticatedUser.mockRejectedValue(new routeMocks.AuthError("no session"));
+
+    const response = await DELETE(
+      new Request("http://localhost/api/game-sessions/session-1/review", { method: "DELETE" }),
+      context,
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({ code: "AUTH_REQUIRED" });
+    expect(routeMocks.deleteGameReview).not.toHaveBeenCalled();
+  });
+
+  it("删除复盘只更新当前用户对应 session", async () => {
+    routeMocks.requireAuthenticatedUser.mockResolvedValue({
+      userId: "user-1",
+      email: "user@example.com",
+      responseHeaders: new Headers(),
+    });
+    routeMocks.deleteGameReview.mockResolvedValue({ id: "session-1" });
+
+    const response = await DELETE(
+      new Request("http://localhost/api/game-sessions/session-1/review", { method: "DELETE" }),
+      context,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ id: "session-1" });
+    expect(routeMocks.deleteGameReview).toHaveBeenCalledWith({
+      userId: "user-1",
+      sessionId: "session-1",
+    });
+  });
+
+  it("其他用户或不存在的复盘删除返回 404", async () => {
+    routeMocks.requireAuthenticatedUser.mockResolvedValue({
+      userId: "user-1",
+      email: "user@example.com",
+      responseHeaders: new Headers(),
+    });
+    routeMocks.deleteGameReview.mockRejectedValue(
+      new routeMocks.ReviewError("NOT_FOUND", "review snapshot not found"),
+    );
+
+    const response = await DELETE(
+      new Request("http://localhost/api/game-sessions/session-1/review", { method: "DELETE" }),
+      context,
+    );
 
     expect(response.status).toBe(404);
   });

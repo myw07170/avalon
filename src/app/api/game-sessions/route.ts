@@ -43,6 +43,10 @@ export async function GET(request: Request): Promise<Response> {
       return fail(401, "AUTH_REQUIRED", "请先登录后再查看历史对局");
     }
     if (error instanceof ReviewError) {
+      if (error.code === "SCHEMA_MISSING") {
+        console.warn("[api/game-sessions] 复盘历史表结构未就绪：", error.message);
+        return Response.json({ reviews: [] }, { headers: auth?.responseHeaders });
+      }
       return fail(503, "CONFIG_MISSING", error.message, auth?.responseHeaders);
     }
     console.error("[api/game-sessions] 读取历史对局失败：", error);
