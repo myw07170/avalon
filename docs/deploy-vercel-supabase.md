@@ -48,10 +48,23 @@ LLM_BASE_URL=
 LLM_EXTRA_BODY=
 LLM_MAX_TOKENS=
 LLM_TIMEOUT_MS=
+LLM_MAX_RETRIES=2
 MAX_AI_CALLS_PER_GAME=250
 ```
 
 `LLM_BASE_URL`, `LLM_EXTRA_BODY`, `LLM_MAX_TOKENS`, and `LLM_TIMEOUT_MS` are optional unless your chosen provider/model needs them.
+
+For Qwen/DashScope-compatible production deployments, prefer:
+
+```dotenv
+LLM_TEMPERATURE=default
+LLM_EXTRA_BODY={"enable_thinking":false}
+LLM_MAX_TOKENS=700
+LLM_TIMEOUT_MS=18000
+LLM_MAX_RETRIES=2
+```
+
+If a Qwen model rejects `enable_thinking`, use `LLM_EXTRA_BODY={"thinking_budget":0}` instead. Do not use OpenAI's `{"reasoning_effort":"minimal"}` with Qwen/DashScope-compatible endpoints.
 
 Vercel only applies environment variable changes to new deployments. After changing Supabase Auth URLs or Vercel env vars, redeploy.
 

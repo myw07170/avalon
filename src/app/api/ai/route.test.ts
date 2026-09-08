@@ -374,6 +374,36 @@ describe("公开部署鉴权与额度", () => {
 });
 
 describe("maxRetries 被服务端夹住", () => {
+  it("provider timeout 会按 Vercel 函数时长预算夹住，避免 60s 硬超时", async () => {
+    configureEnv({ LLM_TIMEOUT_MS: "120000", LLM_MAX_RETRIES: "2" });
+    stubProvider(VOTE_JSON);
+    const timeouts: number[] = [];
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      timeouts.push(ms);
+      return new AbortController().signal;
+    });
+
+    const response = await post(validBody(2));
+
+    expect(response.status).toBe(200);
+    expect(timeouts).toEqual([18_000]);
+  });
+
+  it("不重试时把更多预算留给单次 provider 调用", async () => {
+    configureEnv({ LLM_TIMEOUT_MS: "120000", LLM_MAX_RETRIES: "2" });
+    stubProvider(VOTE_JSON);
+    const timeouts: number[] = [];
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      timeouts.push(ms);
+      return new AbortController().signal;
+    });
+
+    const response = await post(validBody(0));
+
+    expect(response.status).toBe(200);
+    expect(timeouts).toEqual([54_000]);
+  });
+
   it("请求里写 99，实际调用次数仍按 LLM_MAX_RETRIES 算", async () => {
     configureEnv({ LLM_MAX_RETRIES: "1" });
     const provider = stubProvider("永远不合格");

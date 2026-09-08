@@ -19,6 +19,9 @@ import { consumeAiCall, QuotaError } from "@/lib/supabase/quota";
 /** 一次请求内可能跑到 3 次模型调用，平台默认的 10s 不够 */
 export const maxDuration = 60;
 
+/** 留 6s 给鉴权、额度、JSON 解析与响应写回，避免被 Vercel 直接 504 */
+const PROVIDER_TIMEOUT_BUDGET_MS = maxDuration * 1000 - 6000;
+
 /**
  * 错误响应。
  *
@@ -84,10 +87,19 @@ export async function POST(request: Request): Promise<Response> {
     throw error;
   }
 
+  const maxRetries = Math.min(parsed.data.maxRetries, serverMaxRetries);
+  const effectiveTimeoutMs = Math.max(
+    1,
+    Math.floor(PROVIDER_TIMEOUT_BUDGET_MS / (maxRetries + 1)),
+  );
+  if (config.timeoutMs === undefined || config.timeoutMs > effectiveTimeoutMs) {
+    config = { ...config, timeoutMs: effectiveTimeoutMs };
+  }
+
   const req = {
     ...parsed.data,
     // 请求来自浏览器，是不可信输入：不夹一下的话一个 maxRetries: 999 就能烧光预算
-    maxRetries: Math.min(parsed.data.maxRetries, serverMaxRetries),
+    maxRetries,
   };
 
   try {
