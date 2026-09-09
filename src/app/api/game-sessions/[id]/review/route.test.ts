@@ -128,6 +128,34 @@ describe("/api/game-sessions/[id]/review", () => {
     });
   });
 
+  it("保存复盘遇到缺失复盘列时不返回数据库原始错误", async () => {
+    routeMocks.requireAuthenticatedUser.mockResolvedValue({
+      userId: "user-1",
+      email: "user@example.com",
+      responseHeaders: new Headers(),
+    });
+    routeMocks.saveGameReview.mockRejectedValue(
+      new routeMocks.ReviewError(
+        "SCHEMA_MISSING",
+        "Could not find the 'evil_score' column of 'game_sessions' in the schema cache",
+      ),
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/game-sessions/session-1/review", {
+        method: "POST",
+        body: JSON.stringify({ review: snapshot }),
+      }),
+      context,
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      code: "CONFIG_MISSING",
+      error: "对局已结束，但复盘保存失败",
+    });
+  });
+
   it("快照形状不合法时不写库", async () => {
     routeMocks.requireAuthenticatedUser.mockResolvedValue({
       userId: "user-1",

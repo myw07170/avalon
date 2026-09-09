@@ -15,7 +15,9 @@
    - Project URL -> `NEXT_PUBLIC_SUPABASE_URL`
    - publishable key -> `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
    - secret key -> `SUPABASE_SECRET_KEY`
-3. In **SQL Editor**, run [the migration](../supabase/migrations/20260904000000_auth_game_credits.sql).
+3. In **SQL Editor**, run every SQL file in [`supabase/migrations`](../supabase/migrations)
+   in filename order. Do not stop after the first migration; later files add production
+   schema used by released features such as replay history.
 4. In **Authentication > Providers**, enable Email.
 5. In **Authentication > Sign In / Providers**, enable email confirmation.
 6. After the first Vercel deployment, set:

@@ -90,7 +90,12 @@ export async function saveGameReview({
     .select("id")
     .single();
 
-  if (error) throw new ReviewError("CONFIG_MISSING", error.message);
+  if (error) {
+    throw new ReviewError(
+      isMissingReviewColumnsError(error) ? "SCHEMA_MISSING" : "CONFIG_MISSING",
+      error.message,
+    );
+  }
   if (!data?.id) throw new ReviewError("NOT_FOUND", "game session not found");
   return { id: data.id };
 }
@@ -178,7 +183,15 @@ function summaryFromRow(row: GameSessionReviewRow): ReviewSummary[] {
 export function isMissingReviewColumnsError(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
   const candidate = error as { code?: unknown; message?: unknown };
-  if (candidate.code !== "42703" || typeof candidate.message !== "string") return false;
+  if (candidate.code !== "42703" && candidate.code !== "PGRST204") {
+    return false;
+  }
+  if (typeof candidate.message !== "string") return false;
   const message = candidate.message.toLowerCase();
-  return REVIEW_COLUMN_NAMES.some((column) => message.includes(`game_sessions.${column}`));
+  return REVIEW_COLUMN_NAMES.some(
+    (column) =>
+      message.includes(`game_sessions.${column}`) ||
+      message.includes(`'${column}' column of 'game_sessions'`) ||
+      message.includes(`"${column}" column of "game_sessions"`),
+  );
 }

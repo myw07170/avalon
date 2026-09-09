@@ -13,6 +13,8 @@ export const maxDuration = 10;
 const fail = (status: number, code: AiErrorCode, error: string, headers?: Headers): Response =>
   Response.json({ code, error }, { status, headers });
 
+const REVIEW_SAVE_UNAVAILABLE = "对局已结束，但复盘保存失败";
+
 export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> },
@@ -72,7 +74,7 @@ export async function POST(
       return fail(
         error.code === "NOT_FOUND" ? 404 : 503,
         "CONFIG_MISSING",
-        error.message,
+        error.code === "SCHEMA_MISSING" ? REVIEW_SAVE_UNAVAILABLE : error.message,
         auth?.responseHeaders,
       );
     }
