@@ -16,11 +16,11 @@ export const THEMES = ["dark", "light"] as const;
 export type Theme = (typeof THEMES)[number];
 
 /**
- * 【默认恒为 dark，且不做 prefers-color-scheme 探测】与 locale.ts 里
+ * 【默认恒为 light，且不做 prefers-color-scheme 探测】与 locale.ts 里
  * "默认恒为 zh、不做浏览器探测"同一条理由：默认值恒定，SSR 与客户端首帧
- * 永远一致。深色本来也是这一屏的主张——夜里的一张圆桌。
+ * 永远一致。要改默认主题，只改这里这一处。
  */
-export const DEFAULT_THEME: Theme = "dark";
+export const DEFAULT_THEME: Theme = "light";
 
 export const STORAGE_KEY = "avalon.theme";
 

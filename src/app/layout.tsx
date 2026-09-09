@@ -40,13 +40,13 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   /*
-   * 【只给深色那一份，浅色由 ThemeSwitcher 在 effect 里改这条 meta】viewport 与
-   * metadata 一样是 server component 的静态对象，读不到 localStorage 里的主题
-   * （和 title 的处境完全一样，见上）。数组 + media 那种写法绑的是
-   * prefers-color-scheme，而这里的主题是用户点出来的，不是系统给的。
+   * 【默认色跟着 DEFAULT_THEME】viewport 与 metadata 一样是 server component
+   * 的静态对象，读不到 localStorage 里的主题（和 title 的处境完全一样，见上）。
+   * 数组 + media 那种写法绑的是 prefers-color-scheme，而这里的主题是用户点出来的，
+   * 不是系统给的。
    *
-   * 晚一帧变的是浏览器自己那条状态栏，不是页面内容——不值得为它去动
-   * Next 的 metadata 管线。页面本身的零闪烁由 <head> 里那段脚本负责。
+   * 有保存主题时，晚一帧变的是浏览器自己那条状态栏，不是页面内容——不值得为它
+   * 去动 Next 的 metadata 管线。页面本身的零闪烁由 <head> 里那段脚本负责。
    */
   themeColor: THEME_COLOR[DEFAULT_THEME],
 };

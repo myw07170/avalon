@@ -48,8 +48,9 @@
 
 ## 视觉基座
 
-token 定义在 `src/app/globals.css`。**两套主题**：深色是默认，浅色（暖羊皮纸）由
-`<html data-theme="light">` 覆盖同一批变量——组件从头到尾只认 token 名，一行都不用改。
+token 定义在 `src/app/globals.css`。**两套主题**：默认主题由 `src/theme/theme.ts`
+里的 `DEFAULT_THEME` 决定；`@theme` 里的深色基础值与 `<html data-theme="light">`
+覆盖的是同一批变量——组件从头到尾只认 token 名，一行都不用改。
 
 | token | 用途 |
 | --- | --- |

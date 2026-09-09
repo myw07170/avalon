@@ -8,6 +8,7 @@
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { DEFAULT_THEME, THEME_COLOR } from "./theme";
 
 /**
  * 【必须先剥注释】这个文件头顶和 globals.css 里都写着"绝对不能写成 @theme
@@ -43,6 +44,11 @@ function colorTokens(body: string): string[] {
 }
 
 describe("主题 token 的两套取值必须对齐", () => {
+  it("默认主题是浅色", () => {
+    expect(DEFAULT_THEME).toBe("light");
+    expect(THEME_COLOR[DEFAULT_THEME]).toBe(THEME_COLOR.light);
+  });
+
   it("@theme 不能写成 @theme inline", () => {
     // 加上 inline，Tailwind 会把字面值内联进每一条 utility
     // （.bg-ink{background-color:#0e1418} 而不是 var(--color-ink)），
