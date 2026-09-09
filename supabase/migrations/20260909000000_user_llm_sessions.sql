@@ -183,3 +183,5 @@ revoke all on function public.record_ai_call(uuid, uuid) from public, anon, auth
 grant execute on function public.start_user_llm_game_session(uuid, integer) to service_role;
 grant execute on function public.consume_ai_call(uuid, uuid) to service_role;
 grant execute on function public.record_ai_call(uuid, uuid) to service_role;
+
+notify pgrst, 'reload schema';
