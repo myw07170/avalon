@@ -20,6 +20,11 @@ import { buildPrompt } from "./prompt";
 import { PROMPT_COPY } from "./prompt-copy";
 import { safeParseAiPayload } from "./schema";
 import { AiError } from "./errors";
+import {
+  USER_LLM_PROVIDER_BASE_URLS,
+  userLlmConfigSchema,
+  type UserLlmConfig,
+} from "./user-config";
 import { fromDisplaySeatNumber } from "../seat-number";
 import type {
   AiClient,
@@ -79,11 +84,7 @@ export interface LlmProviderConfig {
  * provider → 默认 baseUrl。`LLM_BASE_URL` 覆盖它。
  * 认不出的 provider 直接抛，不猜——猜错的表现是一串 404，比报错难查得多。
  */
-const PROVIDER_BASE_URLS: Record<string, string> = {
-  deepseek: "https://api.deepseek.com/v1",
-  qwen: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-  openai: "https://api.openai.com/v1",
-};
+const PROVIDER_BASE_URLS: Record<string, string> = USER_LLM_PROVIDER_BASE_URLS;
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_RETRIES = 2;
@@ -135,6 +136,36 @@ export function readProviderConfig(): LlmProviderConfig {
   }
 
   return { provider, apiKey, baseUrl, model, temperature, timeoutMs, maxTokens, extraBody };
+}
+
+export function providerConfigFromUserConfig(input: UserLlmConfig): LlmProviderConfig {
+  const parsed = userLlmConfigSchema.safeParse(input);
+  if (!parsed.success) {
+    const detail = parsed.error.issues
+      .map((issue) => `${issue.path.join(".") || "(根)"}: ${issue.message}`)
+      .join("; ");
+    throw new AiError(`用户 LLM 配置不合法：${detail}`, "CONFIG_MISSING");
+  }
+
+  const config = parsed.data;
+  const baseUrl =
+    config.baseUrl ??
+    (config.provider === "custom" ? undefined : USER_LLM_PROVIDER_BASE_URLS[config.provider]);
+  if (!baseUrl) {
+    throw new AiError("用户 LLM 配置缺少 baseUrl", "CONFIG_MISSING", {
+      provider: config.provider,
+    });
+  }
+
+  return {
+    provider: config.provider,
+    apiKey: config.apiKey,
+    baseUrl,
+    model: config.model,
+    temperature: config.temperature,
+    maxTokens: config.maxTokens,
+    extraBody: config.extraBody,
+  };
 }
 
 /** 不许被 LLM_EXTRA_BODY 覆盖的字段：改了它们等于换了个问题去问 */

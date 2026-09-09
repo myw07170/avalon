@@ -2,23 +2,46 @@ import type { AiErrorCode } from "@/lib/ai/errors";
 import { AuthError, requireAuthenticatedUser } from "@/lib/supabase/auth";
 import { QuotaError, startGameSession } from "@/lib/supabase/quota";
 import { listGameReviewSummaries, ReviewError } from "@/lib/supabase/reviews";
+import type { LlmSource } from "@/lib/supabase/quota";
 
 export const maxDuration = 10;
 
 const fail = (status: number, code: AiErrorCode, error: string, headers?: Headers): Response =>
   Response.json({ code, error }, { status, headers });
 
+async function readLlmSource(request: Request): Promise<LlmSource> {
+  const raw = await request.text().catch(() => "");
+  if (!raw.trim()) return "platform";
+
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    throw new QuotaError("CONFIG_MISSING", "请求体不是合法 JSON");
+  }
+
+  if (typeof body !== "object" || body === null || !("llmSource" in body)) {
+    return "platform";
+  }
+  const llmSource = (body as { llmSource?: unknown }).llmSource;
+  if (llmSource === "platform" || llmSource === "user") return llmSource;
+  throw new QuotaError("CONFIG_MISSING", "llmSource 必须是 platform 或 user");
+}
+
 export async function POST(request: Request): Promise<Response> {
   let auth;
   try {
     auth = await requireAuthenticatedUser(request);
-    const gameSessionId = await startGameSession(auth.userId);
+    const gameSessionId = await startGameSession(auth.userId, await readLlmSource(request));
     return Response.json({ gameSessionId }, { headers: auth.responseHeaders });
   } catch (error) {
     if (error instanceof AuthError) {
       return fail(401, "AUTH_REQUIRED", "请先登录后再开始远程模型局");
     }
     if (error instanceof QuotaError) {
+      if (error.message.includes("llmSource") || error.message.includes("JSON")) {
+        return fail(400, "BAD_REQUEST", error.message, auth?.responseHeaders);
+      }
       if (error.code === "QUOTA_EXHAUSTED") {
         return fail(402, error.code, "当前账号没有可用对局额度", auth?.responseHeaders);
       }

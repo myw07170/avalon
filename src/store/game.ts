@@ -52,6 +52,7 @@ import {
   type HumanTurn,
 } from "@/lib/ai/orchestrator";
 import { createRemoteAiClient } from "@/lib/ai/remote";
+import type { UserLlmConfig } from "@/lib/ai/user-config";
 import { PREVIEW_AVATAR_SEED } from "@/lib/seat-avatar";
 import { createSavedReviewSnapshot } from "@/lib/reviews";
 import { GAME_REVIEWS_CHANGED_EVENT } from "@/lib/credits/events";
@@ -413,6 +414,9 @@ export const DEFAULT_AI_MODE: AiMode =
 /** SetupScreen 的 mock 开关。在点「开始」之前改都有效 */
 export const aiModeAtom = atom<AiMode>(DEFAULT_AI_MODE);
 
+/** 用户本次浏览器会话自带的 LLM 配置。只存在内存里，刷新页面即清空。 */
+export const userLlmConfigAtom = atom<UserLlmConfig | null>(null);
+
 /** 发言之间的基准停顿。设 0 全速跑（测试与「快进」用） */
 export const DEFAULT_PACE_MS = 800;
 
@@ -675,11 +679,14 @@ export interface CreateGameInput {
   preferredHumanRole?: Role | null;
   /** 远程模型局的服务端额度 session。mock 局为空 */
   gameSessionId?: string | null;
+  /** 开局时锁定的用户自带 LLM 配置。之后改账户弹窗不影响当前局。 */
+  userLlmConfig?: UserLlmConfig | null;
   /** 缺省只供测试与内部调用回退；正常 UI 始终从静态人设库传入完整数组 */
   personas?: Persona[];
 }
 
 const gameSessionIdAtom = atom<string | null>(null);
+const gameUserLlmConfigAtom = atom<UserLlmConfig | null>(null);
 
 /**
  * 建局，停在 SETUP。
@@ -706,6 +713,7 @@ export const createGameAtom = atom(null, (_get, set, input: CreateGameInput) => 
     set(gameStateAtom, state);
     set(mySeatAtom, humanSeat);
     set(gameSessionIdAtom, input.gameSessionId ?? null);
+    set(gameUserLlmConfigAtom, input.userLlmConfig ?? null);
     set(seatAvatarSeedStateAtom, avatarSeed);
     set(rngAtom, () => rng);
     set(runStatusAtom, "ready");
@@ -743,7 +751,11 @@ export const runGameAtom = atom(null, async (get, set) => {
   // 在途的那次请求仍在跑，服务端也仍在向 provider 要结果（见 remote.ts 的说明）
   const client: AiClient = withThinking(
     get(aiModeAtom) === "remote"
-      ? createRemoteAiClient({ signal, gameSessionId: get(gameSessionIdAtom) })
+      ? createRemoteAiClient({
+          signal,
+          gameSessionId: get(gameSessionIdAtom),
+          userLlmConfig: get(gameUserLlmConfigAtom),
+        })
       : createMockAiClient(rng),
     set,
   );
@@ -877,6 +889,7 @@ export const resetGameAtom = atom(null, (get, set) => {
   set(thinkingAtom, EMPTY_THINKING);
   set(rngAtom, null);
   set(gameSessionIdAtom, null);
+  set(gameUserLlmConfigAtom, null);
   set(runStatusAtom, "idle");
   set(errorSourceAtom, null);
 });

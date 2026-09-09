@@ -45,8 +45,13 @@ vi.mock("@/lib/supabase/reviews", () => ({
   listGameReviewSummaries: routeMocks.listGameReviewSummaries,
 }));
 
-const post = (): Promise<Response> =>
-  POST(new Request("http://localhost/api/game-sessions", { method: "POST" }));
+const post = (body?: unknown): Promise<Response> =>
+  POST(
+    new Request("http://localhost/api/game-sessions", {
+      method: "POST",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
+  );
 const get = (): Promise<Response> => GET(new Request("http://localhost/api/game-sessions"));
 
 afterEach(() => {
@@ -78,7 +83,35 @@ describe("/api/game-sessions", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ gameSessionId: "session-1" });
-    expect(routeMocks.startGameSession).toHaveBeenCalledWith("user-1");
+    expect(routeMocks.startGameSession).toHaveBeenCalledWith("user-1", "platform");
+  });
+
+  it("用户自带 LLM 开局创建 user session，不扣平台局数", async () => {
+    routeMocks.requireAuthenticatedUser.mockResolvedValue({
+      userId: "user-1",
+      email: "user@example.com",
+      responseHeaders: new Headers(),
+    });
+    routeMocks.startGameSession.mockResolvedValue("session-1");
+
+    const response = await post({ llmSource: "user" });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ gameSessionId: "session-1" });
+    expect(routeMocks.startGameSession).toHaveBeenCalledWith("user-1", "user");
+  });
+
+  it("llmSource 不合法时 400", async () => {
+    routeMocks.requireAuthenticatedUser.mockResolvedValue({
+      userId: "user-1",
+      email: "user@example.com",
+      responseHeaders: new Headers(),
+    });
+
+    const response = await post({ llmSource: "other" });
+
+    expect(response.status).toBe(400);
+    expect(routeMocks.startGameSession).not.toHaveBeenCalled();
   });
 
   it("没有对局额度时 402", async () => {

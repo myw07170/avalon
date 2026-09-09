@@ -113,6 +113,28 @@ describe("正常路径", () => {
     const sent = JSON.parse(typeof calls[0]?.body === "string" ? calls[0].body : "{}");
     expect(sent).not.toHaveProperty("gameSessionId");
   });
+
+  it("有用户 LLM 配置时只放进请求体，不写进请求头或 prompt 字段", async () => {
+    const calls: RequestInit[] = [];
+    const fetchFn: FetchFn = (_url, init) => {
+      calls.push(init);
+      return Promise.resolve(Response.json(RESULT));
+    };
+    const userLlmConfig = {
+      provider: "openai" as const,
+      apiKey: "sk-user-secret-key",
+      model: "gpt-test",
+    };
+
+    await createRemoteAiClient({ fetchFn, userLlmConfig }).decide(makeReq());
+
+    expect(calls[0]?.headers).toMatchObject({ "Content-Type": "application/json" });
+    expect(calls[0]?.headers).not.toMatchObject({ Authorization: expect.any(String) });
+    const sent = JSON.parse(typeof calls[0]?.body === "string" ? calls[0].body : "{}");
+    expect(sent.userLlmConfig).toEqual(userLlmConfig);
+    expect(JSON.stringify(sent.view)).not.toContain("sk-user-secret-key");
+    expect(JSON.stringify(sent.persona)).not.toContain("sk-user-secret-key");
+  });
 });
 
 describe("失败就抛，不兜底", () => {

@@ -16,6 +16,8 @@ export class QuotaError extends Error {
   }
 }
 
+export type LlmSource = "platform" | "user";
+
 export function readMaxAiCallsPerGame(): number {
   const raw = process.env.MAX_AI_CALLS_PER_GAME;
   if (!raw) return 250;
@@ -27,12 +29,21 @@ export function readMaxAiCallsPerGame(): number {
   return parsed;
 }
 
-export async function startGameSession(userId: string): Promise<string> {
+export async function startGameSession(
+  userId: string,
+  llmSource: LlmSource = "platform",
+): Promise<string> {
   const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase.rpc("start_game_session", {
-    p_user_id: userId,
-    p_ai_call_limit: readMaxAiCallsPerGame(),
-  });
+  const { data, error } =
+    llmSource === "user"
+      ? await supabase.rpc("start_user_llm_game_session", {
+          p_user_id: userId,
+          p_ai_call_limit: readMaxAiCallsPerGame(),
+        })
+      : await supabase.rpc("start_game_session", {
+          p_user_id: userId,
+          p_ai_call_limit: readMaxAiCallsPerGame(),
+        });
 
   if (error) throw quotaErrorFromSupabase(error.message);
   if (typeof data !== "string") {
@@ -51,6 +62,20 @@ export async function consumeAiCall(userId: string, sessionId: string): Promise<
   if (error) throw quotaErrorFromSupabase(error.message);
   if (typeof data !== "number") {
     throw new QuotaError("CONFIG_MISSING", "consume_ai_call 没有返回调用次数");
+  }
+  return data;
+}
+
+export async function recordUserAiCall(userId: string, sessionId: string): Promise<number> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase.rpc("record_ai_call", {
+    p_user_id: userId,
+    p_session_id: sessionId,
+  });
+
+  if (error) throw quotaErrorFromSupabase(error.message);
+  if (typeof data !== "number") {
+    throw new QuotaError("CONFIG_MISSING", "record_ai_call 没有返回调用次数");
   }
   return data;
 }

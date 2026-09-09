@@ -9,12 +9,17 @@
  * 不要加 `export const runtime`：Edge runtime 在这一版已经废弃，'nodejs' 就是默认值。
  * POST 天然不缓存，也不需要额外声明。
  */
-import { createAiClient, readMaxRetries, readProviderConfig } from "@/lib/ai/client";
+import {
+  createAiClient,
+  providerConfigFromUserConfig,
+  readMaxRetries,
+  readProviderConfig,
+} from "@/lib/ai/client";
 import { AiError, type AiErrorCode } from "@/lib/ai/errors";
 import { aiDecisionRequestSchema } from "@/lib/ai/schema";
 import { AuthError, requireAuthenticatedUser } from "@/lib/supabase/auth";
 import { isAuthRequired } from "@/lib/supabase/config";
-import { consumeAiCall, QuotaError } from "@/lib/supabase/quota";
+import { consumeAiCall, QuotaError, recordUserAiCall } from "@/lib/supabase/quota";
 
 /** 一次请求内可能跑到 3 次模型调用，平台默认的 10s 不够 */
 export const maxDuration = 60;
@@ -73,10 +78,14 @@ export async function POST(request: Request): Promise<Response> {
     return fail(400, "BAD_REQUEST", `请求体不合法：${detail}`, responseHeaders);
   }
 
+  const { userLlmConfig, ...requestData } = parsed.data;
+
   let config;
   let serverMaxRetries;
   try {
-    config = readProviderConfig();
+    config = userLlmConfig
+      ? providerConfigFromUserConfig(userLlmConfig)
+      : readProviderConfig();
     serverMaxRetries = readMaxRetries();
   } catch (error) {
     if (error instanceof AiError) {
@@ -97,14 +106,18 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const req = {
-    ...parsed.data,
+    ...requestData,
     // 请求来自浏览器，是不可信输入：不夹一下的话一个 maxRetries: 999 就能烧光预算
     maxRetries,
   };
 
   try {
     if (authenticatedUserId && gameSessionId) {
-      await consumeAiCall(authenticatedUserId, gameSessionId);
+      if (userLlmConfig) {
+        await recordUserAiCall(authenticatedUserId, gameSessionId);
+      } else {
+        await consumeAiCall(authenticatedUserId, gameSessionId);
+      }
     }
     return Response.json(await createAiClient(config).decide(req), { headers: responseHeaders });
   } catch (error) {

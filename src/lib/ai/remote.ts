@@ -8,6 +8,7 @@
  * "模型说了胡话"这一种情况，把网络故障也算进 fallback 率，那个指标就废了。
  */
 import { AiError, type AiErrorCode } from "./errors";
+import type { UserLlmConfig } from "./user-config";
 import type {
   AiClient,
   AiDecisionKind,
@@ -23,6 +24,8 @@ export interface RemoteAiClientOptions {
   endpoint?: string;
   /** 服务端创建的对局额度 session；只放 header，不进入 prompt schema */
   gameSessionId?: string | null;
+  /** 用户本次会话自带的 LLM 配置；只随 /api/ai 请求体走，不写 header */
+  userLlmConfig?: UserLlmConfig | null;
   /** 注入点：测试里不发真网络 */
   fetchFn?: FetchFn;
   /**
@@ -52,7 +55,10 @@ export function createRemoteAiClient(options: RemoteAiClientOptions = {}): AiCli
         response = await fetchFn(endpoint, {
           method: "POST",
           headers,
-          body: JSON.stringify(req),
+          body: JSON.stringify({
+            ...req,
+            ...(options.userLlmConfig ? { userLlmConfig: options.userLlmConfig } : {}),
+          }),
           // 没配 signal 时整个字段不出现，而不是发个 undefined
           ...(options.signal ? { signal: options.signal } : {}),
         });

@@ -24,6 +24,7 @@ const supabaseMocks = vi.hoisted(() => {
     QuotaError: MockQuotaError,
     requireAuthenticatedUser: vi.fn(),
     consumeAiCall: vi.fn(),
+    recordUserAiCall: vi.fn(),
   };
 });
 
@@ -39,6 +40,7 @@ vi.mock("@/lib/supabase/auth", () => ({
 vi.mock("@/lib/supabase/quota", () => ({
   QuotaError: supabaseMocks.QuotaError,
   consumeAiCall: supabaseMocks.consumeAiCall,
+  recordUserAiCall: supabaseMocks.recordUserAiCall,
 }));
 
 // ---------------------------------------------------------------------------
@@ -115,10 +117,11 @@ function configureEnv(overrides: Record<string, string> = {}): void {
 }
 
 /** 假的上游。返回捕获到的调用次数 */
-function stubProvider(content: string, status = 200): { calls: number } {
-  const state = { calls: 0 };
-  vi.stubGlobal("fetch", () => {
+function stubProvider(content: string, status = 200): { calls: number; requests: RequestInit[] } {
+  const state = { calls: 0, requests: [] as RequestInit[] };
+  vi.stubGlobal("fetch", (_url: string, init: RequestInit) => {
     state.calls += 1;
+    state.requests.push(init);
     if (status !== 200) {
       return Promise.resolve(new Response("上游的原始错误体", { status }));
     }
@@ -133,6 +136,7 @@ afterEach(() => {
   supabaseMocks.authRequired = false;
   supabaseMocks.requireAuthenticatedUser.mockReset();
   supabaseMocks.consumeAiCall.mockReset();
+  supabaseMocks.recordUserAiCall.mockReset();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -350,6 +354,64 @@ describe("公开部署鉴权与额度", () => {
     expect(response.status).toBe(200);
     expect(supabaseMocks.consumeAiCall).toHaveBeenCalledWith("user-1", "session-1");
     expect(provider.calls).toBe(1);
+  });
+
+  it("用户自带 LLM 时不读平台模型配置，只记录调用次数", async () => {
+    supabaseMocks.authRequired = true;
+    supabaseMocks.requireAuthenticatedUser.mockResolvedValue({
+      userId: "user-1",
+      email: "user@example.com",
+      responseHeaders: new Headers(),
+    });
+    supabaseMocks.recordUserAiCall.mockResolvedValue(1);
+    const provider = stubProvider(VOTE_JSON);
+    const userLlmConfig = {
+      provider: "openai",
+      apiKey: "sk-user-secret-key",
+      model: "gpt-test",
+    };
+
+    const response = await post(
+      { ...validBody(), userLlmConfig },
+      { "X-Game-Session-Id": "session-1" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(supabaseMocks.recordUserAiCall).toHaveBeenCalledWith("user-1", "session-1");
+    expect(supabaseMocks.consumeAiCall).not.toHaveBeenCalled();
+    expect(provider.calls).toBe(1);
+    expect(provider.requests[0]?.headers).toMatchObject({
+      Authorization: "Bearer sk-user-secret-key",
+    });
+  });
+
+  it("用户自带 LLM 被 provider 拒绝时不泄漏用户 key 或上游原始响应体", async () => {
+    supabaseMocks.authRequired = true;
+    supabaseMocks.requireAuthenticatedUser.mockResolvedValue({
+      userId: "user-1",
+      email: "user@example.com",
+      responseHeaders: new Headers(),
+    });
+    supabaseMocks.recordUserAiCall.mockResolvedValue(1);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    stubProvider("", 401);
+
+    const response = await post(
+      {
+        ...validBody(),
+        userLlmConfig: {
+          provider: "openai",
+          apiKey: "sk-user-secret-key",
+          model: "gpt-test",
+        },
+      },
+      { "X-Game-Session-Id": "session-1" },
+    );
+
+    expect(response.status).toBe(502);
+    const text = await response.text();
+    expect(text).not.toContain("sk-user-secret-key");
+    expect(text).not.toContain("上游的原始错误体");
   });
 
   it("单局 AI 调用达到上限时 429，且不请求 provider", async () => {

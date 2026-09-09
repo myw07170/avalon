@@ -18,6 +18,7 @@ import {
 import {
   createAiClient,
   extractJson,
+  providerConfigFromUserConfig,
   readMaxRetries,
   readProviderConfig,
   type FetchFn,
@@ -436,6 +437,55 @@ describe("LLM_EXTRA_BODY", () => {
       vi.stubEnv("LLM_EXTRA_BODY", bad);
       expect(() => readProviderConfig(), bad).toThrow(AiError);
     }
+  });
+});
+
+describe("用户自带 LLM 配置", () => {
+  it("provider 默认 baseUrl 与请求字段按现有协议发送", async () => {
+    const provider = fakeProvider([{ content: VOTE_JSON }]);
+    const config = {
+      ...providerConfigFromUserConfig({
+        provider: "openai",
+        apiKey: "sk-user-secret-key",
+        model: "gpt-test",
+        temperature: null,
+        maxTokens: 120,
+        extraBody: { reasoning_effort: "minimal" },
+      }),
+      fetchFn: provider.fetchFn,
+    };
+
+    await createAiClient(config).decide(makeReq(build(), 2, "VOTE"));
+
+    expect(provider.calls[0]?.url).toBe("https://api.openai.com/v1/chat/completions");
+    expect(provider.calls[0]?.init.headers).toMatchObject({
+      Authorization: "Bearer sk-user-secret-key",
+    });
+    expect(provider.calls[0]?.body.model).toBe("gpt-test");
+    expect(provider.calls[0]?.body).not.toHaveProperty("temperature");
+    expect(provider.calls[0]?.body.max_tokens).toBe(120);
+    expect(provider.calls[0]?.body).toMatchObject({ reasoning_effort: "minimal" });
+  });
+
+  it("custom provider 必须显式提供 baseUrl", () => {
+    expect(() =>
+      providerConfigFromUserConfig({
+        provider: "custom",
+        apiKey: "sk-user-secret-key",
+        model: "gpt-test",
+      }),
+    ).toThrow(AiError);
+  });
+
+  it("extraBody 不能覆盖 model 与 messages", () => {
+    expect(() =>
+      providerConfigFromUserConfig({
+        provider: "openai",
+        apiKey: "sk-user-secret-key",
+        model: "gpt-test",
+        extraBody: { model: "other" },
+      }),
+    ).toThrow(AiError);
   });
 });
 

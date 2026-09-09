@@ -16,7 +16,13 @@ import { isClientAuthRequired } from "@/lib/supabase/config";
 import { cn } from "@/lib/utils";
 import { assignPersonas } from "@/lib/persona-catalog";
 import { createSeatAvatarSeed, PREVIEW_AVATAR_SEED } from "@/lib/seat-avatar";
-import { aiModeAtom, createGameAtom, errorAtom, setRawErrorAtom } from "@/store/game";
+import {
+  aiModeAtom,
+  createGameAtom,
+  errorAtom,
+  setRawErrorAtom,
+  userLlmConfigAtom,
+} from "@/store/game";
 import { SeatRing } from "./SeatRing";
 import {
   effectiveRolePreference,
@@ -44,6 +50,7 @@ interface SetupScreenProps {
 export function SetupScreen({ draft, onDraftChange }: SetupScreenProps) {
   const [starting, setStarting] = useState(false);
   const aiMode = useAtomValue(aiModeAtom);
+  const userLlmConfig = useAtomValue(userLlmConfigAtom);
   const createGame = useSetAtom(createGameAtom);
   const setRawError = useSetAtom(setRawErrorAtom);
   const storeError = useAtomValue(errorAtom);
@@ -82,7 +89,10 @@ export function SetupScreen({ draft, onDraftChange }: SetupScreenProps) {
     try {
       const gameSessionId =
         aiMode === "remote" && isClientAuthRequired
-          ? await requestGameSession(msg.setup.startRemoteFailed)
+          ? await requestGameSession(
+              userLlmConfig ? "user" : "platform",
+              msg.setup.startRemoteFailed,
+            )
           : null;
       createGame({
         config,
@@ -92,6 +102,7 @@ export function SetupScreen({ draft, onDraftChange }: SetupScreenProps) {
           humanSeat === null ? null : effectiveRolePreference(draft, preview.roles),
         personas,
         gameSessionId,
+        userLlmConfig: aiMode === "remote" ? userLlmConfig : null,
       });
     } catch (error) {
       setRawError(error instanceof Error ? error.message : msg.setup.startRemoteFailed);
@@ -225,8 +236,15 @@ export function SetupScreen({ draft, onDraftChange }: SetupScreenProps) {
   );
 }
 
-async function requestGameSession(fallbackMessage: string): Promise<string> {
-  const response = await fetch("/api/game-sessions", { method: "POST" });
+async function requestGameSession(
+  llmSource: "platform" | "user",
+  fallbackMessage: string,
+): Promise<string> {
+  const response = await fetch("/api/game-sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ llmSource }),
+  });
   const body: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {

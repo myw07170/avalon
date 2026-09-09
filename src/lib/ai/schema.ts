@@ -27,6 +27,11 @@ import type {
   Persona,
   PlayerView,
 } from "../game/types";
+import { userLlmConfigSchema, type UserLlmConfig } from "./user-config";
+
+export type AiDecisionHttpRequest = AiDecisionRequest<AiDecisionKind> & {
+  userLlmConfig?: UserLlmConfig;
+};
 
 /** 座位号。范围合不合法（有没有这个座位）归 assertLegal 管 */
 export const playerIdSchema = z.number().int().nonnegative();
@@ -170,4 +175,5 @@ export const aiDecisionRequestSchema = z.object({
    * 缺了是编译错误——两件事不矛盾：默认值只在**不可信输入**这一侧存在。
    */
   locale: localeSchema.default("zh"),
-}) satisfies z.ZodType<AiDecisionRequest<AiDecisionKind>>;
+  userLlmConfig: userLlmConfigSchema.optional(),
+}) satisfies z.ZodType<AiDecisionHttpRequest>;

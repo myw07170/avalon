@@ -44,6 +44,7 @@ import {
   thinkingAtom,
   toggleSeatAtom,
   togglePauseAtom,
+  userLlmConfigAtom,
   viewAtom,
 } from "./game";
 
@@ -225,6 +226,28 @@ describe("建局", () => {
     expect(view?.selfRole).toBe("MERLIN");
     expect(Object.keys(view ?? {})).not.toContain("preferredHumanRole");
     expect(JSON.stringify(view)).not.toContain("rolePreference");
+  });
+
+  it("用户自带 LLM 配置只作为会话态保存，重开不清账户配置", () => {
+    const store = createStore();
+    const userLlmConfig = {
+      provider: "openai" as const,
+      apiKey: "sk-user",
+      model: "gpt-test",
+    };
+    store.set(userLlmConfigAtom, userLlmConfig);
+    store.set(createGameAtom, {
+      config: createConfig(5, { seed: 1 }),
+      avatarSeed: AVATAR_SEED,
+      humanSeat: SEAT,
+      gameSessionId: "session-1",
+      userLlmConfig,
+    });
+
+    store.set(resetGameAtom);
+
+    expect(store.get(userLlmConfigAtom)).toEqual(userLlmConfig);
+    expect(store.get(gameStateAtom)).toBeNull();
   });
 });
 

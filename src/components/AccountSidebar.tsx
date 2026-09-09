@@ -13,6 +13,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import * as Popover from "@radix-ui/react-popover";
 import {
   Bot,
+  Check,
   Dice5,
   History,
   KeyRound,
@@ -23,17 +24,24 @@ import {
   Radio,
   Trash2,
   UserCircle,
+  XCircle,
 } from "lucide-react";
 import { useLocale, useMessages } from "@/i18n/useMessages";
 import { GAME_REVIEWS_CHANGED_EVENT } from "@/lib/credits/events";
+import { USER_LLM_PROVIDERS, type UserLlmProvider } from "@/lib/ai/user-config";
 import { ROLE_ORDER, type Role } from "@/lib/game";
 import type { ReviewSummary } from "@/lib/reviews";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { aiModeAtom, type AiMode } from "@/store/game";
+import { aiModeAtom, userLlmConfigAtom, type AiMode } from "@/store/game";
 import { useAuthSession } from "./AuthGate";
 import { PersonaLibrary } from "./PersonaLibrary";
-import { describeHistoryItem } from "./account-sidebar-model";
+import {
+  describeHistoryItem,
+  draftFromUserLlmConfig,
+  parseUserLlmConfigDraft,
+  type UserLlmConfigDraft,
+} from "./account-sidebar-model";
 import {
   aiSeatsOf,
   clearPersonaSelections,
@@ -782,12 +790,22 @@ function AccountDialog({
   const [busy, setBusy] = useState<"password" | "signOut" | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [userLlmConfig, setUserLlmConfig] = useAtom(userLlmConfigAtom);
+  const [llmDraft, setLlmDraft] = useState<UserLlmConfigDraft>(() =>
+    draftFromUserLlmConfig(userLlmConfig),
+  );
+  const [llmError, setLlmError] = useState<string | null>(null);
 
   const creditLine = credits
     ? msg.auth.creditsTotal(credits.totalGamesRemaining)
     : creditsLoading
       ? msg.auth.creditsLoading
       : creditsError ?? msg.auth.creditsUnavailable;
+
+  function updateLlmDraft(patch: Partial<UserLlmConfigDraft>) {
+    setLlmDraft((current) => ({ ...current, ...patch }));
+    setLlmError(null);
+  }
 
   async function requestPasswordReset() {
     setBusy("password");
@@ -811,6 +829,33 @@ function AccountDialog({
     setError(null);
     await createSupabaseBrowserClient().auth.signOut();
     setBusy(null);
+  }
+
+  function saveUserLlmConfig() {
+    const parsed = parseUserLlmConfigDraft(llmDraft);
+    if (!parsed.success) {
+      setLlmError(msg.auth.userLlm.error[parsed.error]);
+      return;
+    }
+    setUserLlmConfig(parsed.data);
+    setLlmError(null);
+    setNotice(msg.auth.userLlm.saved);
+    setError(null);
+  }
+
+  function disableUserLlmConfig() {
+    setUserLlmConfig(null);
+    setLlmError(null);
+    setNotice(msg.auth.userLlm.disabled);
+    setError(null);
+  }
+
+  function clearUserLlmDraft() {
+    setLlmDraft(draftFromUserLlmConfig(null));
+    setUserLlmConfig(null);
+    setLlmError(null);
+    setNotice(msg.auth.userLlm.cleared);
+    setError(null);
   }
 
   return (
@@ -841,9 +886,9 @@ function AccountDialog({
         <Dialog.Overlay className="dialog-veil fixed inset-0 z-40 bg-scrim backdrop-blur-sm" />
         <Dialog.Content
           className={cn(
-            "dialog-rise fixed left-1/2 top-1/2 z-50 w-[min(24rem,calc(100vw-1rem))]",
+            "dialog-rise fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-1rem)] w-[min(32rem,calc(100vw-1rem))]",
             "-translate-x-1/2 -translate-y-1/2",
-            "rounded-lg border border-ink-line bg-ink-raised p-5 text-sm shadow-2xl outline-none",
+            "overflow-y-auto rounded-lg border border-ink-line bg-ink-raised p-5 text-sm shadow-2xl outline-none",
           )}
         >
           <div className="pr-12">
@@ -887,6 +932,146 @@ function AccountDialog({
               <p className="text-xs text-muted">{creditsError ?? msg.auth.creditsUnavailable}</p>
             )}
           </div>
+
+          <section className="mt-4 rounded-lg border border-ink-line bg-ink px-3 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm text-vellum">{msg.auth.userLlm.title}</h3>
+                <p className="mt-1 text-xs leading-relaxed text-muted">
+                  {msg.auth.userLlm.description}
+                </p>
+              </div>
+              <span
+                className={cn(
+                  "shrink-0 rounded-full border px-2 py-1 text-[11px]",
+                  userLlmConfig
+                    ? "border-loyal/50 text-loyal"
+                    : "border-ink-line text-muted",
+                )}
+              >
+                {userLlmConfig ? msg.auth.userLlm.enabled : msg.auth.userLlm.off}
+              </span>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              <label className="block text-xs text-muted">
+                {msg.auth.userLlm.provider}
+                <select
+                  className="mt-1.5 w-full rounded-lg border border-ink-line bg-ink-raised px-3 py-2 text-sm text-vellum outline-none transition-colors focus:border-brass"
+                  value={llmDraft.provider}
+                  onChange={(event) =>
+                    updateLlmDraft({ provider: event.target.value as UserLlmProvider })
+                  }
+                >
+                  {USER_LLM_PROVIDERS.map((provider) => (
+                    <option key={provider} value={provider}>
+                      {msg.auth.userLlm.providerLabel[provider]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block text-xs text-muted">
+                {msg.auth.userLlm.apiKey}
+                <input
+                  className="mt-1.5 w-full rounded-lg border border-ink-line bg-ink-raised px-3 py-2 text-sm text-vellum outline-none transition-colors focus:border-brass"
+                  type="password"
+                  autoComplete="off"
+                  value={llmDraft.apiKey}
+                  onChange={(event) => updateLlmDraft({ apiKey: event.target.value })}
+                />
+              </label>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-xs text-muted">
+                  {msg.auth.userLlm.model}
+                  <input
+                    className="mt-1.5 w-full rounded-lg border border-ink-line bg-ink-raised px-3 py-2 text-sm text-vellum outline-none transition-colors focus:border-brass"
+                    value={llmDraft.model}
+                    onChange={(event) => updateLlmDraft({ model: event.target.value })}
+                    placeholder={msg.auth.userLlm.modelPlaceholder}
+                  />
+                </label>
+                <label className="block text-xs text-muted">
+                  {msg.auth.userLlm.baseUrl}
+                  <input
+                    className="mt-1.5 w-full rounded-lg border border-ink-line bg-ink-raised px-3 py-2 text-sm text-vellum outline-none transition-colors focus:border-brass"
+                    value={llmDraft.baseUrl}
+                    onChange={(event) => updateLlmDraft({ baseUrl: event.target.value })}
+                    placeholder={msg.auth.userLlm.baseUrlPlaceholder}
+                  />
+                </label>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-xs text-muted">
+                  {msg.auth.userLlm.temperature}
+                  <input
+                    className="mt-1.5 w-full rounded-lg border border-ink-line bg-ink-raised px-3 py-2 text-sm text-vellum outline-none transition-colors focus:border-brass"
+                    value={llmDraft.temperature}
+                    onChange={(event) => updateLlmDraft({ temperature: event.target.value })}
+                    placeholder={msg.auth.userLlm.temperaturePlaceholder}
+                  />
+                </label>
+                <label className="block text-xs text-muted">
+                  {msg.auth.userLlm.maxTokens}
+                  <input
+                    className="mt-1.5 w-full rounded-lg border border-ink-line bg-ink-raised px-3 py-2 text-sm text-vellum outline-none transition-colors focus:border-brass"
+                    inputMode="numeric"
+                    value={llmDraft.maxTokens}
+                    onChange={(event) => updateLlmDraft({ maxTokens: event.target.value })}
+                    placeholder={msg.auth.userLlm.maxTokensPlaceholder}
+                  />
+                </label>
+              </div>
+
+              <label className="block text-xs text-muted">
+                {msg.auth.userLlm.extraBody}
+                <textarea
+                  className="mt-1.5 min-h-20 w-full resize-y rounded-lg border border-ink-line bg-ink-raised px-3 py-2 font-mono text-xs text-vellum outline-none transition-colors focus:border-brass"
+                  value={llmDraft.extraBody}
+                  onChange={(event) => updateLlmDraft({ extraBody: event.target.value })}
+                  placeholder={msg.auth.userLlm.extraBodyPlaceholder}
+                />
+              </label>
+            </div>
+
+            <p className="mt-3 text-xs leading-relaxed text-muted">
+              {msg.auth.userLlm.sessionOnly}
+            </p>
+            {llmError && (
+              <p role="alert" className="mt-3 text-xs leading-relaxed text-mordred">
+                {llmError}
+              </p>
+            )}
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+              <button
+                type="button"
+                onClick={saveUserLlmConfig}
+                className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-brass px-3 text-sm text-vellum transition-colors hover:bg-brass hover:text-on-brass"
+              >
+                <Check className="size-4" aria-hidden />
+                {msg.auth.userLlm.save}
+              </button>
+              <button
+                type="button"
+                onClick={disableUserLlmConfig}
+                disabled={!userLlmConfig}
+                className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-ink-line px-3 text-sm text-muted transition-colors hover:border-muted hover:text-vellum disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <XCircle className="size-4" aria-hidden />
+                {msg.auth.userLlm.disable}
+              </button>
+              <button
+                type="button"
+                onClick={clearUserLlmDraft}
+                className="min-h-10 rounded-lg border border-ink-line px-3 text-sm text-muted transition-colors hover:border-mordred hover:text-mordred"
+              >
+                {msg.auth.userLlm.clear}
+              </button>
+            </div>
+          </section>
 
           {notice && <p className="mt-3 text-xs leading-relaxed text-loyal">{notice}</p>}
           {error && (
