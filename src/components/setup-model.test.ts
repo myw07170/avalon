@@ -5,6 +5,7 @@ import {
   aiSeatsOf,
   clearPersonaSelections,
   defaultDraft,
+  effectiveRolePreference,
   finalizeConfig,
   normalizePersonaSelections,
   presetOptionIndex,
@@ -164,7 +165,7 @@ describe("草稿变更", () => {
     const next = withPlayerCount(draft, 6);
     expect(next.humanSeat).toBe(0);
     expect(next.evilOptionIndex).toBe(presetOptionIndex(6));
-    expect(next.rolePreference).toBeNull();
+    expect(next.rolePreference).toBe("MINION");
     expect(next.personaSelections).toEqual({});
     expect(previewSetup(next).canStart).toBe(true);
   });
@@ -272,22 +273,35 @@ describe("草稿变更", () => {
     expect(withEvilOption(defaultDraft(7), -1).evilOptionIndex).toBe(0);
   });
 
-  it("角色偏好默认随机，也只能选当前牌池里存在的角色", () => {
+  it("角色偏好默认随机，也允许选择当前牌池里不存在的角色", () => {
     expect(defaultDraft().rolePreference).toBeNull();
 
     const draft = withRolePreference(defaultDraft(7), "MERLIN");
     expect(draft.rolePreference).toBe("MERLIN");
     // 默认 7 人局是奥伯伦自由位，莫德雷德不在牌池里
-    expect(withRolePreference(defaultDraft(7), "MORDRED").rolePreference).toBeNull();
+    expect(withRolePreference(defaultDraft(7), "MORDRED").rolePreference).toBe("MORDRED");
   });
 
-  it("坏人自由位变化后会清掉不再存在的角色偏好", () => {
+  it("坏人自由位变化后保留不再存在的角色偏好", () => {
     const draft = withRolePreference(defaultDraft(10), "MORDRED");
     expect(draft.rolePreference).toBe("MORDRED");
 
     const next = withEvilOption(draft, 2); // 奥伯伦 + 爪牙，没有莫德雷德
     expect(previewSetup(next).selectedEvil).toEqual(["OBERON", "MINION"]);
-    expect(next.rolePreference).toBeNull();
+    expect(next.rolePreference).toBe("MORDRED");
+  });
+
+  it("有效角色偏好只在当前牌池包含该角色时传给引擎", () => {
+    const preferred = withRolePreference(defaultDraft(7), "MORDRED");
+    const absent = previewSetup(preferred);
+    expect(absent.roles).not.toContain("MORDRED");
+    expect(effectiveRolePreference(preferred, absent.roles)).toBeNull();
+
+    const mordredIndex = getEvilOptions(7).findIndex((option) => option[0] === "MORDRED");
+    const presentDraft = withEvilOption(preferred, mordredIndex);
+    const present = previewSetup(presentDraft);
+    expect(present.roles).toContain("MORDRED");
+    expect(effectiveRolePreference(presentDraft, present.roles)).toBe("MORDRED");
   });
 });
 

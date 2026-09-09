@@ -7,8 +7,8 @@
  * previewSetup 的返回值画出来。那些函数因此能用 .ts 测试覆盖，
  * 不必为一屏表单引入 jsdom。
  */
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { useState } from "react";
+import { useAtomValue, useSetAtom } from "jotai";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import { useLocale, useMessages } from "@/i18n/useMessages";
 import { MAX_PLAYERS, MIN_PLAYERS, type MissionConfig } from "@/lib/game";
 import { GAME_CREDITS_CHANGED_EVENT } from "@/lib/credits/events";
@@ -18,19 +18,14 @@ import { assignPersonas } from "@/lib/persona-catalog";
 import { createSeatAvatarSeed, PREVIEW_AVATAR_SEED } from "@/lib/seat-avatar";
 import { aiModeAtom, createGameAtom, errorAtom, setRawErrorAtom } from "@/store/game";
 import { SeatRing } from "./SeatRing";
-import { PersonaLibrary } from "./PersonaLibrary";
 import {
-  aiSeatsOf,
-  clearPersonaSelections,
-  defaultDraft,
+  effectiveRolePreference,
   finalizeConfig,
   previewSetup,
   tallyRoles,
   withEvilOption,
   withHumanSeat,
-  withPersonaSelection,
   withPlayerCount,
-  withRolePreference,
   withSeat,
   withSpectator,
   type SetupDraft,
@@ -41,10 +36,14 @@ const PLAYER_COUNTS = Array.from(
   (_, i) => MIN_PLAYERS + i,
 );
 
-export function SetupScreen() {
-  const [draft, setDraft] = useState<SetupDraft>(defaultDraft);
+interface SetupScreenProps {
+  draft: SetupDraft;
+  onDraftChange: Dispatch<SetStateAction<SetupDraft>>;
+}
+
+export function SetupScreen({ draft, onDraftChange }: SetupScreenProps) {
   const [starting, setStarting] = useState(false);
-  const [aiMode, setAiMode] = useAtom(aiModeAtom);
+  const aiMode = useAtomValue(aiModeAtom);
   const createGame = useSetAtom(createGameAtom);
   const setRawError = useSetAtom(setRawErrorAtom);
   const storeError = useAtomValue(errorAtom);
@@ -66,7 +65,7 @@ export function SetupScreen() {
 
     // 【种子在点击时才取】放进 useState 初值会让 SSR 与 hydration 对不上。
     // 不显式传的话 createConfig 的缺省 seed 是 0，每一局发的牌完全一样。
-    const config = finalizeConfig(draft, Date.now() >>> 0);
+    const config = finalizeConfig(draft, createSeatAvatarSeed());
     // 头像 seed 与发牌 seed 完全独立。
     const avatarSeed = createSeatAvatarSeed();
     const humanSeat = draft.humanSeat;
@@ -89,7 +88,8 @@ export function SetupScreen() {
         config,
         avatarSeed,
         humanSeat,
-        preferredHumanRole: humanSeat === null ? null : draft.rolePreference,
+        preferredHumanRole:
+          humanSeat === null ? null : effectiveRolePreference(draft, preview.roles),
         personas,
         gameSessionId,
       });
@@ -115,7 +115,7 @@ export function SetupScreen() {
             <Choice
               key={count}
               checked={count === draft.playerCount}
-              onSelect={() => setDraft((d) => withPlayerCount(d, count))}
+              onSelect={() => onDraftChange((d) => withPlayerCount(d, count))}
               className="tabular flex-1 py-2.5 text-base"
             >
               {count}
@@ -124,64 +124,34 @@ export function SetupScreen() {
         </div>
       </Field>
 
-      <RoundTable
-        playerCount={draft.playerCount}
-        humanSeat={draft.humanSeat}
-        good={preview.split.good}
-        evil={preview.split.evil}
-        onSeat={(id) => setDraft((d) => withHumanSeat(d, id))}
-        onToggleSpectate={() =>
-          setDraft((d) => (d.humanSeat === null ? withSeat(d) : withSpectator(d)))
-        }
-      />
-
-      <Field label={msg.setup.personaField}>
-        <PersonaLibrary
-          aiSeats={aiSeatsOf(draft)}
-          selections={draft.personaSelections}
-          onSelect={(seat, personaId) =>
-            setDraft((current) => withPersonaSelection(current, seat, personaId))
-          }
-          onClearAll={() => setDraft(clearPersonaSelections)}
-        />
-      </Field>
-
-      <Field label={msg.setup.freeEvilSlots(preview.freeEvilSlots)}>
-        {preview.freeEvilSlots === 0 ? (
-          // rules.md §3.2.1：5、6 人局没有任何可调空间，
-          // 如实说明，不要渲染一个点了没反应的编辑器
-          <p className="rounded-lg border border-ink-line bg-ink-raised px-4 py-3 text-sm text-muted">
-            {msg.setup.fixedEvil}
-          </p>
-        ) : (
-          <>
-            <div
-              role="radiogroup"
-              aria-label={msg.setup.freeEvilAria}
-              className="grid grid-cols-2 gap-2 sm:grid-cols-4"
-            >
-              {preview.evilOptions.map((option, index) => (
-                <Choice
-                  key={option.join("+")}
-                  checked={index === draft.evilOptionIndex}
-                  onSelect={() => setDraft((d) => withEvilOption(d, index))}
-                  className="min-h-11 px-3 py-2.5 text-sm"
-                >
-                  {option.map((role) => msg.roles[role].label).join(" + ")}
-                </Choice>
-              ))}
-            </div>
-            <ul className="mt-3 space-y-1.5">
-              {dedupe(preview.selectedEvil).map((role) => (
-                <li key={role} className="text-xs leading-relaxed text-muted">
-                  <span className="text-mordred">{msg.roles[role].label}</span>
-                  {msg.gameOver.opinionLine("", msg.roles[role].ability)}
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </Field>
+      {preview.freeEvilSlots > 0 && (
+        <Field label={msg.setup.freeEvilSlots(preview.freeEvilSlots)}>
+          <div
+            role="radiogroup"
+            aria-label={msg.setup.freeEvilAria}
+            className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+          >
+            {preview.evilOptions.map((option, index) => (
+              <Choice
+                key={option.join("+")}
+                checked={index === draft.evilOptionIndex}
+                onSelect={() => onDraftChange((d) => withEvilOption(d, index))}
+                className="min-h-11 px-3 py-2.5 text-sm"
+              >
+                {option.map((role) => msg.roles[role].label).join(" + ")}
+              </Choice>
+            ))}
+          </div>
+          <ul className="mt-3 space-y-1.5">
+            {dedupe(preview.selectedEvil).map((role) => (
+              <li key={role} className="text-xs leading-relaxed text-muted">
+                <span className="text-mordred">{msg.roles[role].label}</span>
+                {msg.gameOver.opinionLine("", msg.roles[role].ability)}
+              </li>
+            ))}
+          </ul>
+        </Field>
+      )}
 
       <Field label={msg.setup.rolesField}>
         <ul className="flex flex-wrap gap-2">
@@ -200,60 +170,21 @@ export function SetupScreen() {
             </li>
           ))}
         </ul>
-        {seated && (
-          <div className="mt-5">
-            <h3 className="mb-3 text-xs text-muted">{msg.setup.rolePreferenceField}</h3>
-            <div
-              role="radiogroup"
-              aria-label={msg.setup.rolePreferenceField}
-              className="grid grid-cols-2 gap-2 sm:grid-cols-4"
-            >
-              <Choice
-                checked={draft.rolePreference === null}
-                onSelect={() => setDraft((d) => withRolePreference(d, null))}
-                className="min-h-11 px-3 py-2.5 text-sm"
-              >
-                {msg.setup.rolePreferenceRandom}
-              </Choice>
-              {roleTallies.map((entry) => (
-                <Choice
-                  key={entry.role}
-                  checked={draft.rolePreference === entry.role}
-                  onSelect={() => setDraft((d) => withRolePreference(d, entry.role))}
-                  className="min-h-11 px-3 py-2.5 text-sm"
-                >
-                  {msg.roles[entry.role].label}
-                </Choice>
-              ))}
-            </div>
-          </div>
-        )}
       </Field>
+
+      <RoundTable
+        playerCount={draft.playerCount}
+        humanSeat={draft.humanSeat}
+        good={preview.split.good}
+        evil={preview.split.evil}
+        onSeat={(id) => onDraftChange((d) => withHumanSeat(d, id))}
+        onToggleSpectate={() =>
+          onDraftChange((d) => (d.humanSeat === null ? withSeat(d) : withSpectator(d)))
+        }
+      />
 
       <Field label={msg.setup.missionsField}>
         <MissionTable missions={preview.missions} />
-      </Field>
-
-      <Field label={msg.setup.modelField}>
-        <div role="radiogroup" aria-label={msg.setup.modelField} className="flex gap-2">
-          <Choice
-            checked={aiMode === "mock"}
-            onSelect={() => setAiMode("mock")}
-            className="min-h-11 flex-1 py-2.5 text-sm"
-          >
-            mock
-          </Choice>
-          <Choice
-            checked={aiMode === "remote"}
-            onSelect={() => setAiMode("remote")}
-            className="min-h-11 flex-1 py-2.5 text-sm"
-          >
-            remote
-          </Choice>
-        </div>
-        <p className="mt-3 text-xs leading-relaxed text-muted">
-          {msg.setup.modelNote}
-        </p>
       </Field>
 
       <div className="flex flex-col gap-3">

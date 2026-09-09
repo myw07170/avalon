@@ -35,6 +35,7 @@ import { AssassinationDraftProvider } from "./AssassinationDraftContext";
 import { VoteMatrix } from "./VoteMatrix";
 import { AuthGate } from "./AuthGate";
 import { AccountSidebar, LocalAccountSidebar } from "./AccountSidebar";
+import { defaultDraft, type SetupDraft } from "./setup-model";
 import {
   readSavedAccountSidebarCollapsed,
   saveAccountSidebarCollapsed,
@@ -73,6 +74,7 @@ function Screen() {
   const status = useAtomValue(runStatusAtom);
   const spectating = useAtomValue(isSpectatingAtom);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [setupDraft, setSetupDraft] = useState<SetupDraft>(() => defaultDraft());
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -105,14 +107,18 @@ function Screen() {
             <AccountSidebar
               collapsed={sidebarCollapsed}
               onToggleCollapsed={toggleSidebarCollapsed}
+              setupDraft={setupDraft}
+              onSetupDraftChange={setSetupDraft}
             />
           ) : (
             <LocalAccountSidebar
               collapsed={sidebarCollapsed}
               onToggleCollapsed={toggleSidebarCollapsed}
+              setupDraft={setupDraft}
+              onSetupDraftChange={setSetupDraft}
             />
           )}
-          <SetupScreen />
+          <SetupScreen draft={setupDraft} onDraftChange={setSetupDraft} />
         </div>
       );
 

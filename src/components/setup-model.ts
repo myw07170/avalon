@@ -101,7 +101,7 @@ export function defaultDraft(playerCount: number = DEFAULT_PLAYER_COUNT): SetupD
  */
 export function withPlayerCount(draft: SetupDraft, playerCount: number): SetupDraft {
   if (playerCount === draft.playerCount) return draft;
-  return defaultDraft(playerCount);
+  return { ...defaultDraft(playerCount), rolePreference: draft.rolePreference };
 }
 
 /** 换自由位组合。越界下标当作 0，不让一次误操作把界面卡在非法态 */
@@ -110,14 +110,12 @@ export function withEvilOption(draft: SetupDraft, index: number): SetupDraft {
     ? getEvilOptions(draft.playerCount)
     : [];
   const safe = index >= 0 && index < options.length ? index : 0;
-  const next = { ...draft, evilOptionIndex: safe };
-  return { ...next, rolePreference: normalizeRolePreference(next) };
+  return { ...draft, evilOptionIndex: safe };
 }
 
-/** 设置人类角色偏好。不存在于当前牌池里的角色视为随机 */
+/** 设置人类角色偏好。不存在于当前牌池里的角色开局时视为随机，但选择本身保留 */
 export function withRolePreference(draft: SetupDraft, role: Role | null): SetupDraft {
-  const next = { ...draft, rolePreference: role };
-  return { ...next, rolePreference: normalizeRolePreference(next) };
+  return { ...draft, rolePreference: role };
 }
 
 /**
@@ -196,20 +194,20 @@ export function clearPersonaSelections(draft: SetupDraft): SetupDraft {
     : { ...draft, personaSelections: {} };
 }
 
-function normalizeRolePreference(draft: SetupDraft): Role | null {
-  if (draft.rolePreference === null || !isSupportedPlayerCount(draft.playerCount)) {
-    return null;
-  }
-
-  const options = getEvilOptions(draft.playerCount);
-  const roles = composeRoles(draft.playerCount, selectedEvilOf(draft, options));
-  return roles.includes(draft.rolePreference) ? draft.rolePreference : null;
-}
-
 /** 当前草稿选中的那一组自由位。配置固定或人数非法时是空数组 */
 function selectedEvilOf(draft: SetupDraft, options: Role[][]): Role[] {
   const option = options[draft.evilOptionIndex] ?? options[0];
   return option ? [...option] : [];
+}
+
+/** 交给引擎的有效偏好。所选角色不在本局牌池时，按随机发牌处理 */
+export function effectiveRolePreference(
+  draft: Pick<SetupDraft, "rolePreference">,
+  roles: readonly Role[],
+): Role | null {
+  return draft.rolePreference !== null && roles.includes(draft.rolePreference)
+    ? draft.rolePreference
+    : null;
 }
 
 /**

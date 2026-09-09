@@ -92,6 +92,9 @@ export const en: Messages = {
       "The confirmation email has been sent. Open it to confirm your account, then come back and sign in.",
     signedIn: "Signed in.",
     accountInfo: "Account info",
+    accountDialogDescription:
+      "Review this account and its game credits, change the password, or sign out.",
+    accountCloseAria: "Close account info",
     localMode: "Local mode",
     localModeNote: "No account enabled",
     signOut: "Sign out",
@@ -617,10 +620,14 @@ export const en: Messages = {
       `${R.MORGANA.label} and the ${R.ASSASSIN.label}.`,
     rolesField: "Roles this game",
     missionsField: "Missions",
-    modelField: "Model",
+    modelField: "Call model",
     modelNote:
       "mock makes no network calls and costs nothing. remote goes through /api/ai and " +
       "needs a provider and key set in .env.local.",
+    modelCallsField: "Call model",
+    modelCallsAria: "Toggle model calls",
+    modelCallsOn: "remote · call model",
+    modelCallsOff: "mock · no model calls",
     // 【issue.message 目前仍是中文】阶段 3 会把 ConfigIssue 换成 code + params，
     // 那之后这个参数才真的是本地化过的
     balanceNote: (message) => `${message}. This is a balance suggestion, not a blocker.`,
@@ -654,6 +661,8 @@ export const en: Messages = {
     personaReasoning: "Notices first: ",
     rolePreferenceField: "Role preference",
     rolePreferenceRandom: "Random role",
+    rolePreferenceChooseAria: (current) => `Choose role preference, currently ${current}`,
+    rolePreferenceMissing: (role) => `${role} is absent; starts as random`,
     submit: "Take the seat",
     spectate: "Start watching",
     starting: "Starting...",

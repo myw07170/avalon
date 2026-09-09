@@ -19,6 +19,7 @@ import type { HumanTurn } from "@/lib/ai/orchestrator";
 import {
   aiModeAtom,
   createGameAtom,
+  DEFAULT_AI_MODE,
   errorAtom,
   gameStateAtom,
   hideAllSeatsAtom,
@@ -152,6 +153,11 @@ describe("viewAtom", () => {
 });
 
 describe("建局", () => {
+  it("是否调用模型开关默认打开，对应 remote", () => {
+    expect(DEFAULT_AI_MODE).toBe("remote");
+    expect(createStore().get(aiModeAtom)).toBe("remote");
+  });
+
   it("头像 seed 只随建局与重置变化，阶段推进不会改它", async () => {
     const empty = createStore();
     expect(empty.get(seatAvatarSeedAtom)).toBe(PREVIEW_AVATAR_SEED);

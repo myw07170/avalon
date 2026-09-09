@@ -132,6 +132,8 @@ export const zh = {
     confirmEmail: "确认邮件已经发出。请打开邮箱完成确认，然后回到这里登录。",
     signedIn: "已登录。",
     accountInfo: "账户信息",
+    accountDialogDescription: "查看当前账号与对局额度，也可以修改密码或登出。",
+    accountCloseAria: "关闭账户信息",
     localMode: "本地模式",
     localModeNote: "未启用账号",
     signOut: "登出",
@@ -717,9 +719,13 @@ export const zh = {
     fixedEvil: `该人数配置固定，坏人恒为${R.MORGANA.label}与${R.ASSASSIN.label}。`,
     rolesField: "本局角色",
     missionsField: "任务",
-    modelField: "模型",
+    modelField: "是否调用模型",
     modelNote:
       "mock 不发网络请求，也不花钱。remote 走 /api/ai，需要先在 .env.local 配好 provider 和 key。",
+    modelCallsField: "是否调用模型",
+    modelCallsAria: "切换是否调用模型",
+    modelCallsOn: "remote · 调用模型",
+    modelCallsOff: "mock · 不调用模型",
     /** checkConfig 的 warning。阶段 3 会把 issue.message 也换成结构化的 */
     balanceNote: (message: string) => `${message}。这是平衡性建议，不阻止开局。`,
     /** 不落座时给的一句说明。**不是错误**，所以不拦开局 */
@@ -749,6 +755,8 @@ export const zh = {
     personaReasoning: "先看什么：",
     rolePreferenceField: "角色偏好",
     rolePreferenceRandom: "随机角色",
+    rolePreferenceChooseAria: (current: string) => `选择角色偏好，当前为${current}`,
+    rolePreferenceMissing: (role: string) => `${role}本局没有，开局按随机`,
     submit: "入座",
     spectate: "开始观战",
     starting: "开局中…",

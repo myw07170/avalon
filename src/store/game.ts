@@ -404,11 +404,11 @@ export type AiMode = "mock" | "remote";
  *
  * 这里重复了一次那个判断而没有复用 `resolveAiClient`：那个函数只认环境变量，
  * 给不出 SetupScreen 需要的"用户手动切换"入口，而它的函数体被 orchestrator.test.ts
- * 的源码断言钉着，为一个 UI 开关去改不划算。两边的底线一致——**默认 mock**，
- * 不会因为忘了配开关就悄悄开始花钱。
+ * 的源码断言钉着，为一个 UI 开关去改不划算。首页开关默认调用模型，开发时可用
+ * NEXT_PUBLIC_AI_MODE=mock 显式关掉。
  */
 export const DEFAULT_AI_MODE: AiMode =
-  process.env.NEXT_PUBLIC_AI_MODE === "remote" ? "remote" : "mock";
+  process.env.NEXT_PUBLIC_AI_MODE === "mock" ? "mock" : "remote";
 
 /** SetupScreen 的 mock 开关。在点「开始」之前改都有效 */
 export const aiModeAtom = atom<AiMode>(DEFAULT_AI_MODE);
