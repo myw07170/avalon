@@ -76,4 +76,8 @@ Keep each change focused and explain the behavior being protected, especially fo
 - call out intentional snapshot changes and any real-model validation performed;
 - pass lint, type checking, unit tests, and the production build.
 
+## Contribution license
+
+Unless explicitly stated otherwise, any contribution intentionally submitted for inclusion in Avalon is provided under the [Apache License 2.0](./LICENSE).
+
 Security vulnerabilities should not be filed as public issues. Follow [`SECURITY.md`](./SECURITY.md) instead.

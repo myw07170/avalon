@@ -1,12 +1,14 @@
 # Vercel + Supabase Deployment
 
-目标栈：
+参考栈：
 
-- GitHub private repository: `myw07170/avalon`
-- Vercel Hobby
-- Supabase Free
+- GitHub repository containing this project
+- Vercel
+- Supabase
 - Email + password auth with email confirmation
 - One free remote-model game per account
+
+本地开发和 mock 模式不需要 Supabase。公开 remote 部署建议启用认证与额度限制，避免未授权请求消耗模型预算。
 
 ## Supabase
 
@@ -27,12 +29,12 @@
 
 ## Vercel
 
-Import `https://github.com/myw07170/avalon.git` into a personal Vercel Hobby account.
+Import your GitHub repository into Vercel.
 
 Use:
 
 - Framework Preset: Next.js
-- Production Branch: `main`
+- Production Branch: `main` or your chosen release branch
 - Build Command: `pnpm build`
 
 Production environment variables:

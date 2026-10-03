@@ -4,13 +4,20 @@
 
 一个人，一桌会说话的 AI。
 
-这是一个基于 Next.js 的单人阿瓦隆游戏：你可以入座和 AI 玩家对局，也可以旁观一桌全 AI 对局。项目默认使用不联网、不产生模型费用的 mock 模式；配置 OpenAI 兼容接口后，可以让不同角色用真实模型讨论、投票和推理。
+Avalon 是一个基于 Next.js 的单人阿瓦隆游戏：你可以入座和 AI 玩家对局，也可以旁观一桌全 AI 对局。项目默认使用不联网、不产生模型费用的 mock 模式；配置 OpenAI 兼容接口后，可以让不同角色用真实模型讨论、投票和推理。
 
 项目仍在积极开发中，当前重点不是把规则塞进 prompt，而是让游戏规则、隐藏信息和 AI 决策之间的边界可验证。
 
+## 项目状态
+
+- 本地 mock 模式开箱可用，不需要账号、数据库或 API key。
+- remote 模式需要你自行配置 OpenAI 兼容的模型服务；全 AI 对局会产生大量模型调用。
+- Supabase Auth、账号额度和复盘历史属于可选部署能力；本地开发和 mock 对局不依赖它们。
+- 生产构建使用 `next/font/google` 加载 Geist，构建环境需要能访问 Google Fonts。
+
 ## 功能
 
-- 5–10 人阿瓦隆对局，支持推荐角色配置和合法的自定义配置
+- 5-10 人阿瓦隆对局，支持推荐角色配置和合法的自定义配置
 - 单人入座与全 AI 观战；观战身份默认盖住，可按座位翻牌
 - 中文、英文界面以及深色、浅色主题
 - mock 与 remote 两种 AI 模式，remote 支持 OpenAI 兼容的 provider
@@ -58,7 +65,7 @@ PlayerView / SpectatorView
 
 规则依据见[阿瓦隆规则规格](./docs/rules.md)。
 
-## 本地开发
+## 快速开始
 
 ### 前置要求
 
@@ -73,26 +80,6 @@ pnpm dev
 
 打开 <http://localhost:3000>。默认 mock 模式无需 API key，也不会发出模型请求。
 
-### 使用真实模型
-
-复制环境变量模板并填写 provider 配置：
-
-```bash
-cp .env.local.example .env.local
-```
-
-Windows PowerShell 可使用：
-
-```powershell
-Copy-Item .env.local.example .env.local
-```
-
-至少检查 `LLM_PROVIDER`、`LLM_API_KEY` 和 `LLM_MODEL`；自定义 OpenAI 兼容服务时还要设置 `LLM_BASE_URL`。完整字段、默认值和 provider 差异都写在 [`.env.local.example`](./.env.local.example) 中。
-
-`NEXT_PUBLIC_AI_MODE=remote` 只决定构建后的初始选项，界面仍允许在开局前切换 mock/remote。所有 `NEXT_PUBLIC_*` 变量都会在构建时固化；`LLM_*` 变量只在服务端运行时读取，绝不要给密钥加 `NEXT_PUBLIC_` 前缀。
-
-> 全 AI remote 观战会连续产生大量模型调用。日常开发请保持 mock，仅在明确接受时间与费用后运行真实模型测试。
-
 ### 常用命令
 
 | 命令 | 用途 |
@@ -105,6 +92,36 @@ Copy-Item .env.local.example .env.local
 | `pnpm test:cov` | 生成测试覆盖率 |
 
 真实模型整局测试默认跳过，启用方式和费用注意事项见[贡献指南](./CONTRIBUTING.md)。
+
+## 配置
+
+复制环境变量模板并填写需要的 provider 配置：
+
+```bash
+cp .env.local.example .env.local
+```
+
+Windows PowerShell 可使用：
+
+```powershell
+Copy-Item .env.local.example .env.local
+```
+
+| 变量 | 用途 | 是否可公开 |
+| --- | --- | --- |
+| `LLM_PROVIDER` | 选择 `mock`、`openai`、`deepseek`、`qwen` 或自定义兼容服务 | 服务端配置 |
+| `LLM_API_KEY` | 模型服务密钥 | 私密，绝不要加 `NEXT_PUBLIC_` |
+| `LLM_BASE_URL` / `LLM_MODEL` | 自定义 OpenAI 兼容 endpoint 与模型 | 服务端配置 |
+| `LLM_EXTRA_BODY` / `LLM_TEMPERATURE` / `LLM_MAX_TOKENS` | provider 专属请求调参 | 服务端配置 |
+| `NEXT_PUBLIC_AI_MODE` | 浏览器初始选择 `mock` 或 `remote` | 公开，会打进浏览器包 |
+| `NEXT_PUBLIC_REQUIRE_AUTH` | 公开部署时要求登录并让 `/api/ai` 校验 session | 公开开关 |
+| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase 浏览器端连接信息 | 公开 |
+| `SUPABASE_SECRET_KEY` | 服务端访问 Supabase 的 secret key | 私密，只能在服务端 |
+| `MAX_AI_CALLS_PER_GAME` | 单局 remote 调用上限 | 服务端配置 |
+
+完整字段、默认值和 provider 差异都写在 [`.env.local.example`](./.env.local.example) 中。
+
+> 全 AI remote 观战会连续产生大量模型调用。日常开发请保持 mock，仅在明确接受时间与费用后运行真实模型测试。
 
 ## Docker
 
@@ -122,16 +139,26 @@ docker build --build-arg NEXT_PUBLIC_AI_MODE=remote -t avalon:remote .
 docker run --rm -p 3000:3000 --env-file .env.local avalon:remote
 ```
 
-不要把 `LLM_API_KEY` 作为 build arg。镜像使用 Next.js standalone 输出，以非 root 用户运行并监听 `0.0.0.0:3000`。因为项目通过 `next/font/google` 使用 Geist，生产构建需要能够访问 Google Fonts。
+不要把 `LLM_API_KEY` 作为 build arg。镜像使用 Next.js standalone 输出，以非 root 用户运行并监听 `0.0.0.0:3000`。
+
+## 部署
+
+本地开发不需要 Supabase。公开 remote 部署建议开启 Supabase Auth 与账号额度限制，避免未授权调用模型服务。
+
+部署步骤见 [Vercel + Supabase Deployment](./docs/deploy-vercel-supabase.md)。
 
 ## 文档
 
 - [阿瓦隆规则规格](./docs/rules.md)：规则和边界情况的唯一依据
 - [状态机设计](./docs/state-machine.md)：阶段转移、合法动作和测试策略
-- [架构边界](./docs/architecture.md)：分层、依赖方向以及为什么对局不需要数据库
-- [路线图](./docs/todos.md)：当前进度与后续计划
+- [架构边界](./docs/architecture.md)：分层、依赖方向以及为什么核心对局不需要数据库
+- [Vercel + Supabase 部署](./docs/deploy-vercel-supabase.md)：公开 remote 部署参考
 - [贡献指南](./CONTRIBUTING.md) · [安全政策](./SECURITY.md) · [变更日志](./CHANGELOG.md)
 
-## 许可证
+## 许可证与引用
 
-本项目采用 [MIT License](./LICENSE)。
+本项目采用 [Apache License 2.0](./LICENSE)。
+
+Avalon 由 Yiwen (Lucy) 原创开发。复制、分发、修改或基于本项目构建时，请保留版权声明、许可证文本和 [`NOTICE`](./NOTICE) 中的署名信息；如果修改了文件，也请按 Apache License 2.0 的要求说明变更。
+
+如果你在文章、项目说明、论文或演示中引用本项目，推荐使用 [`CITATION.cff`](./CITATION.cff) 中的引用信息。

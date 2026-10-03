@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use Avalon, please cite it as below."
+title: "Avalon"
+type: software
+authors:
+  - name: "Yiwen (Lucy)"
+version: "0.1.0"
+license: "Apache-2.0"
+abstract: "A single-player Avalon game with AI players, a deterministic game engine, and tested hidden-information boundaries."
+keywords:
+  - avalon
+  - game
+  - ai
+  - nextjs

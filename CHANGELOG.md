@@ -10,5 +10,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Chinese and English project guides covering the deterministic engine, information-isolation test system, local development, and deployment.
 - Contribution guidelines and a private security-reporting policy.
-- MIT license.
+- Apache License 2.0, NOTICE attribution, and citation metadata.
 - A multi-stage Docker image based on Next.js standalone output, with mock and remote build modes.
