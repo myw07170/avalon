@@ -13,9 +13,8 @@ export const LOCALES = ["zh", "en"] as const;
 export type Locale = (typeof LOCALES)[number];
 
 /**
- * 【默认恒为 zh，且不做浏览器探测】探测要么发生在服务端（需要 cookie 或
- * Accept-Language，即上面否掉的那套机制），要么发生在客户端首帧之后（那就是一次
- * 必然的水合不一致）。固定 zh 让 SSR 与客户端首帧永远一致。
+ * SSR 与客户端首帧的固定初值。挂载后才恢复手动选择或检测浏览器语言，
+ * 避免水合不一致；浏览器没有匹配语言时的回退值由 resolveBrowserLocale 决定。
  */
 export const DEFAULT_LOCALE: Locale = "zh";
 
@@ -29,3 +28,12 @@ export const STORAGE_KEY = "avalon.locale";
 
 export const isLocale = (value: unknown): value is Locale =>
   typeof value === "string" && (LOCALES as readonly string[]).includes(value);
+
+/** 按浏览器偏好顺序匹配语言主标签；没有支持的语言时使用英文。 */
+export function resolveBrowserLocale(languages: readonly string[]): Locale {
+  for (const language of languages) {
+    const primary = language.trim().toLowerCase().split("-")[0];
+    if (isLocale(primary)) return primary;
+  }
+  return "en";
+}

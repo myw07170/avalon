@@ -14,15 +14,13 @@ const geistMono = Geist_Mono({
 });
 
 /**
- * 【双语字面量，不做 generateMetadata】generateMetadata 在服务端跑，而语言是
- * 纯客户端状态（localStorage），服务端没有任何信号能读到它。要造一个信号
- * 就得上 cookie 或 /en 前缀，也就是被明确否掉的那套 middleware 机制。
+ * 【描述保持双语，不做 generateMetadata】语言在客户端恢复或检测，服务端
+ * 读不到这些信号。页面标题由 LocaleGate 声明，SSR 使用固定中文初值，
+ * 挂载后跟着语言更新。
  *
- * 所以这里给一份两种语言都认得的标题；精确到当前语言的那份由
- * `src/i18n/LocaleGate.tsx` 在 effect 里写 `document.title`。
+ * 不声明 metadata.title，避免 Next 在水合时把本地化标题覆盖回静态值。
  */
 export const metadata: Metadata = {
-  title: "阿瓦隆 Avalon",
   description: "一个人，一桌会说话的 AI。 · One player, a table of talking AIs.",
 };
 
@@ -41,7 +39,7 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   /*
    * 【默认色跟着 DEFAULT_THEME】viewport 与 metadata 一样是 server component
-   * 的静态对象，读不到 localStorage 里的主题（和 title 的处境完全一样，见上）。
+   * 的静态对象，读不到 localStorage 里的主题。
    * 数组 + media 那种写法绑的是 prefers-color-scheme，而这里的主题是用户点出来的，
    * 不是系统给的。
    *

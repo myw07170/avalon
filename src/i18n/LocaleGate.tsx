@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 不渲染任何东西，只负责把语言状态同步到 <html> 上。
+ * 把语言状态同步到 <html> 上，并声明当前语言的页面标题。
  *
  * 【为什么这些事必须在 effect 里，不能在渲染里】layout.tsx 是 server component，
  * 它渲染的 `lang="zh-CN"` 就是 SSR 的输出。客户端首帧必须产出同一个值，否则水合报错。
@@ -21,7 +21,7 @@ export function LocaleGate() {
   const locale = useAtomValue(localeAtom);
   const hydrate = useSetAtom(hydrateLocaleAtom);
 
-  // 只跑一次：把上次选的语言取回来
+  // 挂载后恢复手动选择；没有保存选择时检测浏览器语言
   useEffect(() => {
     hydrate();
   }, [hydrate]);
@@ -29,10 +29,9 @@ export function LocaleGate() {
   useEffect(() => {
     document.documentElement.lang = HTML_LANG[locale];
     document.documentElement.dataset.locale = locale;
-    // metadata 是 server component 的静态对象，没有 locale 信号可用（见 layout.tsx），
-    // 精确标题只能在这里补
-    document.title = MESSAGES[locale].app.title;
   }, [locale]);
 
-  return null;
+  // React 将 title 放进 head，SSR 和客户端更新都由同一组件管理。
+  // 不与 Next 的静态 metadata.title 并存，避免水合时覆盖掉客户端语言标题。
+  return <title>{MESSAGES[locale].app.title}</title>;
 }

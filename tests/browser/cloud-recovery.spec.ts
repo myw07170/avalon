@@ -71,8 +71,8 @@ async function signIn(page: Page) {
 }
 
 test("two browsers recover the same paid session, take over, and keep the original quota", async ({ browser }) => {
-  const firstContext = await browser.newContext();
-  const secondContext = await browser.newContext();
+  const firstContext = await browser.newContext({ locale: "zh-CN" });
+  const secondContext = await browser.newContext({ locale: "zh-CN" });
   const first = await firstContext.newPage();
   const second = await secondContext.newPage();
   try {

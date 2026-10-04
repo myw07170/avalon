@@ -48,7 +48,7 @@ export function ThemeSwitcher() {
   /**
    * 【为什么是 useLayoutEffect，而且必须存在】开发模式下 Strict Mode 会把组件
    * 重挂一次，而那一次 React 会把 <html> 重置成只剩 JSX 里声明过的属性——
-   * <head> 里那段脚本设的 data-theme 会被抹掉，页面于是跳回深色。生产环境
+   * <head> 里那段脚本设的 data-theme 会被抹掉，页面于是跳回默认主题。生产环境
    * 这里是 no-op。Next 16 的 preventing-flash-before-hydration 指南专门记了这条。
    *
    * 用 layout 而不是 effect：它跑在绘制之前，补属性的动作不会自己变成一帧闪烁。

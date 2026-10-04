@@ -1,5 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
+test.use({ locale: "zh-CN" });
+
 const key = "avalon:active-game:v1:local";
 const backup = (page: Page) => page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? "null"), key);
 

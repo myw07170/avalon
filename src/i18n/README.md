@@ -2,6 +2,14 @@
 
 UI 文案目录、语言状态、以及 UI 与 prompt 共用的角色名。
 
+## 初始语言
+
+SSR 与客户端首帧使用固定中文初值，挂载后优先恢复 `avalon.locale` 中的有效手动选择。
+没有保存选择、值无效或存储不可用时，按 `navigator.languages` 的偏好顺序匹配中文或英文；
+列表为空则使用 `navigator.language`。区域变体统一映射到 `zh` / `en`，均不匹配时使用英文。
+自动检测不会写入存储，只有手动切换才保存。英文用户首次加载可能短暂看到中文。
+界面语言、页面标题与 `<html lang>` / `data-locale` 一起更新；开局时锁定对局语言，恢复对局沿用存档语言。
+
 ## 唯一的硬规则：依赖只出不进
 
 `src/i18n/` 只 import：
@@ -38,7 +46,7 @@ UI 文案目录、语言状态、以及 UI 与 prompt 共用的角色名。
 
 | 文件 | 是什么 |
 | --- | --- |
-| `locale.ts` | `Locale` / `LOCALES` / `DEFAULT_LOCALE` / `HTML_LANG` / `STORAGE_KEY` / `isLocale`。不依赖任何东西 |
+| `locale.ts` | `Locale` / `LOCALES` / `DEFAULT_LOCALE` / `HTML_LANG` / `STORAGE_KEY` / `isLocale` / `resolveBrowserLocale`。不依赖任何东西 |
 | `plural.ts` | `plural(n, one, other)`。英文单复数，四行 |
 | `roles.ts` | `ROLE_TEXT`。**UI 与 prompt 语料共用**，两边都 import 它 |
 | `messages.zh.ts` | 中文目录，**母版**。`Messages` 类型从它推导 |
@@ -46,7 +54,7 @@ UI 文案目录、语言状态、以及 UI 与 prompt 共用的角色名。
 | `messages.ts` | `MESSAGES` / `messagesFor(locale)` |
 | `locale-atom.ts` | `localeAtom` / `hydrateLocaleAtom` / `setLocaleAtom` |
 | `useMessages.ts` | 组件读文案的入口 |
-| `LocaleGate.tsx` | 水合 + 写 `<html lang>` / `data-locale` / `document.title` |
+| `LocaleGate.tsx` | 水合 + 写 `<html lang>` / `data-locale`，渲染本地化 `<title>` |
 | `LocaleSwitcher.tsx` | 右上角的切换按钮 |
 | `catalog.test.ts` | 键对齐 + **en 目录里不许有汉字** |
 
