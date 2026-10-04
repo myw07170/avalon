@@ -12,6 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:browser": "playwright test",
+    "test:browser:cloud": "playwright test --config playwright.cloud.config.ts",
     "test:cov": "vitest run --coverage",
     "transcripts": "vitest run src/lib/ai/transcript-page.test.ts",
     "personas:generate": "node scripts/generate-personas.mjs"
@@ -33,6 +35,8 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@playwright/test": "1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

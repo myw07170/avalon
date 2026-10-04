@@ -17,7 +17,7 @@ import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
 import {
   viewAtom,
-  resetGameAtom,
+  restartGameAtom,
   runGameAtom,
   seatAvatarSeedAtom,
 } from "@/store/game";
@@ -30,7 +30,7 @@ export function RoleCard() {
   const avatarSeed = useAtomValue(seatAvatarSeedAtom);
   const msg = useMessages();
   const startRun = useSetAtom(runGameAtom);
-  const reset = useSetAtom(resetGameAtom);
+  const reset = useSetAtom(restartGameAtom);
   const [flipped, setFlipped] = useState(false);
   const reduced = useReducedMotion();
 

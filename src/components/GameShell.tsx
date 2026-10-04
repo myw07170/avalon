@@ -19,7 +19,7 @@ import { useMessages } from "@/i18n/useMessages";
 import { LocaleSwitcher } from "@/i18n/LocaleSwitcher";
 import { ThemeSwitcher } from "@/theme/ThemeSwitcher";
 import { isClientAuthRequired } from "@/lib/supabase/config";
-import { errorAtom, isSpectatingAtom, resetGameAtom, runStatusAtom } from "@/store/game";
+import { errorAtom, isSpectatingAtom, restartGameAtom, runStatusAtom } from "@/store/game";
 import { GameOverPanel } from "./GameOverPanel";
 import { InGameLayout } from "./InGameLayout";
 import { MissionTrack } from "./MissionTrack";
@@ -34,6 +34,7 @@ import { TeamDraftProvider } from "./TeamDraftContext";
 import { AssassinationDraftProvider } from "./AssassinationDraftContext";
 import { VoteMatrix } from "./VoteMatrix";
 import { AuthGate } from "./AuthGate";
+import { RecoveryBoundary } from "./RecoveryBoundary";
 import { AccountSidebar, LocalAccountSidebar } from "./AccountSidebar";
 import { defaultDraft, type SetupDraft } from "./setup-model";
 import {
@@ -64,7 +65,7 @@ export function GameShell() {
       {/* 窄屏标题会横跨工具组所在的右半边；留出一小行，只在首屏把内容压到按钮下方 */}
       <div aria-hidden className="h-5 shrink-0 sm:hidden" />
       <AuthGate>
-        <Screen />
+        <RecoveryBoundary><Screen /></RecoveryBoundary>
       </AuthGate>
     </>
   );
@@ -138,7 +139,7 @@ function Screen() {
 /** 对局中。圆桌与右下操作台共享组队草稿，其余人类操作也统一从右栏进入。 */
 function Table() {
   const error = useAtomValue(errorAtom);
-  const reset = useSetAtom(resetGameAtom);
+  const reset = useSetAtom(restartGameAtom);
   const msg = useMessages();
 
   return (

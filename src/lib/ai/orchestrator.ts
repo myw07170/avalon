@@ -18,6 +18,7 @@ import {
   getSystemActions,
 } from "../game/legal";
 import { reduce } from "../game/reduce";
+import { createRng } from "../game/rng";
 import { toPlayerView } from "../game/view";
 import {
   EngineError,
@@ -167,6 +168,8 @@ export interface DecisionRecord {
 }
 
 export interface OrchestratorHooks {
+  /** Durable boundary, including answers received before a concurrent batch commits. */
+  onCheckpoint?: (checkpoint: RunCheckpoint, committed?: DecisionRecord) => void | Promise<void>;
   /** 每次 reduce 之后。UI 用它更新 gameStateAtom */
   onState?: (state: GameState) => void | Promise<void>;
   /**
@@ -178,6 +181,10 @@ export interface OrchestratorHooks {
 }
 
 export interface RunGameOptions {
+  checkpoint?: RunCheckpoint;
+  /** Reserve independent random streams before starting concurrent work. */
+  isolatedRng?: boolean;
+  clientForTurn?: (rng: RngFn) => AiClient;
   state: GameState;
   client: AiClient;
   rng: RngFn;
@@ -215,9 +222,20 @@ function isHuman(state: GameState, playerId: PlayerId): boolean {
 }
 
 /** 一个人的一次行动：可能不需要模型、可能来自人类、可能来自 AI */
-interface Turn {
+export interface Turn {
   action: GameAction;
   record: DecisionRecord | null;
+}
+
+export interface RunCheckpoint {
+  state: GameState;
+  batch: {
+    base: GameState;
+    seats: PlayerId[];
+    turns: Array<Turn | null>;
+    cursor: number;
+    seeds?: number[];
+  } | null;
 }
 
 async function takeTurn(
@@ -389,7 +407,13 @@ async function ensureLegal(
  */
 export async function runGame(options: RunGameOptions): Promise<GameState> {
   const { rng, hooks, signal } = options;
-  let state = options.state;
+  let state = options.checkpoint?.state ?? options.state;
+  let batch = options.checkpoint?.batch ? structuredClone(options.checkpoint.batch) : null;
+  const checkpoint = (committed?: DecisionRecord) => {
+    signal?.throwIfAborted();
+    // Never hand hooks a batch that in-flight promises can subsequently mutate.
+    return hooks?.onCheckpoint?.(structuredClone({ state, batch }), committed);
+  };
 
   for (let step = 0; state.phase !== "GAME_OVER"; step += 1) {
     signal?.throwIfAborted();
@@ -414,20 +438,38 @@ export async function runGame(options: RunGameOptions): Promise<GameState> {
         );
       }
       state = reduce(state, systemAction, rng);
+      await checkpoint();
       await hooks?.onState?.(state);
       continue;
     }
 
     // 并发决策。map 是同步跑完的，所以 rng 的消耗顺序就是座位序，确定性不受影响
-    const snapshot = state;
-    const turns = await Promise.all(
-      awaiting.map((playerId) => takeTurn(snapshot, playerId, options)),
-    );
+    batch ??= { base: state, seats: awaiting, turns: awaiting.map(() => null), cursor: 0,
+      ...(options.isolatedRng ? { seeds: awaiting.map(() => Math.floor(rng() * 4294967296)) } : {}) };
+    const currentBatch = batch;
+    await checkpoint();
+    // Observe every answer immediately, even when a human is still choosing.
+    let accepting = true;
+    await Promise.all(currentBatch.seats.map(async (playerId, index) => {
+      if (currentBatch.turns[index]) return;
+      const turnRng = currentBatch.seeds ? createRng(currentBatch.seeds[index]!) : rng;
+      const turn = await takeTurn(currentBatch.base, playerId, { ...options, rng: turnRng, client: options.clientForTurn?.(turnRng) ?? options.client });
+      signal?.throwIfAborted();
+      if (!accepting) return;
+      currentBatch.turns[index] = turn;
+      await checkpoint();
+    })).catch(error => { accepting = false; throw error; });
 
     // 按座位序逐个落地。即使在并发阶段，UI 收到的也是一条有序的事件流
-    for (const turn of turns) {
+    while (currentBatch.cursor < currentBatch.turns.length) {
+      signal?.throwIfAborted();
+      const turn = currentBatch.turns[currentBatch.cursor]!;
       if (turn.record) await hooks?.onDecision?.(turn.record);
+      signal?.throwIfAborted();
       state = reduce(state, turn.action, rng);
+      currentBatch.cursor += 1;
+      if (currentBatch.cursor === currentBatch.turns.length) batch = null;
+      await checkpoint(turn.record ?? undefined);
       await hooks?.onState?.(state);
     }
   }

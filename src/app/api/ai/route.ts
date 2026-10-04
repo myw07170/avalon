@@ -20,6 +20,7 @@ import { aiDecisionRequestSchema } from "@/lib/ai/schema";
 import { AuthError, requireAuthenticatedUser } from "@/lib/supabase/auth";
 import { isAuthRequired } from "@/lib/supabase/config";
 import { consumeAiCall, QuotaError, recordUserAiCall } from "@/lib/supabase/quota";
+import { ActiveGameError, authorizeActiveGameAiCall } from "@/lib/supabase/active-games";
 
 /** 一次请求内可能跑到 3 次模型调用，平台默认的 10s 不够 */
 export const maxDuration = 60;
@@ -113,14 +114,16 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     if (authenticatedUserId && gameSessionId) {
-      if (userLlmConfig) {
+      const authorized = await authorizeActiveGameAiCall(authenticatedUserId, gameSessionId, request.headers.get("X-Active-Game"), userLlmConfig ? "user" : "platform");
+      if (!authorized && userLlmConfig) {
         await recordUserAiCall(authenticatedUserId, gameSessionId);
-      } else {
+      } else if (!authorized) {
         await consumeAiCall(authenticatedUserId, gameSessionId);
       }
     }
     return Response.json(await createAiClient(config).decide(req), { headers: responseHeaders });
   } catch (error) {
+    if (error instanceof ActiveGameError) return fail(error.status, error.code === "AI_CALL_LIMIT_REACHED" ? "AI_CALL_LIMIT" : "GAME_SESSION_REQUIRED", error.code, responseHeaders);
     if (error instanceof QuotaError) {
       if (error.code === "AI_CALL_LIMIT") {
         return fail(429, error.code, "本局模型调用次数已达上限", responseHeaders);

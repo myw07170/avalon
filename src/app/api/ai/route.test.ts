@@ -6,6 +6,10 @@ import { createGame, makePlaceholderPersonas } from "@/lib/game/setup";
 import { toPlayerView } from "@/lib/game/view";
 import { createPending, type GameState, type Role } from "@/lib/game/types";
 import { POST } from "./route";
+vi.mock("@/lib/supabase/active-games", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/supabase/active-games")>(),
+  authorizeActiveGameAiCall: vi.fn().mockResolvedValue(false),
+}));
 
 const supabaseMocks = vi.hoisted(() => {
   class MockAuthError extends Error {}

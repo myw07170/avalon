@@ -14,15 +14,22 @@ import { EngineError, type RngFn } from "./types";
  * 刻意不用 Math.random：它不可播种，一旦出现"跑 1000 局偶发崩一次"这类问题，
  * 没有种子就没法复现。
  */
-export function createRng(seed: number): RngFn {
+export interface StatefulRng extends RngFn {
+  getState(): number;
+}
+
+/** The saved state is the same 32-bit accumulator used by a fresh seed. */
+export function createRng(seed: number): StatefulRng {
   let state = seed >>> 0;
-  return () => {
+  const next = () => {
     state = (state + 0x6d2b79f5) >>> 0;
     let t = state;
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+  next.getState = () => state;
+  return next;
 }
 
 /** [0, maxExclusive) 内的整数 */

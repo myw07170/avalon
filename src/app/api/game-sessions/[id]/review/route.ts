@@ -1,6 +1,7 @@
 import type { AiErrorCode } from "@/lib/ai/errors";
 import { isSavedReviewSnapshot } from "@/lib/reviews";
 import { AuthError, requireAuthenticatedUser } from "@/lib/supabase/auth";
+import { ActiveGameError, finishActiveGameFromReviewRequest } from "@/lib/supabase/active-games";
 import {
   deleteGameReview,
   readGameReview,
@@ -60,6 +61,9 @@ export async function POST(
       return fail(400, "BAD_REQUEST", "复盘快照不合法", auth.responseHeaders);
     }
 
+    if (await finishActiveGameFromReviewRequest(auth.userId, id, request.headers.get("X-Active-Game"))) {
+      return Response.json({ id }, { headers: auth.responseHeaders });
+    }
     const saved = await saveGameReview({
       userId: auth.userId,
       sessionId: id,
@@ -67,6 +71,7 @@ export async function POST(
     });
     return Response.json(saved, { headers: auth.responseHeaders });
   } catch (error) {
+    if (error instanceof ActiveGameError) return fail(error.status, "GAME_SESSION_REQUIRED", error.code, auth?.responseHeaders);
     if (error instanceof AuthError) {
       return fail(401, "AUTH_REQUIRED", "请先登录后再保存复盘");
     }

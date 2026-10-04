@@ -11,14 +11,14 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { useLocale, useMessages } from "@/i18n/useMessages";
 import { MAX_PLAYERS, MIN_PLAYERS, type MissionConfig } from "@/lib/game";
-import { GAME_CREDITS_CHANGED_EVENT } from "@/lib/credits/events";
-import { isClientAuthRequired } from "@/lib/supabase/config";
 import { cn } from "@/lib/utils";
 import { assignPersonas } from "@/lib/persona-catalog";
 import { createSeatAvatarSeed, PREVIEW_AVATAR_SEED } from "@/lib/seat-avatar";
 import {
   aiModeAtom,
-  createGameAtom,
+  beginGameAtom,
+  recoveryCheckedAtom,
+  recoverySummaryAtom,
   errorAtom,
   setRawErrorAtom,
   userLlmConfigAtom,
@@ -51,7 +51,9 @@ export function SetupScreen({ draft, onDraftChange }: SetupScreenProps) {
   const [starting, setStarting] = useState(false);
   const aiMode = useAtomValue(aiModeAtom);
   const userLlmConfig = useAtomValue(userLlmConfigAtom);
-  const createGame = useSetAtom(createGameAtom);
+  const createGame = useSetAtom(beginGameAtom);
+  const recoveryChecked = useAtomValue(recoveryCheckedAtom);
+  const recoverySummary = useAtomValue(recoverySummaryAtom);
   const setRawError = useSetAtom(setRawErrorAtom);
   const storeError = useAtomValue(errorAtom);
   const msg = useMessages();
@@ -87,21 +89,13 @@ export function SetupScreen({ draft, onDraftChange }: SetupScreenProps) {
 
     setStarting(true);
     try {
-      const gameSessionId =
-        aiMode === "remote" && isClientAuthRequired
-          ? await requestGameSession(
-              userLlmConfig ? "user" : "platform",
-              msg.setup.startRemoteFailed,
-            )
-          : null;
-      createGame({
+      await createGame({
         config,
         avatarSeed,
         humanSeat,
         preferredHumanRole:
           humanSeat === null ? null : effectiveRolePreference(draft, preview.roles),
         personas,
-        gameSessionId,
         userLlmConfig: aiMode === "remote" ? userLlmConfig : null,
       });
     } catch (error) {
@@ -220,7 +214,7 @@ export function SetupScreen({ draft, onDraftChange }: SetupScreenProps) {
         <button
           type="button"
           onClick={start}
-          disabled={!preview.canStart || starting}
+          disabled={!preview.canStart || starting || !recoveryChecked || recoverySummary !== null}
           className={cn(
             "mt-1 w-full rounded-lg px-6 py-3.5 font-display text-lg tracking-[var(--track-3)] transition-colors",
             "bg-brass text-on-brass hover:bg-brass/85",
@@ -236,45 +230,6 @@ export function SetupScreen({ draft, onDraftChange }: SetupScreenProps) {
   );
 }
 
-async function requestGameSession(
-  llmSource: "platform" | "user",
-  fallbackMessage: string,
-): Promise<string> {
-  const response = await fetch("/api/game-sessions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ llmSource }),
-  });
-  const body: unknown = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    const detail =
-      typeof body === "object" &&
-      body !== null &&
-      "error" in body &&
-      typeof body.error === "string"
-        ? body.error
-        : fallbackMessage;
-    throw new Error(detail);
-  }
-
-  if (
-    typeof body === "object" &&
-    body !== null &&
-    "gameSessionId" in body &&
-    typeof body.gameSessionId === "string"
-  ) {
-    window.dispatchEvent(new Event(GAME_CREDITS_CHANGED_EVENT));
-    return body.gameSessionId;
-  }
-
-  throw new Error(fallbackMessage);
-}
-
-// ---------------------------------------------------------------------------
-// 圆桌
-// ---------------------------------------------------------------------------
-
 interface RoundTableProps {
   playerCount: number;
   humanSeat: number | null;
@@ -284,10 +239,6 @@ interface RoundTableProps {
   onToggleSpectate: () => void;
 }
 
-/**
- * 选座器就是圆桌本身。环的画法在 SeatRing 里，与 RoleCard、SeatTable 共用；
- * 这里只负责把"我的座位"翻译成 self tone，再配一句说明。
- */
 function RoundTable({
   playerCount,
   humanSeat,

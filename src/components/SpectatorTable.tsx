@@ -9,7 +9,7 @@
  */
 import { useAtomValue, useSetAtom } from "jotai";
 import { useMessages } from "@/i18n/useMessages";
-import { errorAtom, pausedAtom, resetGameAtom } from "@/store/game";
+import { errorAtom, pausedAtom, restartGameAtom } from "@/store/game";
 import { IdentityDeck } from "./IdentityDeck";
 import { InGameLayout } from "./InGameLayout";
 import { MindPanel } from "./MindPanel";
@@ -22,7 +22,7 @@ import { VoteMatrix } from "./VoteMatrix";
 export function SpectatorTable() {
   const error = useAtomValue(errorAtom);
   const paused = useAtomValue(pausedAtom);
-  const reset = useSetAtom(resetGameAtom);
+  const reset = useSetAtom(restartGameAtom);
   const msg = useMessages();
 
   return (

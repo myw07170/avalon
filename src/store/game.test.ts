@@ -726,10 +726,10 @@ describe("观战：暂停闸", () => {
     store.set(togglePauseAtom);
     expect(store.get(pausedAtom)).toBe(true);
 
-    // 第一手决策会先落进 decisions，再撞上闸
+    // 未提交的第一手只在私有检查点中；公开心证与引擎提交保持一致。
     for (let i = 0; i < 20; i += 1) await tick();
     const at = store.get(liveDecisionsAtom).length;
-    expect(at).toBeGreaterThan(0);
+    expect(at).toBe(0);
     expect(store.get(runStatusAtom)).toBe("running");
 
     // 再让出一批宏任务：真停住了的话这个数不会再涨

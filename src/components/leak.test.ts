@@ -106,9 +106,12 @@ describe("store 的私有 atom 没有被导出", () => {
   it("没有第三个地方直接读 decisionsAtom", () => {
     // 【判据是"出现了几次"】上面那条只能证明两扇门各自带闸，
     // 证明不了没人在别处开第三扇。decisionsAtom 一共该出现五次：
-    // 声明、两个派生 atom 各读一次、onDecision 里写一次、resetGameAtom 里清一次。
+    // 声明、两个受控视图、提交时写入、清理，以及私有存档写出/恢复。
     // 数字变了就说明多了一个消费者——**先想清楚它凭什么能读**，再改这个数
     const stripped = stripComments(text);
-    expect(stripped.split("decisionsAtom").length - 1).toBe(5);
+    expect(stripped.split("decisionsAtom").length - 1).toBe(7);
+    expect(stripped).not.toContain("export function snapshotOf");
+    expect(stripped).not.toContain("export const checkpointAtom");
+    expect(stripped).not.toContain("export const persistenceAtom");
   });
 });

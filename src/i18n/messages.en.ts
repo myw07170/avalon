@@ -42,6 +42,20 @@ const SILENT = "(said nothing)";
 const failCards = (n: number) => plural(n, "1 fail card", `${n} fail cards`);
 
 export const en: Messages = {
+  recovery: {
+    title: "Unfinished game", checking: "Checking saved game…", working: "Saving or restoring your game…",
+    resume: "Continue game", takeover: "Take over", abandon: "Abandon game", saveExit: "Save and exit", retry: "Retry", retryFinish: "Retry saving review",
+    confirmAbandon: "Abandon this game? Its save will be deleted. Used game credits will not be refunded.",
+    confirmTakeover: "This game may be running in another window. Taking over will stop that window from advancing. Continue?",
+    occupied: "This game is running in another window. You can take over.", lost: "This window no longer controls the game. Continue again from the home screen.",
+    gone: "This game has ended or was abandoned.", exists: "An unfinished game already exists. Continue or abandon it first.",
+    invalid: "This save is damaged or incompatible. Abandon it to start a new game.",
+    saveFailed: "Save sync failed. Your progress is retained. Check your connection and retry.",
+    localUnavailable: "This browser cannot save a local backup. Check cloud sync, or allow browser storage for local games.",
+    apiKeyRequired: "This game uses your own model. Re-enter its API key to continue. The key is never stored in the save.",
+    apiKey: "Original model API key", noCredits: "Your account has no game credits remaining.",
+    players: (count: number) => `${count}-player game`, spectator: "Spectator", player: (seat: number) => `Player ${seat}`, saved: "Saved",
+  },
   app: {
     title: "Avalon",
     tagline: "One player. A table of talking AIs.",

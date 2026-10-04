@@ -13,7 +13,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/lib/game";
-import { errorAtom, resetGameAtom, runGameAtom, viewAtom } from "@/store/game";
+import { errorAtom, restartGameAtom, runGameAtom, viewAtom } from "@/store/game";
 import { IdentityDeck } from "./IdentityDeck";
 import { tallyRoles } from "./setup-model";
 
@@ -21,7 +21,7 @@ export function SpectatorIntro() {
   const view = useAtomValue(viewAtom);
   const error = useAtomValue(errorAtom);
   const startRun = useSetAtom(runGameAtom);
-  const reset = useSetAtom(resetGameAtom);
+  const reset = useSetAtom(restartGameAtom);
   const msg = useMessages();
 
   if (!view || view.selfId !== null) return null;

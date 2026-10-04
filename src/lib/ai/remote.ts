@@ -20,6 +20,7 @@ import type {
 export type FetchFn = (url: string, init: RequestInit) => Promise<Response>;
 
 export interface RemoteAiClientOptions {
+  activeGameHeader?: () => string | null;
   /** 默认 /api/ai */
   endpoint?: string;
   /** 服务端创建的对局额度 session；只放 header，不进入 prompt schema */
@@ -54,7 +55,7 @@ export function createRemoteAiClient(options: RemoteAiClientOptions = {}): AiCli
       try {
         response = await fetchFn(endpoint, {
           method: "POST",
-          headers,
+          headers: { ...headers, ...(options.activeGameHeader?.() ? { "X-Active-Game": options.activeGameHeader()! } : {}) },
           body: JSON.stringify({
             ...req,
             ...(options.userLlmConfig ? { userLlmConfig: options.userLlmConfig } : {}),

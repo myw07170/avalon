@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { REVIEW_SCHEMA_VERSION, type SavedReviewSnapshot } from "@/lib/reviews";
 import { DELETE, GET, POST } from "./route";
+vi.mock("@/lib/supabase/active-games", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/supabase/active-games")>(),
+  finishActiveGameFromReviewRequest: vi.fn().mockResolvedValue(false),
+}));
 
 const routeMocks = vi.hoisted(() => {
   class MockAuthError extends Error {}

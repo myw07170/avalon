@@ -3,6 +3,8 @@ import { AuthError, requireAuthenticatedUser } from "@/lib/supabase/auth";
 import { QuotaError, startGameSession } from "@/lib/supabase/quota";
 import { listGameReviewSummaries, ReviewError } from "@/lib/supabase/reviews";
 import type { LlmSource } from "@/lib/supabase/quota";
+import { activeRoute } from "@/lib/supabase/active-route";
+import { startActiveGame } from "@/lib/supabase/active-games";
 
 export const maxDuration = 10;
 
@@ -29,6 +31,10 @@ async function readLlmSource(request: Request): Promise<LlmSource> {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const candidate: unknown = await request.clone().json().catch(() => null);
+  if (candidate && typeof candidate === "object" && "snapshot" in candidate) {
+    return activeRoute(request, user => startActiveGame(user, candidate));
+  }
   let auth;
   try {
     auth = await requireAuthenticatedUser(request);

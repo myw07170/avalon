@@ -27,6 +27,12 @@
    - Redirect URLs: production URL, `https://<your-domain>/auth/callback`, and `http://localhost:3000/**`
 7. Run Supabase Security Advisor and fix any reported issue before sharing the deployment.
 
+For game recovery, apply `20261003225020_active_game_recovery.sql` before deploying
+the application. It adds the account's single active-save slot and backend-only
+transaction RPC. No additional environment variables are needed. Do not expose
+the new tables or RPC to `anon` or `authenticated`. See [game recovery](game-recovery.md)
+for lease behavior, compatibility, and isolated database/browser tests.
+
 ## Vercel
 
 Import your GitHub repository into Vercel.

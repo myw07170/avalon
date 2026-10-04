@@ -13,6 +13,9 @@
 
 # testing
 /coverage
+/test-results
+/playwright-report
+/supabase/.temp
 # real-game.test.ts 落盘的对局记录 + transcript-page 生成的记录页，带真实发言，不入库
 /transcripts
 

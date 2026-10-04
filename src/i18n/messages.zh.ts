@@ -63,6 +63,20 @@ const SKIP_LABEL = "不说了";
 const SILENT = "（没有开口）";
 
 export const zh = {
+  recovery: {
+    title: "未结束的对局", checking: "正在检查对局存档…", working: "正在保存或恢复对局…",
+    resume: "继续对局", takeover: "接管对局", abandon: "放弃对局", saveExit: "保存并退出", retry: "重试", retryFinish: "重试保存复盘",
+    confirmAbandon: "确定放弃这局游戏吗？存档将被删除，已使用的开局额度不会退回。",
+    confirmTakeover: "这局游戏可能正在其他页面运行。接管后，原页面将停止推进。确定接管吗？",
+    occupied: "对局正在其他页面运行，可选择接管。", lost: "当前页面已失去对局控制权，请从首页重新继续。",
+    gone: "这局游戏已结束或被放弃。", exists: "已有未结束的对局，请先继续或放弃。",
+    invalid: "存档损坏或版本不兼容，无法恢复。可以放弃此存档后新开。",
+    saveFailed: "存档同步失败，进度已保留。请检查网络后重试。",
+    localUnavailable: "浏览器无法保存本机备份；云端对局请确认同步成功，本地模式请允许浏览器存储后重试。",
+    apiKeyRequired: "这局使用自带模型，请重新填写原模型的 API Key 后继续。Key 不会写入存档。",
+    apiKey: "原模型 API Key", noCredits: "当前账号没有可用对局额度。",
+    players: (count: number) => `${count} 人局`, spectator: "观战", player: (seat: number) => `${seat} 号玩家`, saved: "保存于",
+  },
   app: {
     title: "阿瓦隆",
     tagline: "一个人，一桌会说话的 AI。",

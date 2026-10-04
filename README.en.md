@@ -17,6 +17,8 @@ The project is under active development. Its central concern is not putting the 
 
 ## Features
 
+- In-progress saves, refresh recovery, and save-and-exit; authenticated deployments support cross-device recovery and explicit takeover ([details](docs/game-recovery.md)).
+
 - 5-10 player Avalon games with recommended and valid custom role setups
 - Single-player and all-AI spectator modes; spectator roles start face down and can be revealed seat by seat
 - Chinese and English interfaces with dark and light themes

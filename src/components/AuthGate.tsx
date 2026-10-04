@@ -23,6 +23,7 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+export function useOptionalAuthSession() { return useContext(AuthContext); }
 
 export function useAuthSession(): AuthContextValue {
   const value = useContext(AuthContext);

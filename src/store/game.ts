@@ -56,6 +56,222 @@ import type { UserLlmConfig } from "@/lib/ai/user-config";
 import { PREVIEW_AVATAR_SEED } from "@/lib/seat-avatar";
 import { createSavedReviewSnapshot } from "@/lib/reviews";
 import { GAME_REVIEWS_CHANGED_EVENT } from "@/lib/credits/events";
+import { GAME_CREDITS_CHANGED_EVENT } from "@/lib/credits/events";
+import { ActiveGamePersistence, SaveError } from "@/lib/active-game-client";
+import { InvalidActiveGameSnapshot, parseActiveGameSnapshot, type ActiveGameSnapshot, type ActiveGameSummary, type RunCheckpoint } from "@/lib/active-game";
+import type { StatefulRng } from "@/lib/game/rng";
+
+const persistenceAtom = atom<ActiveGamePersistence | null>(null);
+const persistenceOwnerAtom = atom<string | undefined>(undefined);
+const checkpointAtom = atom<RunCheckpoint | null>(null);
+const activeGameIdAtom = atom<string | null>(null);
+const gameLocaleAtom = atom<"zh" | "en">("zh");
+const gameAiModeAtom = atom<AiMode>("mock");
+export const recoverySummaryAtom = atom<ActiveGameSummary | null>(null);
+export const recoveryCheckedAtom = atom(false);
+export const recoveryBusyAtom = atom(false);
+const recoveryErrorCodeAtom = atom<string | null>(null);
+export const recoveryErrorAtom = atom(get => {
+  const code = get(recoveryErrorCodeAtom);
+  const copy = MESSAGES[get(localeAtom)].recovery;
+  if (!code) return null;
+  if (code === "GAME_OCCUPIED") return copy.occupied;
+  if (code === "GAME_CONFLICT") return copy.lost;
+  if (code === "GAME_GONE") return copy.gone;
+  if (code === "GAME_EXISTS") return copy.exists;
+  if (code === "INVALID_SAVE") return copy.invalid;
+  if (code === "LOCAL_UNAVAILABLE") return copy.localUnavailable;
+  if (code === "API_KEY_REQUIRED") return copy.apiKeyRequired;
+  if (code === "NO_GAME_CREDITS") return copy.noCredits;
+  return copy.saveFailed;
+});
+
+function reportSaveError(set: Setter, error: unknown) {
+  set(recoveryErrorCodeAtom, error instanceof SaveError ? error.code : error instanceof InvalidActiveGameSnapshot ? "INVALID_SAVE" : "SAVE_UNAVAILABLE");
+}
+
+/** The full snapshot stays private to the driver, never a component-readable atom. */
+function snapshotOf(get: Getter): ActiveGameSnapshot {
+  const state = get(gameStateAtom)!;
+  const config = get(gameUserLlmConfigAtom);
+  const model = config ? (({ apiKey: _key, ...rest }) => rest)(config) : null;
+  // Raw provider prompts grow with the transcript and are not used by the UI.
+  // Keep reasoning/actions for review without filling browser storage with N copies.
+  const compact = (record: DecisionRecord): DecisionRecord => ({
+    ...record, result: { payload: record.result.payload, fallback: record.result.fallback },
+  });
+  const checkpoint = get(checkpointAtom) ?? { state, batch: null };
+  return {
+    schemaVersion: 1, gameId: get(activeGameIdAtom)!, gameSessionId: get(gameSessionIdAtom), savedAt: new Date().toISOString(),
+    checkpoint: { ...checkpoint, batch: checkpoint.batch ? {
+      ...checkpoint.batch, turns: checkpoint.batch.turns.map(turn => turn ? { ...turn, record: turn.record ? compact(turn.record) : null } : null),
+    } : null }, decisions: get(decisionsAtom).map(compact),
+    rngState: (get(rngAtom) as StatefulRng).getState(), humanSeat: get(mySeatAtom), avatarSeed: get(seatAvatarSeedAtom),
+    locale: get(gameLocaleAtom), aiMode: get(gameAiModeAtom), model,
+    paused: get(pausedAtom), revealedSeats: [...get(revealedSeatsAtom)], paceMs: get(paceMsAtom),
+  };
+}
+
+export const initializeRecoveryAtom = atom(null, async (get, set, owner: string | null) => {
+  const ownerKey = owner ?? "local";
+  if (get(persistenceOwnerAtom) === ownerKey) return;
+  get(persistenceAtom)?.pagehide();
+  set(resetGameAtom);
+  set(userLlmConfigAtom, null);
+  set(persistenceOwnerAtom, ownerKey);
+  set(recoveryCheckedAtom, false);
+  set(recoveryBusyAtom, false);
+  set(recoverySummaryAtom, null);
+  set(recoveryErrorCodeAtom, null);
+  const persistence = new ActiveGamePersistence(owner);
+  set(persistenceAtom, persistence);
+  persistence.onLost = (code) => {
+    if (get(persistenceAtom) !== persistence) return;
+    get(abortAtom)?.abort();
+    set(recoveryErrorCodeAtom, code);
+    set(runStatusAtom, get(gameStateAtom)?.phase === "GAME_OVER" ? "finished" : "error");
+    void set(refreshRecoveryAtom);
+  };
+  persistence.onLocalFailure = () => set(recoveryErrorCodeAtom, "LOCAL_UNAVAILABLE");
+  await set(refreshRecoveryAtom);
+});
+
+export const refreshRecoveryAtom = atom(null, async (get, set) => {
+  const persistence = get(persistenceAtom);
+  if (!persistence) return;
+  try {
+    const summary = await persistence.summary();
+    if (get(persistenceAtom) !== persistence) return;
+    set(recoverySummaryAtom, summary);
+    set(recoveryCheckedAtom, true);
+  } catch (error) { if (get(persistenceAtom) === persistence) reportSaveError(set, error); }
+});
+
+export const disposeRecoveryAtom = atom(null, (get, set) => {
+  get(persistenceAtom)?.pagehide();
+  set(resetGameAtom);
+  set(userLlmConfigAtom, null);
+  set(persistenceAtom, null);
+  set(persistenceOwnerAtom, undefined);
+  set(recoveryBusyAtom, false);
+  set(recoveryCheckedAtom, false);
+  set(recoverySummaryAtom, null);
+});
+
+/** UI start: durable initial deal and quota charge precede any play. */
+export const beginGameAtom = atom(null, async (get, set, input: CreateGameInput) => {
+  if (get(recoveryBusyAtom) || !get(recoveryCheckedAtom) || get(recoverySummaryAtom)) return;
+  const persistence = get(persistenceAtom);
+  if (!persistence) return;
+  set(recoveryBusyAtom, true);
+  set(recoveryErrorCodeAtom, null);
+  try {
+    set(createGameAtom, input);
+    if (!get(gameStateAtom)) return;
+    const envelope = await persistence.start(parseActiveGameSnapshot(snapshotOf(get)));
+    if (get(persistenceAtom) !== persistence) return;
+    set(gameSessionIdAtom, envelope.snapshot.gameSessionId);
+    window.dispatchEvent(new Event(GAME_CREDITS_CHANGED_EVENT));
+  } catch (error) {
+    if (get(persistenceAtom) !== persistence) return;
+    set(resetGameAtom);
+    reportSaveError(set, error);
+    await set(refreshRecoveryAtom);
+  } finally { if (get(persistenceAtom) === persistence) set(recoveryBusyAtom, false); }
+});
+
+export const resumeSavedGameAtom = atom(null, async (get, set, input: { gameId: string; takeover?: boolean; apiKey?: string }) => {
+  if (get(recoveryBusyAtom)) return;
+  const persistence = get(persistenceAtom);
+  if (!persistence) return;
+  set(recoveryBusyAtom, true);
+  set(recoveryErrorCodeAtom, null);
+  try {
+    get(abortAtom)?.abort();
+    const { snapshot } = await persistence.resume(input.gameId, input.takeover ?? false);
+    if (get(persistenceAtom) !== persistence) return;
+    if (snapshot.model && !input.apiKey?.trim()) {
+      await persistence.release();
+      throw new SaveError("API_KEY_REQUIRED");
+    }
+    set(resetGameAtom);
+    set(activeGameIdAtom, snapshot.gameId);
+    set(gameSessionIdAtom, snapshot.gameSessionId);
+    set(gameStateAtom, snapshot.checkpoint.state);
+    set(checkpointAtom, snapshot.checkpoint);
+    set(decisionsAtom, snapshot.decisions);
+    set(rngAtom, () => createRng(snapshot.rngState));
+    set(mySeatAtom, snapshot.humanSeat);
+    set(seatAvatarSeedStateAtom, snapshot.avatarSeed);
+    set(gameLocaleAtom, snapshot.locale);
+    set(gameAiModeAtom, snapshot.aiMode);
+    set(gameUserLlmConfigAtom, snapshot.model ? { ...snapshot.model, apiKey: input.apiKey!.trim() } : null);
+    set(pauseStateAtom, snapshot.paused);
+    set(revealedSeatsAtom, new Set(snapshot.revealedSeats));
+    set(paceMsAtom, snapshot.paceMs);
+    set(recoverySummaryAtom, null);
+    if (snapshot.checkpoint.state.phase === "GAME_OVER") {
+      set(runStatusAtom, "finished");
+      await set(retryFinishAtom);
+    } else {
+      set(runStatusAtom, "ready");
+      if (snapshot.checkpoint.state.phase !== "SETUP") void set(runGameAtom);
+    }
+  } catch (error) { if (get(persistenceAtom) === persistence) { reportSaveError(set, error); await set(refreshRecoveryAtom); } }
+  finally { if (get(persistenceAtom) === persistence) set(recoveryBusyAtom, false); }
+});
+
+export const saveAndExitAtom = atom(null, async (get, set) => {
+  if (get(recoveryBusyAtom)) return;
+  const persistence = get(persistenceAtom);
+  if (!persistence || !get(gameStateAtom)) { set(resetGameAtom); return; }
+  set(recoveryBusyAtom, true);
+  get(abortAtom)?.abort();
+  try {
+    await persistence.save(snapshotOf(get));
+    await persistence.flush();
+    await persistence.release();
+    if (get(persistenceAtom) !== persistence) return;
+    set(resetGameAtom);
+    await set(refreshRecoveryAtom);
+  } catch (error) { if (get(persistenceAtom) === persistence) { reportSaveError(set, error); set(runStatusAtom, "error"); await set(refreshRecoveryAtom); } }
+  finally { if (get(persistenceAtom) === persistence) set(recoveryBusyAtom, false); }
+});
+
+export const abandonSavedGameAtom = atom(null, async (get, set, gameId: string) => {
+  if (get(recoveryBusyAtom)) return;
+  const msg = MESSAGES[get(localeAtom)].recovery;
+  if (!window.confirm(msg.confirmAbandon)) return;
+  const persistence = get(persistenceAtom);
+  set(recoveryBusyAtom, true);
+  get(abortAtom)?.abort();
+  try {
+    await persistence?.abandon(gameId);
+    if (get(persistenceAtom) !== persistence) return;
+    set(resetGameAtom);
+    set(recoveryErrorCodeAtom, null);
+    await set(refreshRecoveryAtom);
+  } catch (error) { if (get(persistenceAtom) === persistence) { reportSaveError(set, error); set(runStatusAtom, "error"); await set(refreshRecoveryAtom); } }
+  finally { if (get(persistenceAtom) === persistence) set(recoveryBusyAtom, false); }
+});
+
+/** Replace UI reset calls; the internal reset remains a non-destructive cleanup. */
+export const restartGameAtom = atom(null, async (get, set) => {
+  const id = get(persistenceAtom)?.envelope?.handle.gameId;
+  if (id) await set(abandonSavedGameAtom, id);
+  else { set(resetGameAtom); await set(refreshRecoveryAtom); }
+});
+
+export const retryFinishAtom = atom(null, async (get, set) => {
+  const persistence = get(persistenceAtom);
+  if (!persistence?.envelope || get(gameStateAtom)?.phase !== "GAME_OVER") return;
+  try {
+    await persistence.finish();
+    if (get(persistenceAtom) !== persistence) return;
+    set(recoveryErrorCodeAtom, null);
+    window.dispatchEvent(new Event(GAME_REVIEWS_CHANGED_EVENT));
+  } catch (error) { if (get(persistenceAtom) === persistence) reportSaveError(set, error); }
+});
 
 // ---------------------------------------------------------------------------
 // 全知状态与视角
@@ -333,6 +549,7 @@ export const togglePauseAtom = atom(null, (get, set) => {
   const paused = get(pauseStateAtom);
   set(pauseStateAtom, !paused);
   if (paused) get(gateAtom)?.();
+  void set(persistPreferencesAtom);
 });
 
 // ---------------------------------------------------------------------------
@@ -361,6 +578,7 @@ export const toggleSeatAtom = atom(null, (get, set, seat: PlayerId) => {
   const next = new Set(get(revealedSeatsAtom));
   if (!next.delete(seat)) next.add(seat);
   set(revealedSeatsAtom, next);
+  void set(persistPreferencesAtom);
 });
 
 /** 全部翻开 / 全部盖上 */
@@ -368,10 +586,12 @@ export const revealAllSeatsAtom = atom(null, (get, set) => {
   const view = get(viewAtom);
   if (!view) return;
   set(revealedSeatsAtom, new Set(view.players.map((p) => p.id)));
+  void set(persistPreferencesAtom);
 });
 
 export const hideAllSeatsAtom = atom(null, (_get, set) => {
   set(revealedSeatsAtom, NO_SEATS);
+  void set(persistPreferencesAtom);
 });
 
 /**
@@ -420,7 +640,11 @@ export const userLlmConfigAtom = atom<UserLlmConfig | null>(null);
 /** 发言之间的基准停顿。设 0 全速跑（测试与「快进」用） */
 export const DEFAULT_PACE_MS = 800;
 
-export const paceMsAtom = atom(DEFAULT_PACE_MS);
+const paceStateAtom = atom(DEFAULT_PACE_MS);
+export const paceMsAtom = atom(
+  get => get(paceStateAtom),
+  (_get, set, value: number) => { set(paceStateAtom, value); void set(persistPreferencesAtom); },
+);
 
 /**
  * 按决策种类缩放停顿。
@@ -711,6 +935,10 @@ export const createGameAtom = atom(null, (_get, set, input: CreateGameInput) => 
       rng,
     });
     set(gameStateAtom, state);
+    set(activeGameIdAtom, crypto.randomUUID());
+    set(gameLocaleAtom, _get(localeAtom));
+    set(gameAiModeAtom, _get(aiModeAtom));
+    set(checkpointAtom, { state, batch: null });
     set(mySeatAtom, humanSeat);
     set(gameSessionIdAtom, input.gameSessionId ?? null);
     set(gameUserLlmConfigAtom, input.userLlmConfig ?? null);
@@ -750,11 +978,15 @@ export const runGameAtom = atom(null, async (get, set) => {
   // signal 必须传下去：不传的话「重开」只是让循环下一步不再开始，
   // 在途的那次请求仍在跑，服务端也仍在向 provider 要结果（见 remote.ts 的说明）
   const client: AiClient = withThinking(
-    get(aiModeAtom) === "remote"
+    get(gameAiModeAtom) === "remote"
       ? createRemoteAiClient({
           signal,
           gameSessionId: get(gameSessionIdAtom),
           userLlmConfig: get(gameUserLlmConfigAtom),
+          activeGameHeader: () => {
+            const handle = get(persistenceAtom)?.envelope?.handle;
+            return handle ? JSON.stringify(handle) : null;
+          },
         })
       : createMockAiClient(rng),
     set,
@@ -781,17 +1013,32 @@ export const runGameAtom = atom(null, async (get, set) => {
     });
 
   try {
+    await waitWhileGated(get, set, signal);
+    signal.throwIfAborted();
     const final = await runGame({
       state,
+      checkpoint: get(checkpointAtom) ?? undefined,
+      isolatedRng: true,
+      ...(get(gameAiModeAtom) === "mock" ? { clientForTurn: (turnRng: RngFn) => withThinking(createMockAiClient(turnRng), set) } : {}),
       client,
       rng,
       onHumanAction,
       signal,
       // 【开局取一次，之后不跟着界面变】玩家中途切语言，UI 立刻变，
       // 但 AI 仍然说开局那种语言——一份 transcript 不该说到一半换语言
-      locale: get(localeAtom),
+      locale: get(gameLocaleAtom),
       hooks: {
+        onCheckpoint: (checkpoint, committed) => {
+          signal.throwIfAborted();
+          if (get(abortAtom) !== controller) return;
+          set(checkpointAtom, checkpoint);
+          set(gameStateAtom, checkpoint.state);
+          if (committed) set(decisionsAtom, prev => [...prev, committed]);
+          const persistence = get(persistenceAtom);
+          if (persistence?.envelope) return persistence.save(snapshotOf(get));
+        },
         onState: (next) => {
+          signal.throwIfAborted();
           set(gameStateAtom, next);
           const kind = lastDecisionKind;
           lastDecisionKind = null;
@@ -805,7 +1052,6 @@ export const runGameAtom = atom(null, async (get, set) => {
         // 顺序是 onDecision -> reduce -> onState，所以停顿发生在这条发言出现【之前】，
         // 观感正好是"AI 在想"，而不是"发完了卡一下"
         onDecision: async (record) => {
-          set(decisionsAtom, (prev) => [...prev, record]);
           await sleep(paceOf(get(paceMsAtom), record.kind, record.latencyMs), signal);
           // 停顿走完才看闸：先把这一手画出来再停，暂停键按下去的观感才是"停在这里"
           await waitWhileGated(get, set, signal);
@@ -815,12 +1061,16 @@ export const runGameAtom = atom(null, async (get, set) => {
     });
     set(gameStateAtom, final);
     set(runStatusAtom, "finished");
-    await saveFinishedReview(get, set);
+    if (get(persistenceAtom)?.envelope) await set(retryFinishAtom);
+    else await saveFinishedReview(get, set);
   } catch (error) {
     // 主动中止不是错误，不该在界面上弹红字。状态已由 resetGameAtom 归位
     if (signal.aborted) return;
-    set(errorSourceAtom, sourceOfError(error));
-    set(runStatusAtom, "error");
+    controller.abort();
+    if (error instanceof SaveError) reportSaveError(set, error);
+    else set(errorSourceAtom, sourceOfError(error));
+    set(runStatusAtom, get(gameStateAtom)?.phase === "GAME_OVER" ? "finished" : "error");
+    if (get(persistenceAtom)) await set(refreshRecoveryAtom);
   } finally {
     // 只清理自己那一局。中途 reset 再开新局时，这段跑得比新局晚，
     // 不加这道判断会把新局的 pendingTurn 一起抹掉
@@ -890,6 +1140,21 @@ export const resetGameAtom = atom(null, (get, set) => {
   set(rngAtom, null);
   set(gameSessionIdAtom, null);
   set(gameUserLlmConfigAtom, null);
+  set(checkpointAtom, null);
+  set(activeGameIdAtom, null);
   set(runStatusAtom, "idle");
   set(errorSourceAtom, null);
+});
+
+const persistPreferencesAtom = atom(null, async (get, set) => {
+  if (get(recoveryBusyAtom)) return;
+  const persistence = get(persistenceAtom);
+  if (!persistence?.envelope || !get(gameStateAtom)) return;
+  try { await persistence.save(snapshotOf(get)); }
+  catch (error) {
+    reportSaveError(set, error);
+    get(abortAtom)?.abort();
+    set(runStatusAtom, "error");
+    await set(refreshRecoveryAtom);
+  }
 });

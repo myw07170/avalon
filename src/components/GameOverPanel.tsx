@@ -15,7 +15,7 @@ import { useMemo } from "react";
 import {
   errorAtom,
   viewAtom,
-  resetGameAtom,
+  restartGameAtom,
   reviewDecisionsAtom,
   seatAvatarSeedAtom,
 } from "@/store/game";
@@ -43,7 +43,7 @@ export function GameOverPanel() {
   const avatarSeed = useAtomValue(seatAvatarSeedAtom);
   const decisions = useAtomValue(reviewDecisionsAtom);
   const error = useAtomValue(errorAtom);
-  const reset = useSetAtom(resetGameAtom);
+  const reset = useSetAtom(restartGameAtom);
   const msg = useMessages();
 
   return (
