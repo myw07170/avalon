@@ -23,6 +23,7 @@ import {
   setRawErrorAtom,
   userLlmConfigAtom,
 } from "@/store/game";
+import { RecoveryCard } from "./RecoveryBoundary";
 import { SeatRing } from "./SeatRing";
 import {
   effectiveRolePreference,
@@ -106,125 +107,135 @@ export function SetupScreen({ draft, onDraftChange }: SetupScreenProps) {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-10 px-5 py-12 sm:px-8 sm:py-16">
-      <header className="text-center">
-        <h1 className="-mr-[var(--track-4)] font-display text-4xl tracking-[var(--track-4)] sm:text-5xl">
-          {msg.app.title}
+    <main className="mx-auto flex w-full max-w-7xl min-w-0 flex-1 flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
+      <header className="border-b border-ink-line pb-5">
+        <h1 className="-mr-[var(--track-4)] font-display text-3xl tracking-[var(--track-2)] sm:text-4xl">
+          {msg.ui.lobby}
         </h1>
-        <p className="mt-4 text-sm text-muted">{msg.app.tagline}</p>
+        <p className="mt-2 text-sm leading-relaxed text-muted">{msg.ui.lobbyNote}</p>
       </header>
 
-      <Field label={msg.setup.playerCount}>
-        <div role="radiogroup" aria-label={msg.setup.playerCount} className="flex gap-2">
-          {PLAYER_COUNTS.map((count) => (
-            <Choice
-              key={count}
-              checked={count === draft.playerCount}
-              onSelect={() => onDraftChange((d) => withPlayerCount(d, count))}
-              className="tabular flex-1 py-2.5 text-base"
-            >
-              {count}
-            </Choice>
-          ))}
-        </div>
-      </Field>
+      <RecoveryCard />
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] xl:items-start">
+        <section className="ui-panel min-w-0 p-5 sm:p-6">
+          <h2 className="ui-section-title mb-4">{msg.ui.seats}</h2>
+          <RoundTable
+            playerCount={draft.playerCount}
+            humanSeat={draft.humanSeat}
+            good={preview.split.good}
+            evil={preview.split.evil}
+            onSeat={(id) => onDraftChange((d) => withHumanSeat(d, id))}
+            onToggleSpectate={() =>
+              onDraftChange((d) => (d.humanSeat === null ? withSeat(d) : withSpectator(d)))
+            }
+          />
 
-      {preview.freeEvilSlots > 0 && (
-        <Field label={msg.setup.freeEvilSlots(preview.freeEvilSlots)}>
-          <div
-            role="radiogroup"
-            aria-label={msg.setup.freeEvilAria}
-            className="grid grid-cols-2 gap-2 sm:grid-cols-4"
-          >
-            {preview.evilOptions.map((option, index) => (
-              <Choice
-                key={option.join("+")}
-                checked={index === draft.evilOptionIndex}
-                onSelect={() => onDraftChange((d) => withEvilOption(d, index))}
-                className="min-h-11 px-3 py-2.5 text-sm"
+        </section>
+        <div className="ui-panel flex min-w-0 flex-col gap-5 p-5 sm:p-6">
+          <h2 className="ui-section-title border-b border-ink-line pb-4">{msg.ui.configuration}</h2>
+          <Field label={msg.setup.playerCount}>
+            <div role="radiogroup" aria-label={msg.setup.playerCount} className="flex gap-2">
+              {PLAYER_COUNTS.map((count) => (
+                <Choice
+                  key={count}
+                  checked={count === draft.playerCount}
+                  onSelect={() => onDraftChange((d) => withPlayerCount(d, count))}
+                  className="tabular flex-1 py-2.5 text-base"
+                >
+                  {count}
+                </Choice>
+              ))}
+            </div>
+          </Field>
+
+          {preview.freeEvilSlots > 0 && (
+            <Field label={msg.setup.freeEvilSlots(preview.freeEvilSlots)}>
+              <div
+                role="radiogroup"
+                aria-label={msg.setup.freeEvilAria}
+                className="grid grid-cols-2 gap-2"
               >
-                {option.map((role) => msg.roles[role].label).join(" + ")}
-              </Choice>
-            ))}
-          </div>
-          <ul className="mt-3 space-y-1.5">
-            {dedupe(preview.selectedEvil).map((role) => (
-              <li key={role} className="text-xs leading-relaxed text-muted">
-                <span className="text-mordred">{msg.roles[role].label}</span>
-                {msg.gameOver.opinionLine("", msg.roles[role].ability)}
-              </li>
-            ))}
-          </ul>
-        </Field>
-      )}
+                {preview.evilOptions.map((option, index) => (
+                  <Choice
+                    key={option.join("+")}
+                    checked={index === draft.evilOptionIndex}
+                    onSelect={() => onDraftChange((d) => withEvilOption(d, index))}
+                    className="min-h-11 px-3 py-2.5 text-xs"
+                  >
+                    {option.map((role) => msg.roles[role].label).join(" +")}
+                  </Choice>
+                ))}
+              </div>
+              <ul className="mt-3 space-y-1.5">
+                {dedupe(preview.selectedEvil).map((role) => (
+                  <li key={role} className="text-xs leading-relaxed text-muted">
+                    <span className="text-mordred">{msg.roles[role].label}</span>
+                    {msg.gameOver.opinionLine("", msg.roles[role].ability)}
+                  </li>
+                ))}
+              </ul>
+            </Field>
+          )}
 
-      <Field label={msg.setup.rolesField}>
-        <ul className="flex flex-wrap gap-2">
-          {roleTallies.map((entry) => (
-            <li
-              key={entry.role}
+          <Field label={msg.setup.rolesField}>
+            <ul className="flex flex-wrap gap-2">
+              {roleTallies.map((entry) => (
+                <li
+                  key={entry.role}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-xs",
+                    entry.team === "GOOD"
+                      ? "border-loyal-line text-loyal"
+                      : "border-mordred-line text-mordred",
+                  )}
+                >
+                  {msg.roles[entry.role].label}
+                  {entry.count > 1 && <span className="tabular"> ×{entry.count}</span>}
+                </li>
+              ))}
+            </ul>
+          </Field>
+
+
+          <Field label={msg.setup.missionsField}>
+            <MissionTable missions={preview.missions} />
+          </Field>
+
+          <div className="mt-auto flex flex-col gap-3 border-t border-ink-line pt-5">
+            {preview.errors.map((issue) => (
+              <Notice key={issue.code} tone="error">
+                {msg.configIssue[issue.code](issue.params)}
+              </Notice>
+            ))}
+            {preview.warnings.map((issue) => (
+              <Notice key={issue.code} tone="warning">
+                {msg.setup.balanceNote(msg.configIssue[issue.code](issue.params))}
+              </Notice>
+            ))}
+            {/* 【观战不是错误，所以不用 error 那一档】它是一种正常的对局形态，
+            红字会让人以为自己配错了什么 */}
+            {!seated && <Notice tone="warning">{msg.setup.spectateHint}</Notice>}
+            {!seated && aiMode === "remote" && (
+              <Notice tone="warning">{msg.setup.spectateCostNote}</Notice>
+            )}
+            {storeError && <Notice tone="error">{storeError}</Notice>}
+
+            <button
+              type="button"
+              onClick={start}
+              disabled={!preview.canStart || starting || !recoveryChecked || recoverySummary !== null}
               className={cn(
-                "rounded-full border px-3 py-1 text-sm",
-                entry.team === "GOOD"
-                  ? "border-loyal/40 text-loyal"
-                  : "border-mordred/40 text-mordred",
+                "mt-1 w-full rounded-lg px-6 py-3.5 font-display text-lg tracking-[var(--track-3)] transition-colors",
+                "ui-button-primary",
+                "disabled:cursor-not-allowed disabled:bg-ink-raised disabled:text-muted",
               )}
             >
-              {msg.roles[entry.role].label}
-              {entry.count > 1 && <span className="tabular"> ×{entry.count}</span>}
-            </li>
-          ))}
-        </ul>
-      </Field>
-
-      <RoundTable
-        playerCount={draft.playerCount}
-        humanSeat={draft.humanSeat}
-        good={preview.split.good}
-        evil={preview.split.evil}
-        onSeat={(id) => onDraftChange((d) => withHumanSeat(d, id))}
-        onToggleSpectate={() =>
-          onDraftChange((d) => (d.humanSeat === null ? withSeat(d) : withSpectator(d)))
-        }
-      />
-
-      <Field label={msg.setup.missionsField}>
-        <MissionTable missions={preview.missions} />
-      </Field>
-
-      <div className="flex flex-col gap-3">
-        {preview.errors.map((issue) => (
-          <Notice key={issue.code} tone="error">
-            {msg.configIssue[issue.code](issue.params)}
-          </Notice>
-        ))}
-        {preview.warnings.map((issue) => (
-          <Notice key={issue.code} tone="warning">
-            {msg.setup.balanceNote(msg.configIssue[issue.code](issue.params))}
-          </Notice>
-        ))}
-        {/* 【观战不是错误，所以不用 error 那一档】它是一种正常的对局形态，
-            红字会让人以为自己配错了什么 */}
-        {!seated && <Notice tone="warning">{msg.setup.spectateHint}</Notice>}
-        {!seated && aiMode === "remote" && (
-          <Notice tone="warning">{msg.setup.spectateCostNote}</Notice>
-        )}
-        {storeError && <Notice tone="error">{storeError}</Notice>}
-
-        <button
-          type="button"
-          onClick={start}
-          disabled={!preview.canStart || starting || !recoveryChecked || recoverySummary !== null}
-          className={cn(
-            "mt-1 w-full rounded-lg px-6 py-3.5 font-display text-lg tracking-[var(--track-3)] transition-colors",
-            "bg-brass text-on-brass hover:bg-brass/85",
-            "disabled:cursor-not-allowed disabled:bg-ink-raised disabled:text-muted",
-          )}
-        >
-          <span className="-mr-[var(--track-3)]">
-            {starting ? msg.setup.starting : seated ? msg.setup.submit : msg.setup.spectate}
-          </span>
-        </button>
+              <span className="-mr-[var(--track-3)]">
+                {starting ? msg.setup.starting : seated ? msg.setup.submit : msg.setup.spectate}
+              </span>
+            </button>
+          </div>
+        </div>
       </div>
     </main>
   );
@@ -335,7 +346,7 @@ function MissionTable({ missions }: { missions: MissionConfig[] }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 className="mb-3 font-display text-xs tracking-[var(--track-3)] text-muted">{label}</h2>
+      <h2 className="mb-2.5 text-xs font-medium text-muted">{label}</h2>
       {children}
     </section>
   );
@@ -367,7 +378,7 @@ function Choice({
       className={cn(
         "rounded-lg border transition-colors",
         checked
-          ? "border-brass bg-brass/15 text-vellum"
+          ? "ui-selected border-brass bg-brass-soft text-vellum"
           : "border-ink-line bg-ink-raised text-muted hover:border-muted hover:text-vellum",
         className,
       )}
@@ -390,8 +401,8 @@ function Notice({
       className={cn(
         "rounded-lg border px-4 py-3 text-sm leading-relaxed",
         tone === "error"
-          ? "border-mordred/50 bg-mordred/10 text-mordred"
-          : "border-brass/50 bg-brass/10 text-brass",
+          ? "border-mordred-line bg-mordred-soft text-mordred"
+          : "border-brass-line bg-brass-soft text-brass",
       )}
     >
       {children}

@@ -19,21 +19,21 @@ export function InGameLayout({
   return (
     <main
       className={
-        "mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-5 py-10 " +
-        "sm:py-14 lg:mx-0 lg:grid lg:min-h-dvh lg:max-w-none " +
-        "lg:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)] lg:grid-rows-[auto_1fr] " +
+        "mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-4 py-6 " +
+        "sm:py-8 lg:mx-0 lg:grid lg:min-h-[calc(100dvh-var(--app-header-height))] lg:max-w-none " +
+        "lg:grid-cols-[minmax(0,1.35fr)_minmax(23rem,1fr)] lg:grid-rows-[auto_1fr] " +
         "lg:items-start lg:gap-0 lg:px-0 lg:py-0"
       }
     >
-      <div className="flex w-full flex-col items-center gap-8 lg:col-start-1 lg:row-start-1 lg:mx-auto lg:max-w-3xl lg:px-8 lg:pt-14">
+      <div className="flex w-full flex-col items-center gap-5 lg:col-start-1 lg:row-start-1 lg:mx-auto lg:max-w-3xl lg:px-8 lg:pt-8">
         {overview}
       </div>
 
-      <aside className="w-full lg:sticky lg:top-0 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:h-dvh lg:min-h-0 lg:self-start lg:border-l lg:border-ink-line lg:bg-ink-raised">
+      <aside className="ui-surface w-full lg:sticky lg:top-[var(--app-header-height)] lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:h-[calc(100dvh-var(--app-header-height))] lg:min-h-0 lg:self-start lg:border-l lg:border-ink-line lg:bg-ink-raised">
         {conversation}
       </aside>
 
-      <div className="flex w-full flex-col items-center gap-8 lg:col-start-1 lg:row-start-2 lg:mx-auto lg:max-w-3xl lg:px-8 lg:pb-14 lg:pt-8">
+      <div className="flex w-full flex-col items-center gap-5 lg:col-start-1 lg:row-start-2 lg:mx-auto lg:max-w-3xl lg:px-8 lg:pb-8 lg:pt-5">
         {controls}
       </div>
     </main>

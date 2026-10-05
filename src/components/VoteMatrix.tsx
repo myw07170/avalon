@@ -16,6 +16,7 @@
  * 推导全在 vote-model.ts，这里只负责画。
  */
 import { useAtomValue } from "jotai";
+import { ChevronDown } from "lucide-react";
 import { useMessages } from "@/i18n/useMessages";
 import { toDisplaySeatNumber } from "@/lib/seat-number";
 import { cn } from "@/lib/utils";
@@ -44,12 +45,13 @@ export function VoteMatrix({
   if (!data || data.rows.length === 0) return null;
 
   return (
-    <details open={defaultOpen} className="w-full">
-      <summary className="flex cursor-pointer list-none items-baseline gap-2 py-1">
-        <h2 className="font-display text-xs tracking-[var(--track-3)] text-muted">
+    <details open={defaultOpen} className="group w-full">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 py-1">
+        <h2 className="text-sm font-medium text-vellum">
           {msg.vote.matrixTitle}
         </h2>
         <span className="tabular text-[11px] text-muted">{data.rows.length}</span>
+        <ChevronDown className="ml-auto size-4 text-muted transition-transform group-open:rotate-180" aria-hidden />
       </summary>
 
       {/* 10 人局 10 列，360px 屏放不下——横向滚动只发生在这个盒子里，页面本身不动 */}
@@ -80,7 +82,7 @@ export function VoteMatrix({
           </thead>
           <tbody>
             {data.rows.map((row) => (
-              <tr key={row.key} className="border-t border-ink-line/60">
+              <tr key={row.key} className="border-t border-ink-line">
                 <th
                   scope="row"
                   aria-label={row.ariaLabel}
@@ -98,7 +100,7 @@ export function VoteMatrix({
                         "px-1.5 py-1.5 text-center",
                         // 「他给一支自己不在的队投了赞成」是信息量最大的一格。
                         // 底色走 brass，跟圆桌上"在队伍里"是同一条视觉通道
-                        cell.onTeam && "bg-brass/10",
+                        cell.onTeam && "bg-brass-soft",
                       )}
                     >
                       <span className="sr-only">

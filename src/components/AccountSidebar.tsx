@@ -12,16 +12,11 @@ import { useAtom } from "jotai";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Popover from "@radix-ui/react-popover";
 import {
-  Bot,
   Check,
-  Dice5,
-  History,
-  KeyRound,
   LoaderCircle,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
-  Radio,
   Trash2,
   UserCircle,
   XCircle,
@@ -36,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { aiModeAtom, userLlmConfigAtom, type AiMode } from "@/store/game";
 import { useAuthSession } from "./AuthGate";
 import { PersonaLibrary } from "./PersonaLibrary";
+import { MetalIcon } from "./HeraldicIcon";
 import {
   describeHistoryItem,
   draftFromUserLlmConfig,
@@ -158,8 +154,8 @@ export function AccountSidebar({
       <>
         <aside
           className={cn(
-            "flex min-h-0 items-center gap-2 border-b border-ink-line bg-ink-raised/70 px-3 py-2",
-            "transition-all duration-200 lg:sticky lg:top-0 lg:h-dvh lg:flex-col lg:border-b-0 lg:border-r lg:py-4",
+            "flex min-h-0 items-center gap-2 border-b border-ink-line ui-surface px-3 py-2",
+            "transition-all duration-200 lg:sticky lg:top-[var(--app-header-height)] lg:h-[calc(100dvh-var(--app-header-height))] lg:flex-col lg:border-b-0 lg:border-r lg:py-4",
           )}
         >
           <button
@@ -187,7 +183,7 @@ export function AccountSidebar({
             {loading ? (
               <LoaderCircle className="size-4 animate-spin" aria-hidden />
             ) : (
-              <History className="size-4" aria-hidden />
+              <MetalIcon kind="history" className="size-6" />
             )}
             {!loading && reviews.length > 0 && (
               <span className="absolute right-1 top-1 size-1.5 rounded-full bg-brass" />
@@ -215,7 +211,7 @@ export function AccountSidebar({
 
   return (
     <>
-      <aside className="flex min-h-0 flex-col border-b border-ink-line bg-ink-raised/70 px-4 py-4 lg:sticky lg:top-0 lg:h-dvh lg:border-b-0 lg:border-r">
+      <aside className="flex min-h-0 flex-col border-b border-ink-line ui-sidebar px-4 py-4 lg:sticky lg:top-[var(--app-header-height)] lg:h-[calc(100dvh-var(--app-header-height))] lg:border-b-0 lg:border-r">
         <header className="mb-3 flex justify-end text-muted">
           <button
             type="button"
@@ -236,8 +232,8 @@ export function AccountSidebar({
 
         <header className="mb-3 mt-4 flex items-center gap-2 text-muted">
           <div className="flex min-w-0 items-center gap-2">
-            <History className="size-4 shrink-0" aria-hidden />
-            <h2 className="truncate font-display text-xs tracking-[var(--track-3)]">
+            <MetalIcon kind="history" className="size-6" />
+            <h2 className="truncate text-xs font-medium">
               {msg.history.title}
             </h2>
           </div>
@@ -265,7 +261,7 @@ export function AccountSidebar({
                       <Link
                         href={`/reviews/${review.id}`}
                         aria-label={brief.ariaLabel}
-                        className="min-w-0 flex-1 px-3 py-2"
+                        className="min-w-0 flex-1 px-3 py-3"
                       >
                         <p className="truncate text-sm text-vellum">{brief.title}</p>
                         <p className="mt-1 truncate text-xs text-muted">{brief.detail}</p>
@@ -280,7 +276,7 @@ export function AccountSidebar({
                         }}
                         aria-label={msg.history.deleteAria(brief.title)}
                         title={msg.history.delete}
-                        className="m-1 flex size-9 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-ink-raised hover:text-mordred disabled:cursor-not-allowed disabled:opacity-50"
+                        className="m-1 flex size-9 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-ink-raised hover:text-mordred disabled:cursor-not-allowed"
                       >
                         <Trash2 className="size-4" aria-hidden />
                       </button>
@@ -323,8 +319,8 @@ export function LocalAccountSidebar({
     return (
       <aside
         className={cn(
-          "flex min-h-0 items-center gap-2 border-b border-ink-line bg-ink-raised/70 px-3 py-2",
-          "transition-all duration-200 lg:sticky lg:top-0 lg:h-dvh lg:flex-col lg:border-b-0 lg:border-r lg:py-4",
+          "flex min-h-0 items-center gap-2 border-b border-ink-line ui-surface px-3 py-2",
+          "transition-all duration-200 lg:sticky lg:top-[var(--app-header-height)] lg:h-[calc(100dvh-var(--app-header-height))] lg:flex-col lg:border-b-0 lg:border-r lg:py-4",
         )}
       >
         <button
@@ -349,7 +345,7 @@ export function LocalAccountSidebar({
           title={msg.history.expandHistory}
           className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-ink-line bg-ink text-muted transition-colors hover:border-brass hover:text-vellum"
         >
-          <History className="size-4" aria-hidden />
+          <MetalIcon kind="history" className="size-6" />
         </button>
         <div className="min-w-0 flex-1 lg:min-h-0" />
         <button
@@ -357,7 +353,7 @@ export function LocalAccountSidebar({
           disabled
           aria-label={msg.auth.localMode}
           title={msg.auth.localMode}
-          className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-ink-line bg-ink text-muted opacity-70"
+          className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-ink-line bg-ink text-muted "
         >
           <UserCircle className="size-5 text-brass" aria-hidden />
         </button>
@@ -366,7 +362,7 @@ export function LocalAccountSidebar({
   }
 
   return (
-    <aside className="flex min-h-0 flex-col border-b border-ink-line bg-ink-raised/70 px-4 py-4 lg:sticky lg:top-0 lg:h-dvh lg:border-b-0 lg:border-r">
+    <aside className="flex min-h-0 flex-col border-b border-ink-line ui-sidebar px-4 py-4 lg:sticky lg:top-[var(--app-header-height)] lg:h-[calc(100dvh-var(--app-header-height))] lg:border-b-0 lg:border-r">
       <header className="mb-3 flex justify-end text-muted">
         <button
           type="button"
@@ -387,8 +383,8 @@ export function LocalAccountSidebar({
 
       <header className="mb-3 mt-4 flex items-center gap-2 text-muted">
         <div className="flex min-w-0 items-center gap-2">
-          <History className="size-4 shrink-0" aria-hidden />
-          <h2 className="truncate font-display text-xs tracking-[var(--track-3)]">
+          <MetalIcon kind="history" className="size-6" />
+          <h2 className="truncate text-xs font-medium">
             {msg.history.title}
           </h2>
         </div>
@@ -401,7 +397,7 @@ export function LocalAccountSidebar({
       <button
         type="button"
         disabled
-        className="mt-4 flex w-full items-center gap-3 rounded-lg border border-ink-line bg-ink px-3 py-2 text-left opacity-70"
+        className="mt-4 flex w-full items-center gap-3 rounded-lg border border-ink-line bg-ink px-3 py-2 text-left "
       >
         <UserCircle className="size-5 shrink-0 text-brass" aria-hidden />
         <span className="min-w-0 flex-1">
@@ -474,7 +470,7 @@ function PersonaSettingsDialog({
               : "flex min-h-14 w-full items-center gap-3 rounded-lg px-3 py-2",
           )}
         >
-          <Bot className="size-5 shrink-0 text-brass" aria-hidden />
+          <MetalIcon kind="ai" />
           {!collapsed && (
             <span className="min-w-0 flex-1">
               <span className="block truncate text-xs text-vellum">
@@ -489,12 +485,12 @@ function PersonaSettingsDialog({
       </Dialog.Trigger>
 
       <Dialog.Portal>
-        <Dialog.Overlay className="dialog-veil fixed inset-0 z-40 bg-scrim backdrop-blur-sm" />
+        <Dialog.Overlay className="dialog-veil fixed inset-0 z-40 bg-scrim " />
         <Dialog.Content
           className={cn(
             "dialog-rise fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2",
             "flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-5xl flex-col overflow-hidden",
-            "rounded-2xl border border-ink-line bg-ink-raised shadow-2xl",
+            "rounded-2xl border border-ink-line ui-surface ui-elevation",
           )}
         >
           <header className="shrink-0 border-b border-ink-line px-5 pb-4 pt-5 sm:px-7 sm:pt-6">
@@ -564,10 +560,10 @@ function RolePreferencePicker({
             collapsed
               ? "flex size-10 shrink-0 items-center justify-center rounded-lg text-muted"
               : "flex min-h-14 w-full items-center gap-3 rounded-lg px-3 py-2",
-            missing && "border-brass/60",
+            missing && "border-brass-line",
           )}
         >
-          <Dice5 className="size-5 shrink-0 text-brass" aria-hidden />
+          <MetalIcon kind="dice" />
           {!collapsed && (
             <span className="min-w-0 flex-1">
               <span className="block truncate text-xs text-vellum">
@@ -586,7 +582,7 @@ function RolePreferencePicker({
           align="start"
           side={collapsed ? "right" : "bottom"}
           sideOffset={8}
-          className="z-50 w-[min(18rem,calc(100vw-1rem))] rounded-lg border border-ink-line bg-ink-raised p-2 text-sm shadow-2xl outline-none"
+          className="z-50 w-[min(18rem,calc(100vw-1rem))] rounded-lg border border-ink-line ui-surface p-2 text-sm ui-elevation outline-none"
         >
           <div
             role="radiogroup"
@@ -633,8 +629,8 @@ function RolePreferenceOption({
       onClick={onSelect}
       className={cn(
         "flex min-h-10 w-full items-center justify-between rounded-md px-3 text-left transition-colors",
-        checked ? "bg-brass/15 text-vellum" : "text-muted hover:bg-ink hover:text-vellum",
-        muted && !checked && "opacity-60",
+        checked ? "ui-selected bg-brass-soft text-vellum" : "text-muted hover:bg-ink hover:text-vellum",
+        muted && !checked && "text-muted",
       )}
     >
       <span className="truncate">{label}</span>
@@ -668,17 +664,14 @@ function ModelCallSwitch({
         collapsed
           ? "flex size-10 shrink-0 items-center justify-center rounded-lg text-muted"
           : "flex min-h-14 w-full items-center gap-3 rounded-lg px-3 py-2",
-        enabled && "border-brass/70",
+        enabled && "border-brass-line",
       )}
     >
       {collapsed ? (
-        <Radio
-          className={cn("size-5", enabled ? "text-brass" : "text-muted")}
-          aria-hidden
-        />
+        <MetalIcon kind="watch" />
       ) : (
         <>
-          <Radio className="size-5 shrink-0 text-brass" aria-hidden />
+          <MetalIcon kind="watch" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-xs text-vellum">
               {msg.setup.modelCallsField}
@@ -691,7 +684,7 @@ function ModelCallSwitch({
             aria-hidden
             className={cn(
               "relative h-6 w-11 shrink-0 rounded-full border transition-colors",
-              enabled ? "border-brass bg-brass/35" : "border-ink-line bg-ink-raised",
+              enabled ? "border-brass bg-brass-soft" : "border-ink-line bg-ink-raised",
             )}
           >
             <span
@@ -727,12 +720,12 @@ function DeleteReviewDialog({
   return (
     <Dialog.Root open={review !== null} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="dialog-veil fixed inset-0 z-40 bg-scrim backdrop-blur-sm" />
+        <Dialog.Overlay className="dialog-veil fixed inset-0 z-40 bg-scrim " />
         <Dialog.Content
           className={cn(
             "dialog-rise fixed left-1/2 top-1/2 z-50 w-[min(24rem,calc(100vw-1rem))]",
             "-translate-x-1/2 -translate-y-1/2",
-            "rounded-lg border border-ink-line bg-ink-raised p-5 shadow-2xl outline-none",
+            "rounded-lg border border-ink-line ui-surface p-5 ui-elevation outline-none",
           )}
         >
           <Dialog.Title className="font-display text-xl tracking-[var(--track-1)] text-vellum">
@@ -753,7 +746,7 @@ function DeleteReviewDialog({
               <button
                 type="button"
                 disabled={deleting}
-                className="min-h-11 rounded-lg border border-ink-line px-4 text-sm text-muted transition-colors hover:border-muted hover:text-vellum disabled:cursor-not-allowed disabled:opacity-50"
+                className="min-h-11 rounded-lg border border-ink-line px-4 text-sm text-muted transition-colors hover:border-muted hover:text-vellum disabled:cursor-not-allowed"
               >
                 {msg.history.deleteCancel}
               </button>
@@ -762,7 +755,7 @@ function DeleteReviewDialog({
               type="button"
               disabled={deleting}
               onClick={onConfirm}
-              className="min-h-11 rounded-lg border border-mordred px-4 text-sm text-mordred transition-colors hover:bg-mordred hover:text-vellum disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-11 rounded-lg border border-mordred px-4 text-sm text-mordred transition-colors hover:bg-mordred-fill hover:text-vellum disabled:cursor-not-allowed"
             >
               {deleting ? msg.history.deleting : msg.history.deleteConfirm}
             </button>
@@ -883,12 +876,12 @@ function AccountDialog({
       </Dialog.Trigger>
 
       <Dialog.Portal>
-        <Dialog.Overlay className="dialog-veil fixed inset-0 z-40 bg-scrim backdrop-blur-sm" />
+        <Dialog.Overlay className="dialog-veil fixed inset-0 z-40 bg-scrim " />
         <Dialog.Content
           className={cn(
             "dialog-rise fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-1rem)] w-[min(32rem,calc(100vw-1rem))]",
             "-translate-x-1/2 -translate-y-1/2",
-            "overflow-y-auto rounded-lg border border-ink-line bg-ink-raised p-5 text-sm shadow-2xl outline-none",
+            "overflow-y-auto rounded-lg border border-ink-line ui-surface p-5 text-sm ui-elevation outline-none",
           )}
         >
           <div className="pr-12">
@@ -945,7 +938,7 @@ function AccountDialog({
                 className={cn(
                   "shrink-0 rounded-full border px-2 py-1 text-[11px]",
                   userLlmConfig
-                    ? "border-loyal/50 text-loyal"
+                    ? "border-success-line bg-success-soft text-success"
                     : "border-ink-line text-muted",
                 )}
               >
@@ -957,7 +950,7 @@ function AccountDialog({
               <label className="block text-xs text-muted">
                 {msg.auth.userLlm.provider}
                 <select
-                  className="mt-1.5 w-full rounded-lg border border-ink-line bg-ink-raised px-3 py-2 text-sm text-vellum outline-none transition-colors focus:border-brass"
+                  className="ui-input mt-1.5 w-full rounded-lg border border-ink-line px-3 py-2 text-sm text-vellum transition-colors focus:border-brass"
                   value={llmDraft.provider}
                   onChange={(event) =>
                     updateLlmDraft({ provider: event.target.value as UserLlmProvider })
@@ -974,7 +967,7 @@ function AccountDialog({
               <label className="block text-xs text-muted">
                 {msg.auth.userLlm.apiKey}
                 <input
-                  className="mt-1.5 w-full rounded-lg border border-ink-line bg-ink-raised px-3 py-2 text-sm text-vellum outline-none transition-colors focus:border-brass"
+                  className="ui-input mt-1.5 w-full rounded-lg border border-ink-line px-3 py-2 text-sm text-vellum transition-colors focus:border-brass"
                   type="password"
                   autoComplete="off"
                   value={llmDraft.apiKey}
@@ -986,7 +979,7 @@ function AccountDialog({
                 <label className="block text-xs text-muted">
                   {msg.auth.userLlm.model}
                   <input
-                    className="mt-1.5 w-full rounded-lg border border-ink-line bg-ink-raised px-3 py-2 text-sm text-vellum outline-none transition-colors focus:border-brass"
+                    className="ui-input mt-1.5 w-full rounded-lg border border-ink-line px-3 py-2 text-sm text-vellum transition-colors focus:border-brass"
                     value={llmDraft.model}
                     onChange={(event) => updateLlmDraft({ model: event.target.value })}
                     placeholder={msg.auth.userLlm.modelPlaceholder}
@@ -995,7 +988,7 @@ function AccountDialog({
                 <label className="block text-xs text-muted">
                   {msg.auth.userLlm.baseUrl}
                   <input
-                    className="mt-1.5 w-full rounded-lg border border-ink-line bg-ink-raised px-3 py-2 text-sm text-vellum outline-none transition-colors focus:border-brass"
+                    className="ui-input mt-1.5 w-full rounded-lg border border-ink-line px-3 py-2 text-sm text-vellum transition-colors focus:border-brass"
                     value={llmDraft.baseUrl}
                     onChange={(event) => updateLlmDraft({ baseUrl: event.target.value })}
                     placeholder={msg.auth.userLlm.baseUrlPlaceholder}
@@ -1007,7 +1000,7 @@ function AccountDialog({
                 <label className="block text-xs text-muted">
                   {msg.auth.userLlm.temperature}
                   <input
-                    className="mt-1.5 w-full rounded-lg border border-ink-line bg-ink-raised px-3 py-2 text-sm text-vellum outline-none transition-colors focus:border-brass"
+                    className="ui-input mt-1.5 w-full rounded-lg border border-ink-line px-3 py-2 text-sm text-vellum transition-colors focus:border-brass"
                     value={llmDraft.temperature}
                     onChange={(event) => updateLlmDraft({ temperature: event.target.value })}
                     placeholder={msg.auth.userLlm.temperaturePlaceholder}
@@ -1016,7 +1009,7 @@ function AccountDialog({
                 <label className="block text-xs text-muted">
                   {msg.auth.userLlm.maxTokens}
                   <input
-                    className="mt-1.5 w-full rounded-lg border border-ink-line bg-ink-raised px-3 py-2 text-sm text-vellum outline-none transition-colors focus:border-brass"
+                    className="ui-input mt-1.5 w-full rounded-lg border border-ink-line px-3 py-2 text-sm text-vellum transition-colors focus:border-brass"
                     inputMode="numeric"
                     value={llmDraft.maxTokens}
                     onChange={(event) => updateLlmDraft({ maxTokens: event.target.value })}
@@ -1028,7 +1021,7 @@ function AccountDialog({
               <label className="block text-xs text-muted">
                 {msg.auth.userLlm.extraBody}
                 <textarea
-                  className="mt-1.5 min-h-20 w-full resize-y rounded-lg border border-ink-line bg-ink-raised px-3 py-2 font-mono text-xs text-vellum outline-none transition-colors focus:border-brass"
+                  className="ui-input mt-1.5 min-h-20 w-full resize-y rounded-lg border border-ink-line px-3 py-2 font-mono text-xs text-vellum transition-colors focus:border-brass"
                   value={llmDraft.extraBody}
                   onChange={(event) => updateLlmDraft({ extraBody: event.target.value })}
                   placeholder={msg.auth.userLlm.extraBodyPlaceholder}
@@ -1058,7 +1051,7 @@ function AccountDialog({
                 type="button"
                 onClick={disableUserLlmConfig}
                 disabled={!userLlmConfig}
-                className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-ink-line px-3 text-sm text-muted transition-colors hover:border-muted hover:text-vellum disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-ink-line px-3 text-sm text-muted transition-colors hover:border-muted hover:text-vellum disabled:cursor-not-allowed"
               >
                 <XCircle className="size-4" aria-hidden />
                 {msg.auth.userLlm.disable}
@@ -1073,7 +1066,7 @@ function AccountDialog({
             </div>
           </section>
 
-          {notice && <p className="mt-3 text-xs leading-relaxed text-loyal">{notice}</p>}
+          {notice && <p className="mt-3 text-xs leading-relaxed text-success">{notice}</p>}
           {error && (
             <p role="alert" className="mt-3 text-xs leading-relaxed text-mordred">
               {msg.auth.errorPrefix(error)}
@@ -1085,16 +1078,16 @@ function AccountDialog({
               type="button"
               disabled={busy !== null}
               onClick={requestPasswordReset}
-              className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-ink-line px-3 text-sm text-muted transition-colors hover:border-brass hover:text-vellum disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-ink-line px-3 text-sm text-muted transition-colors hover:border-brass hover:text-vellum disabled:cursor-not-allowed"
             >
-              <KeyRound className="size-4" aria-hidden />
+              <MetalIcon kind="key" className="size-6" />
               {busy === "password" ? msg.auth.sendingPasswordReset : msg.auth.changePassword}
             </button>
             <button
               type="button"
               disabled={busy !== null}
               onClick={signOut}
-              className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-ink-line px-3 text-sm text-muted transition-colors hover:border-mordred hover:text-vellum disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-ink-line px-3 text-sm text-muted transition-colors hover:border-mordred hover:text-vellum disabled:cursor-not-allowed"
             >
               <LogOut className="size-4" aria-hidden />
               {busy === "signOut" ? msg.auth.signingOut : msg.auth.signOut}

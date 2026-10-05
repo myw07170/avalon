@@ -23,6 +23,7 @@ import {
 } from "@/store/game";
 import { FlipCard, TableMotif } from "./FlipCard";
 import { RoleKnowledge } from "./RoleKnowledge";
+import { RoleArtwork } from "./RoleArtwork";
 import { describeRole, type RoleBrief } from "./role-card-model";
 
 export function RoleCard() {
@@ -49,7 +50,7 @@ export function RoleCard() {
 
   return (
     <Screen>
-      <p className="font-display text-xs tracking-[var(--track-3)] text-muted">
+      <p className="text-xs font-medium text-muted">
         {msg.role.seatLine(view.players.length, view.selfId)}
       </p>
 
@@ -64,11 +65,11 @@ export function RoleCard() {
         {flipped && (
           <motion.div
             key="revealed"
-            initial={reduced ? false : { opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={reduced ? { opacity: 0 } : { opacity: 0, y: 8 }}
+            initial={reduced ? false : { y: 12 }}
+            animate={{ y: 0 }}
+            exit={{ y: reduced ? 0 : 8 }}
             transition={{ duration: reduced ? 0 : 0.28 }}
-            className="flex w-full flex-col items-center gap-8"
+            className="flex w-full flex-col items-center gap-6"
           >
             <RoleKnowledge view={view} brief={brief} avatarSeed={avatarSeed} />
 
@@ -76,7 +77,7 @@ export function RoleCard() {
               <button
                 type="button"
                 onClick={() => startRun()}
-                className="w-full rounded-lg bg-brass px-6 py-3.5 font-display text-lg tracking-[var(--track-3)] text-on-brass transition-colors hover:bg-brass/85"
+                className="w-full rounded-lg ui-button-primary px-6 py-3.5 font-display text-lg tracking-[var(--track-3)] transition-colors"
               >
                 <span className="-mr-[var(--track-3)]">{msg.role.start}</span>
               </button>
@@ -113,9 +114,9 @@ function RoleFlipCard({ flipped, reduced, onToggle, brief }: RoleFlipCardProps) 
       reduced={reduced}
       onToggle={onToggle}
       label={flipped ? msg.role.flipToBack : msg.role.flipToFront}
-      className="aspect-[3/4] w-full max-w-sm sm:aspect-[4/5]"
+      className="aspect-[4/5] w-full max-w-xs sm:aspect-[4/5]"
       back={
-        <div className="grid size-full place-content-center gap-6 rounded-2xl border border-ink-line bg-ink-raised">
+        <div className="grid size-full place-content-center gap-6 rounded-2xl border border-ink-line ui-surface">
           <TableMotif />
           <p className="font-display text-sm tracking-[var(--track-3)] text-muted">
             <span className="-mr-[var(--track-3)]">{msg.role.tapToReveal}</span>
@@ -125,22 +126,25 @@ function RoleFlipCard({ flipped, reduced, onToggle, brief }: RoleFlipCardProps) 
       front={
         <div
           className={cn(
-            "flex size-full flex-col items-center justify-center gap-4 rounded-2xl border-2 bg-ink-raised px-7 text-center",
-            isEvil ? "border-mordred/60" : "border-loyal/60",
+            "flex size-full flex-col overflow-hidden rounded-xl border-2 bg-ink-raised text-center",
+            isEvil ? "border-mordred-line" : "border-loyal-line",
           )}
         >
+          {flipped && <RoleArtwork role={brief.role} className="min-h-0 flex-1" />}
+          <div className="flex shrink-0 flex-col items-center gap-2 border-t border-ink-line bg-ink-raised px-5 py-4">
           <p
             className={cn(
-              "font-display text-xs tracking-[var(--track-3)]",
+              "whitespace-nowrap font-display text-xs tracking-[var(--track-3)]",
               isEvil ? "text-mordred" : "text-loyal",
             )}
           >
             <span className="-mr-[var(--track-3)]">{brief.teamLabel}</span>
           </p>
-          <h2 className="-mr-[var(--track-1)] font-display text-4xl tracking-[var(--track-1)]">
+          <h2 className="-mr-[var(--track-1)] font-display text-3xl tracking-[var(--track-1)]">
             {brief.label}
           </h2>
           <p className="text-sm leading-relaxed text-muted">{brief.ability}</p>
+          </div>
         </div>
       }
     />
@@ -153,7 +157,7 @@ function RoleFlipCard({ flipped, reduced, onToggle, brief }: RoleFlipCardProps) 
 
 function Screen({ children }: { children: React.ReactNode }) {
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center gap-8 px-5 py-12 sm:py-16">
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center gap-6 px-4 py-8 sm:py-10">
       {children}
     </main>
   );

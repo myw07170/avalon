@@ -15,6 +15,7 @@ import {
   countEvil,
   type PlayerId,
   type PlayerView,
+  type Role,
   type Team,
 } from "@/lib/game";
 
@@ -37,6 +38,7 @@ export interface SeatMark {
  */
 
 export interface RoleBrief {
+  role: Role;
   label: string;
   team: Team;
   teamLabel: string;
@@ -107,6 +109,7 @@ export function describeRole(view: PlayerView, msg: Messages): RoleBrief {
   }));
 
   return {
+    role: view.selfRole,
     label: meta.label,
     team: ROLE_TEAM[view.selfRole],
     teamLabel: msg.team.label[ROLE_TEAM[view.selfRole]],

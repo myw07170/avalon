@@ -3,10 +3,9 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { LocaleGate } from "@/i18n/LocaleGate";
-import { LocaleSwitcher } from "@/i18n/LocaleSwitcher";
 import { useMessages } from "@/i18n/useMessages";
 import { isSavedReviewSnapshot, type SavedReviewSnapshot } from "@/lib/reviews";
-import { ThemeSwitcher } from "@/theme/ThemeSwitcher";
+import { AppHeader } from "@/components/AppHeader";
 import { GameOverReview } from "@/components/GameOverPanel";
 
 export default function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
@@ -62,10 +61,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   return (
     <>
       <LocaleGate />
-      <div className="fixed right-3 top-3 z-30 flex gap-2">
-        <ThemeSwitcher />
-        <LocaleSwitcher />
-      </div>
+      <AppHeader />
       {loading ? (
         <main className="mx-auto flex w-full max-w-md flex-1 items-center justify-center px-5 py-12">
           <p className="text-sm text-muted">{msg.history.loadingReview}</p>
@@ -79,6 +75,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         </main>
       ) : (
         <GameOverReview
+          key={id}
           view={review.view}
           decisions={review.decisions}
           avatarSeed={review.avatarSeed}

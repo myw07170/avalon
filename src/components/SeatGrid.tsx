@@ -46,11 +46,11 @@ export function SeatGrid({ seats, selected, disabled, onToggle }: SeatGridProps)
                 "tabular flex min-h-11 items-baseline gap-1.5 rounded-lg border px-3 py-2 text-sm transition-all",
                 SEAT_TONE_CLASS[seat.tone],
                 on && "ring-2 ring-brass ring-offset-2 ring-offset-ink",
-                off ? "opacity-35" : "hover:border-muted",
+                off ? "ui-disabled" : "hover:border-muted",
               )}
             >
               <span aria-hidden>{toDisplaySeatNumber(seat.id)}</span>
-              <span aria-hidden className="text-xs opacity-70">
+              <span aria-hidden className="text-xs">
                 {seat.isSelf ? msg.seat.you : seat.name}
               </span>
             </button>

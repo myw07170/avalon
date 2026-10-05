@@ -3,14 +3,15 @@
 阶段 5 建立。规划中的组件见 docs/todos.md 阶段 5。
 
 **唯一的硬规则**：组件的数据来源只有 `store/game.ts` 导出的那些 atom。
-任何组件的 props 里出现其他玩家的 `role`，都是信息泄漏，直接算 bug。
+任何组件的 props 里出现其他玩家未经当前视角批准公开的 `role`，都是信息泄漏，直接算 bug。
+`RoleArtwork` 只消费自己的身份、观战已翻开的角色、终局公开角色或教程的公开示例。
 
 具体说，组件可以读：
 
 | atom | 给的是什么 |
 | --- | --- |
 | `viewAtom` | `AnyView`，绝大多数组件只需要它。落座给 `PlayerView`，观战给 `SpectatorView` |
-| `seatAvatarSeedAtom` | 本局 identicon 的只读 UI seed；与发牌 seed 完全独立 |
+| `seatAvatarSeedAtom` | 本局人物头像的只读 UI seed；与发牌 seed 完全独立 |
 | `humanTurnAtom` / `isMyTurnAtom` | 轮到你时的 `view` + `legalActions` |
 | `teamConstraintAtom` | 组队的 `{ teamSize, candidateIds }` |
 | `revealAtom` | 终局公开面，非 `GAME_OVER` 恒为 `null` |
@@ -48,32 +49,33 @@
 
 ## 视觉基座
 
-token 定义在 `src/app/globals.css`。**两套主题**：默认主题由 `src/theme/theme.ts`
-里的 `DEFAULT_THEME` 决定；`@theme` 里的深色基础值与 `<html data-theme="light">`
-覆盖的是同一批变量——组件从头到尾只认 token 名，一行都不用改。
+token 定义在 `src/app/globals.css`。整个应用使用唯一的午夜蓝与银金配色，
+不读取系统色彩偏好或 `avalon.theme`；浏览器状态栏颜色由 `src/theme/theme.ts`
+的 `APP_THEME_COLOR` 提供。
 
 | token | 用途 |
 | --- | --- |
-| `ink` / `ink-raised` / `ink-line` | 底色 / 面板 / 描边 |
-| `vellum` / `muted` | 主文字 / 次要文字 |
-| `loyal` / `mordred` | 好人 / 坏人。成对出现，任何角色标签都要一眼分得开阵营 |
-| `brass` | 交互态：选中、焦点、主按钮 |
-| `on-brass` / `on-loyal` / `on-mordred` | **实心**强调色上面那行字 |
-| `scrim` | 刺杀面板的幕布。透明度在 token 里，调用点不写 `/85` |
-| `font-display` | CJK 衬线，标题与区块小标题 |
-| `.tabular` | 等宽 + `tabular-nums`，**所有数字**都走它 |
+| `ink` / `ink-raised` / `ink-highlight` / `ink-line` | 蓝黑背景 / 蓝灰面板 / 面板渐变高光 / 描边 |
+| `vellum` / `muted` | 暖银白正文 / 次要文字 |
+| `loyal` / `mordred` | 提亮的蓝色 / 红色文字与状态描边；同时配文字或图标 |
+| `loyal-fill` / `mordred-fill` | 阵营底色：湖蓝 / 酒红；不用于小字 |
+| `success` / `success-fill` | 保存成功、配置启用等功能状态的浅绿色文字 / 深绿色底色 |
+| `brass` / `brass-fill` / `brass-light` | 亮金文字与描边 / 古金底色 / 金属渐变高光 |
+| `on-brass` / `on-loyal` / `on-mordred` | 金色上的蓝黑文字 / 实心蓝色上的极深色文字 / 酒红上的暖白文字 |
+| `scrim` | 不透明深蓝弹窗遮罩 |
+| `font-display` | 品牌与主要标题的衬线字体 |
+| `.tabular` | 等宽数字 |
 
-**`bg-brass` 上的字用 `text-on-brass`，不用 `text-ink`。** `ink` 与 `vellum` 会随主题
-翻转极性（ink 深色下近黑、浅色下近白），拿它们当"强调色上的字"必然在某一套主题下失效。
-半透明填充（`bg-mordred/25` 这类）不在此列——那种底色本来就跟着页面走，配 `text-vellum` 正确。
+共享面板和按钮使用 `.ui-panel` / `.ui-button`，主按钮增加 `.ui-button-primary`。
+`.ui-surface` 提供不透明面板渐变，`.ui-selected` 提供实体描边与内侧高光，表单输入使用 `.ui-input`。
+各状态的 `*-soft` 是固定的实色，禁用控件使用 `disabled` 底色，不降低透明度。
+这些类放在 components 层，让 Tailwind 尺寸、响应式和状态工具类保持优先级。
+保留 `@theme` 而非 `@theme inline`，因为英文标题字体与字距仍由 locale 变量控制。
+配色测试校验正文、强调色与按钮文字的对比度。
 
-**加颜色 token 要在两个块里各加一份**，`src/theme/theme.test.ts` 读 `globals.css`
-钉住了这条（漏一个的症状是浅色下某处突然是深色，而且只在某个阶段才看得见）。
-同一个测试还钉住 **`@theme` 不许写成 `@theme inline`**——加上 inline 会把字面值内联进
-每一条 utility，于是整套浅色主题静默失效，页面照常渲染只是永远深色。
-
-主题状态**没有 atom**：它不改变任何 React 渲染出来的内容，只改 `<html>` 上一个属性。
-切换按钮在 `src/theme/ThemeSwitcher.tsx`，零闪烁靠 `layout.tsx` 的 `<head>` 里那段阻塞脚本。
+顶部导航由 `AppHeader` 提供，手机侧栏由 Radix Dialog 管理焦点与遮罩。
+复盘使用 `review-round-model.ts` 合并任务、提议与心证轮次，只渲染当前标签内容。
+发言与对应心证保持在同一条记录中，真实身份与失败票来源仍只取终局公开面。
 
 `cn()` 在 `src/lib/utils.ts`。
 
@@ -84,13 +86,13 @@ token 定义在 `src/app/globals.css`。**两套主题**：默认主题由 `src/
 全身份公开共用这一份——玩家从头到尾看到的是同一张桌子。给了 `onSelect` 才渲染成按钮，
 不给就是只读展示环。
 
-每座的 identicon 由 `lib/seat-avatar.ts` 根据「独立 UI seed + 座位号」生成 5×5 对称纹章，
-不读 `GameConfig.seed`——后者能重建角色分配，进入组件层就是泄漏。选座与教程使用固定预览
-seed；正式建局在点击时用 `crypto.getRandomValues` 取新 seed，并由只读 atom 贯穿身份页、
-对局和结算。SVG 只继承当前 tone 的 `currentColor`，不新增图片、颜色 token 或信息通道。
+每座的中性人物头像由 `lib/seat-avatar.ts` 根据「独立 UI seed + 座位号」生成十张头像的稳定排列，
+同一局不重复，不读 `GameConfig.seed` 或隐藏身份。选座与教程使用固定预览 seed；正式建局
+在点击时用 `crypto.getRandomValues` 取新 seed，并沿用存档已有的 avatarSeed。
+图集与场景保存在 `public/art`，坐标清单为 `lib/art-assets.ts`，生成提示词见 `public/art/README.md`。
 
 **窄屏（< 640px）自动降级成 `SeatList` 的竖排列表。** 圆桌容器是
-`clamp(15rem, 78vw, 24rem)` 而座位节点固定 44px，所以屏幕越窄节点越挤：
+`clamp(15rem, 78vw, 24rem)` 而座位人物节点固定 56px，所以屏幕越窄节点越挤：
 360px 上跑 10 人局，每个圆只离邻居 16px 左右，队长徽标和光环还都往节点外面伸。
 `SeatGrid` 的文件头说"圆桌是看的，方块是点的"，这是它的另一半——窄屏上要能**看清**。
 

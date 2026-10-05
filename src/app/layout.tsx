@@ -1,82 +1,26 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { DEFAULT_THEME, THEME_COLOR, THEME_INIT_SCRIPT } from "@/theme/theme";
+import { APP_THEME_COLOR } from "@/theme/theme";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-/**
- * 【描述保持双语，不做 generateMetadata】语言在客户端恢复或检测，服务端
- * 读不到这些信号。页面标题由 LocaleGate 声明，SSR 使用固定中文初值，
- * 挂载后跟着语言更新。
- *
- * 不声明 metadata.title，避免 Next 在水合时把本地化标题覆盖回静态值。
- */
+// LocaleGate controls the localized title after hydration.
 export const metadata: Metadata = {
   description: "一个人，一桌会说话的 AI。 · One player, a table of talking AIs.",
 };
 
-/**
- * 【显式声明，不吃 Next 的默认值】默认只有 width/initial-scale，
- * 而 ActionPanel 在窄屏上会撑出滚动区域，`viewport-fit: "cover"` 让
- * env(safe-area-inset-bottom) 有非零值——不然 iPhone 上底部按钮压在
- * home indicator 底下点不着。
- *
- * **不设 maximumScale / userScalable**：禁掉双指缩放对视力不好的人是硬伤，
- * 而这一屏本来就没有会被误触放大的输入框。
- */
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  /*
-   * 【默认色跟着 DEFAULT_THEME】viewport 与 metadata 一样是 server component
-   * 的静态对象，读不到 localStorage 里的主题。
-   * 数组 + media 那种写法绑的是 prefers-color-scheme，而这里的主题是用户点出来的，
-   * 不是系统给的。
-   *
-   * 有保存主题时，晚一帧变的是浏览器自己那条状态栏，不是页面内容——不值得为它
-   * 去动 Next 的 metadata 管线。页面本身的零闪烁由 <head> 里那段脚本负责。
-   */
-  themeColor: THEME_COLOR[DEFAULT_THEME],
+  themeColor: APP_THEME_COLOR,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    /*
-     * 【lang 写死 zh-CN，由 LocaleGate 在 effect 里改】SSR 与客户端首帧必须
-     * 产出同一个值，否则水合报错。effect 在 commit 之后跑，React 不会拿它
-     * 和服务端的输出做 diff，所以在那里改 document.documentElement 是安全的。
-     */
-    <html
-      lang="zh-CN"
-      data-theme={DEFAULT_THEME}
-      suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <head>
-        {/*
-         * 【阻塞脚本，位置就得在这里】它在浏览器解析 HTML 时同步执行，早于首次
-         * 绘制，所以浅色用户刷新时看不到任何一帧深色底。放进 effect 就晚了——
-         * effect 跑在水合之后、绘制之后。语言那边接受了这一帧闪烁（换的是文字），
-         * 整屏底色翻转不行。
-         *
-         * <html> 上的 suppressHydrationWarning 是配套的：这段脚本会在 React
-         * 水合之前改掉 data-theme，不加的话 React 会把它当成不一致而报错。
-         *
-         * 脚本正文在 @/theme/theme，由 STORAGE_KEY 拼出来——不在这里手写字符串。
-         */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
-      </head>
-      {/* overflow-x-hidden 是最后一道保险：任何一个组件算错宽度都不该让整页能横着拖 */}
+    <html lang="zh-CN" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col overflow-x-hidden bg-ink font-sans text-vellum">
         {children}
       </body>

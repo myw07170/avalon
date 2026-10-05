@@ -17,6 +17,7 @@
  */
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { CrownIcon } from "./HeraldicIcon";
 
 interface FlipCardProps {
   flipped: boolean;
@@ -74,7 +75,7 @@ export function FlipCard({
 }
 
 /**
- * 卡背图案：还是那张桌子，黄铜细线的同心圆。
+ * 卡背图案：实体金属徽章上的王冠纹章。
  *
  * 【尺寸走 className】大卡用 size-28，牌堆里的小牌用 size-8——同一个图案，
  * 两种密度。另画一套图案会让人以为那是两种牌。
@@ -82,9 +83,7 @@ export function FlipCard({
 export function TableMotif({ className }: { className?: string }) {
   return (
     <div className={cn("relative mx-auto", className ?? "size-28")} aria-hidden>
-      <div className="absolute inset-0 rounded-full border border-brass/30" />
-      <div className="absolute inset-[18%] rounded-full border border-brass/20" />
-      <div className="absolute inset-[42%] rounded-full border border-brass/50" />
+<div className="metal-badge absolute inset-0 grid place-items-center rounded-full border border-brass-line"><CrownIcon className="size-3/5" /></div>
     </div>
   );
 }

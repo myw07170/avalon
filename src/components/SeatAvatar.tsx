@@ -1,5 +1,6 @@
 import type { PlayerId } from "@/lib/game";
-import { SEAT_AVATAR_SIZE, seatAvatarCells } from "@/lib/seat-avatar";
+import { seatPortraitIndex } from "@/lib/seat-avatar";
+import { cn } from "@/lib/utils";
 
 export interface SeatAvatarProps {
   seed: number;
@@ -7,24 +8,10 @@ export interface SeatAvatarProps {
   className?: string;
 }
 
-/**
- * 纯装饰的座位纹章。精确座位号由旁边的数字和父节点 aria-label 表达，
- * 所以 SVG 不进入可访问性树，也不会给读屏器重复念一遍。
- */
+/** Decorative public face. No role, faction or private state is accepted. */
 export function SeatAvatar({ seed, id, className }: SeatAvatarProps) {
-  const cells = seatAvatarCells(seed, id);
-
-  return (
-    <svg
-      aria-hidden="true"
-      focusable="false"
-      viewBox={`0 0 ${SEAT_AVATAR_SIZE} ${SEAT_AVATAR_SIZE}`}
-      shapeRendering="crispEdges"
-      className={className}
-    >
-      {cells.map((cell) => (
-        <rect key={`${cell.x}:${cell.y}`} x={cell.x} y={cell.y} width="1" height="1" />
-      ))}
-    </svg>
-  );
+  const index = seatPortraitIndex(seed, id);
+  return <span aria-hidden="true" data-portrait-index={index}
+    className={cn("art-portrait seat-portrait rounded-full", className)}
+    style={{ backgroundPosition: `${(index % 5) * 25}% ${Math.floor(index / 5) * 100}%` }} />;
 }

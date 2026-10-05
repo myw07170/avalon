@@ -33,7 +33,7 @@ export function SpectatorIntro() {
   );
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center gap-8 px-5 py-12 sm:py-16">
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center gap-6 px-4 py-8 sm:py-10">
       <header className="text-center">
         <h1 className="-mr-[var(--track-3)] font-display text-3xl tracking-[var(--track-3)] sm:text-4xl">
           {msg.spectator.introTitle}
@@ -50,8 +50,8 @@ export function SpectatorIntro() {
             className={cn(
               "rounded-full border px-3 py-1 text-sm",
               entry.team === "GOOD"
-                ? "border-loyal/40 text-loyal"
-                : "border-mordred/40 text-mordred",
+                ? "border-loyal-line text-loyal"
+                : "border-mordred-line text-mordred",
             )}
           >
             {msg.roles[entry.role].label}
@@ -72,7 +72,7 @@ export function SpectatorIntro() {
         <button
           type="button"
           onClick={() => startRun()}
-          className="w-full rounded-lg bg-brass px-6 py-3.5 font-display text-lg tracking-[var(--track-3)] text-on-brass transition-colors hover:bg-brass/85"
+          className="w-full rounded-lg ui-button-primary px-6 py-3.5 font-display text-lg tracking-[var(--track-3)] transition-colors"
         >
           <span className="-mr-[var(--track-3)]">{msg.spectator.start}</span>
         </button>

@@ -56,12 +56,20 @@ export const en: Messages = {
     apiKey: "Original model API key", noCredits: "Your account has no game credits remaining.",
     players: (count: number) => `${count}-player game`, spectator: "Spectator", player: (seat: number) => `Player ${seat}`, saved: "Saved",
   },
+  ui: {
+    navigation: "Navigation", menu: "Open menu", closeMenu: "Close menu", menuDescription: "Game history, AI settings and account",
+    lobby: "Round table lobby", lobbyNote: "Choose your seat. Let the deductions begin.", seats: "Choose a seat", configuration: "Game setup",
+    overview: "Overview", rounds: "Review navigation", previous: "Previous round", next: "Next round",
+    conversation: "Public speech", reasoning: "AI reasoning", noReasoning: "No matching AI reasoning was recorded.",
+    noMission: "No mission was played this round", noMissions: "No missions were played in this game.", noConversation: "No speech was recorded this round.",
+    roundNote: "Explore each round's speeches and reasoning, with team votes in proposal order.",
+    advancedStats: "Model timing", pending: "In progress",
+  },
   app: {
     title: "Avalon",
     tagline: "One player. A table of talking AIs.",
     localeShort: "EN",
     switchTo: "Switch to English",
-    toggleTheme: "Toggle theme",
   },
 
   roles: R,

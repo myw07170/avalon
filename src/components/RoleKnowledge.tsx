@@ -76,7 +76,7 @@ export function RoleKnowledge({
  * unsure 的两个座位必须完全同权，不能按位置加任何视觉权重。
  */
 const LEGEND: ReadonlyArray<{ tone: SeatTone; swatch: string }> = [
-  { tone: "self", swatch: "border-brass bg-brass/20" },
-  { tone: "evil", swatch: "border-mordred bg-mordred/25" },
+  { tone: "self", swatch: "border-brass bg-brass-soft" },
+  { tone: "evil", swatch: "border-mordred bg-mordred-soft" },
   { tone: "unsure", swatch: "border-brass border-dashed" },
 ];

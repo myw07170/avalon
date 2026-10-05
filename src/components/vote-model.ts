@@ -52,6 +52,7 @@ export interface VoteMatrixCell {
 
 export interface VoteMatrixRow {
   key: string;
+  missionIndex: number;
   /** 「1-2」= 第 1 轮第 2 次提议 */
   label: string;
   ariaLabel: string;
@@ -155,6 +156,7 @@ export function describeVoteMatrix(view: AnyView, msg: Messages): VoteMatrix {
 
     return {
       key: keyOf(record.missionIndex, record.attempt),
+      missionIndex: record.missionIndex,
       label,
       ariaLabel: msg.vote.rowAria(label, outcomeLabel, detailLabel),
       leaderId: record.leaderId,

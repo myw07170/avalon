@@ -1,241 +1,207 @@
 @import "tailwindcss";
 
-/*
- * 阿瓦隆的视觉基座。
- *
- * 【两套主题，默认由 src/theme/theme.ts 决定】@theme 里放深色基础 token；
- * 浅色是一套等价的暖羊皮纸版本，由 <html data-theme="light"> 开关（见文件末尾）。
- * 组件一行都不用改——它们从头到尾只认下面这些 token。
- *
- * 【绝对不能写成 `@theme inline`】这是本文件最容易被改错、且改错了**不会有
- * 任何报错**的一处。加上 inline，Tailwind 会把字面值内联进每一条 utility
- * （`.bg-ink{background-color:#0e1418}`），于是 data-theme 下的变量覆盖
- * 一点作用都没有——页面照常渲染，只是永远是深色。`theme.test.ts` 钉住了这条。
- * 同理，文件末尾 html[data-locale="en"] 换 --font-display 也依赖这一点。
- *
- * 【不读 prefers-color-scheme】没有保存主题时默认浅色，手动选择后恢复保存值。
- * 想要哪套由那颗按钮说了算，不由操作系统替人做主。
- *
- * 【强调色天生有两个】游戏本身就是好人/坏人的二元对立，任何一个角色标签
- * 都要一眼分得开阵营。所以不是"近黑底 + 一个亮色"那套配法：loyal 与 mordred
- * 成对出现且都压低了饱和度，brass 只承担交互态（选中 / 焦点 / 主按钮）。
- */
-
+/* Keep variables at runtime: the display font and tracking follow the locale. */
 @theme {
-  --color-ink: #0e1418;
-  --color-ink-raised: #161e24;
-  --color-ink-line: #263039;
-  --color-vellum: #e8e4da;
-  --color-muted: #7c8a93;
-  --color-loyal: #6fa8c7;
-  --color-mordred: #b4453c;
-  --color-brass: #c08a3e;
-
-  /*
-   * 实心强调色上面那行字。
-   *
-   * 【为什么不能直接用 ink / vellum】那两个是**会随主题翻转极性**的 token：
-   * ink 深色下是近黑、浅色下是近白，vellum 反过来。而"brass 按钮上的字"
-   * 需要的是一个跟着 brass 走、不跟着页面走的颜色。深色下 brass 与 loyal
-   * 都偏亮所以配深字，mordred 偏暗所以配亮字——这三者本来就不同值，
-   * 硬塞进一个 token 只会在某一套主题下失效。
-   */
-  --color-on-brass: #0e1418;
-  --color-on-loyal: #0e1418;
-  --color-on-mordred: #e8e4da;
-
-  /*
-   * 刺杀面板的幕布。
-   *
-   * 【透明度写进 token，调用点不写 /85】浅色下幕布不能是"近白 85%"——那不叫
-   * 压暗，叫蒙一层白纱，整块 Dialog 会浮不起来。所以两套主题给的是两个
-   * 方向相反的值，而 `bg-scrim/85` 这种写法表达不了这件事。
-   */
-  --color-scrim: #0e1418d9;
-
-  /*
-   * 三个字体角色。中文是默认语言，Geist 一个汉字都没有，
-   * 所以真正要定的是 CJK 栈——不定的话浏览器各挑各的，Windows 上会掉进宋体。
-   *
-   * --font-display 在英文模式下会被换掉（见文件末尾的 html[data-locale="en"]）：
-   * Noto Serif CJK 自带的拉丁字形又宽又软，配英文标题不好看。
-   */
-  --font-display: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", SimSun,
-    serif;
-  --font-sans: var(--font-geist-sans), "PingFang SC", "Microsoft YaHei",
-    "Noto Sans SC", sans-serif;
+  --color-ink: #071421;
+  --color-ink-raised: #0B1D2B;
+  --color-ink-highlight: #0F2230;
+  --color-ink-line: #29475A;
+  --color-sidebar: #081520;
+  --color-disabled: #132532;
+  --color-vellum: #ECE5D8;
+  --color-muted: #98A8B8;
+  /* Readable foregrounds are separate from the richer, darker fills. */
+  --color-loyal: #80B3D6;
+  --color-loyal-fill: #527C9F;
+  --color-loyal-soft: #123248;
+  --color-loyal-line: #386585;
+  --color-mordred: #D58A9D;
+  --color-mordred-fill: #7C293D;
+  --color-mordred-soft: #321F2C;
+  --color-mordred-line: #8B4C5C;
+  --color-success: #83B8AA;
+  --color-success-fill: #427D70;
+  --color-success-soft: #113A32;
+  --color-success-line: #386A5C;
+  --color-brass: #DEC082;
+  --color-brass-fill: #B98F4D;
+  --color-brass-light: #D7B77D;
+  --color-brass-soft: #362C1D;
+  --color-brass-line: #90764B;
+  --color-on-brass: #071421;
+  --color-on-loyal: #02060B;
+  --color-on-mordred: #ECE5D8;
+  --color-scrim: #06111B;
+  --font-display: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", SimSun, serif;
+  --font-sans: var(--font-geist-sans), "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
   --font-mono: var(--font-geist-mono), "PingFang SC", "Microsoft YaHei", monospace;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.625rem;
+  --radius-2xl: 0.625rem;
 }
 
-/*
- * 字距三档。
- *
- * 【为什么是变量而不是写死的 em】0.3em 这种字距对方块字是常见排版，对英文句子
- * （"Take the seat"）就是灾难：字母之间被拉开到读不成词。所以它必须跟语言走。
- *
- * 【尾部补偿必须用同一个变量】letter-spacing 会在最后一个字后面也留一份间距，
- * 居中的标题因此整体偏左，组件里用 `-mr-[...]` 抵消。原来那一对是两个手写的
- * 数字靠人对齐，改一个忘一个就偏；现在两边读同一个变量，不可能脱钩。
- */
-:root {
-  --track-1: 0.2em;
-  --track-2: 0.25em;
-  --track-3: 0.3em;
-  --track-4: 0.35em;
-}
-
-/*
- * 深色是 CSS 基础值，所以它不挂在任何 data-theme 下——浅色那一份在文件末尾覆盖。
- * 应用默认显示哪套主题由 layout.tsx 写到 <html data-theme> 上。
- *
- * color-scheme 必须跟着换：它管的是浏览器自己画的那些东西（滚动条、
- * 表单控件、textarea 的插入符），CSS 变量碰不到它们。忘了换的症状是
- * 浅色页面上挂着一条深色滚动条。
- */
 :root {
   color-scheme: dark;
-
-  /*
-   * ActionPanel 那圈 1px 的内发光。原来是手抄的 rgba(192,138,62,0.08)——
-   * 全项目唯一一处把 --color-brass 抄成字面值的地方，改色号必漏。
-   * 它不是一个颜色 token（没有 bg-/text-/border- 的用法），所以不进 @theme。
-   */
-  --panel-ring: color-mix(in srgb, var(--color-brass) 8%, transparent);
+  --track-1: 0.04em;
+  --track-2: 0.06em;
+  --track-3: 0.08em;
+  --track-4: 0.1em;
+  --app-header-height: 4.5rem;
+  --panel-ring: #635438;
+  --surface-gradient: linear-gradient(160deg, var(--color-ink-highlight), var(--color-ink-raised) 70%);
+  --gold-gradient: linear-gradient(180deg, var(--color-brass-light), var(--color-brass-fill));
+  --selected-shadow: inset 0 1px 0 #635C43, inset 0 -1px 0 #171C21, 0 2px 6px #030A10;
 }
 
 body {
-  background: var(--color-ink);
+  background-color: var(--color-ink);
   color: var(--color-vellum);
 }
 
-/*
- * 数字一律等宽对齐。整屏本质上是一张配置表——人数、座位号、阵营分配、
- * 任务队伍规模——数字不对齐就读不动。
- */
 .tabular {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
-/* 键盘焦点必须看得见，且用 brass 与选中态同源 */
 :focus-visible {
   outline: 2px solid var(--color-brass);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
-::selection {
-  background: color-mix(in srgb, var(--color-brass) 35%, transparent);
+::selection { background: var(--color-brass-soft); color: var(--color-vellum); }
+
+@layer base {
+  h1, h2, h3 { font-weight: 600; }
+  button { background-color: var(--color-ink-raised); border-radius: var(--radius-lg); }
+  input, textarea, select { background-color: var(--color-ink); color: var(--color-vellum); }
+}
+
+/* Explicit shared classes avoid changing unrelated controls via tag selectors. */
+@layer components {
+.ui-surface, .ui-panel {
+  background-color: var(--color-ink-raised);
+  background-image: var(--surface-gradient);
+}
+
+.ui-header {
+  background-color: var(--color-ink);
+  background-image: linear-gradient(110deg, var(--color-sidebar), var(--color-ink-highlight));
+  box-shadow: inset 0 -1px 0 #030D16;
+}
+
+.ui-sidebar {
+  background-color: var(--color-sidebar);
+  background-image: url("/art/castle-sidebar.png");
+  background-size: 100% auto;
+  background-position: center bottom;
+  background-repeat: no-repeat;
+}
+
+.ui-panel {
+  border: 1px solid var(--color-ink-line);
+  border-radius: var(--radius-xl);
+  box-shadow: inset 0 1px 0 #163043, inset 0 -1px 0 #06121D, 0 4px 12px #030C15;
+}
+
+.ui-selected { box-shadow: var(--selected-shadow); }
+.ui-disabled, button:disabled, [aria-disabled="true"] {
+  background-color: var(--color-disabled);
+  color: var(--color-muted);
+  border-color: var(--color-ink-line);
+  cursor: not-allowed;
+}
+
+.ui-input {
+  background-color: var(--color-ink);
+  color: var(--color-vellum);
+  transition: border-color 160ms, box-shadow 160ms;
+}
+.ui-input::placeholder { color: var(--color-muted); }
+.ui-input:focus {
+  border-color: var(--color-brass);
+  outline: 2px solid var(--color-brass);
+  outline-offset: 2px;
+  box-shadow: inset 0 1px 2px #030B13;
+}
+
+.ui-button {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 1px solid var(--color-ink-line);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-ink-raised);
+  background-image: var(--surface-gradient);
+  padding: 0.5rem 0.875rem;
+  color: var(--color-vellum);
+  font-size: 0.8125rem;
+  transition: background-color 160ms, border-color 160ms, box-shadow 160ms;
+}
+.ui-button:hover:not(:disabled) { border-color: var(--color-brass); box-shadow: var(--selected-shadow); }
+.ui-button:disabled { cursor: not-allowed; background-image: none; box-shadow: none; }
+.ui-button-primary {
+  border: 1px solid var(--color-brass);
+  background-color: var(--color-brass-fill);
+  background-image: var(--gold-gradient);
+  color: var(--color-on-brass);
+  box-shadow: inset 0 1px 0 #F1D59A, inset 0 -2px 0 #78552C, 0 3px 8px #030B13;
+  font-weight: 600;
+}
+.ui-button-primary:hover:not(:disabled) {
+  background-image: linear-gradient(180deg, #E7C993, #C59D5E);
+  box-shadow: inset 0 1px 0 #FFE3AA, inset 0 -2px 0 #78552C, 0 3px 8px #030B13;
+}
+.ui-button-primary:disabled {
+  background-color: var(--color-disabled);
+  background-image: none;
+  border-color: var(--color-ink-line);
+  color: var(--color-muted);
+  box-shadow: none;
+}
+.ui-section-title { color: var(--color-vellum); font-size: 0.875rem; font-weight: 600; }
+
+}
+
+.lobby-drawer aside { height: 100%; border: 0; background: var(--color-sidebar); }
+.lobby-drawer aside > header:first-child { display: none; }
+
+@keyframes dialog-rise { from { transform: translateY(10px) scale(0.98); } }
+.dialog-rise { animation: dialog-rise 220ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+/* Sprite sheets contain only opaque painted art; clipping supplies the shape. */
+.art-portrait { display: block; overflow: hidden; background-repeat: no-repeat; background-color: var(--color-ink); }
+.seat-portrait { background-image: url("/art/seat-portraits.png"); background-size: 500% 200%; }
+.role-portrait { background-image: url("/art/role-portraits.png"); background-size: 400% 200%; }
+.role-art-frame { position: relative; display: block; overflow: hidden; background: var(--color-ink); }
+.role-art-frame > .role-portrait { position: absolute; left: 0; top: 50%; width: 100%; aspect-ratio: 3 / 4; transform: translateY(-50%); }
+.ui-elevation { box-shadow: inset 0 1px 0 #163043, 0 8px 24px #030C15; }
+.round-table-art { background: var(--color-sidebar) url("/art/round-table.png") center / cover no-repeat; box-shadow: inset 0 0 0 1px #94713D, 0 2px 10px #030B13; }
+.round-table-status { background: var(--color-ink-raised); border: 1px solid var(--color-brass-line); box-shadow: inset 0 1px 0 #294035, 0 2px 6px #030B13; }
+.metal-badge { background: linear-gradient(180deg, #1B3343, #0C1D2B); border: 1px solid #345165; box-shadow: inset 0 1px 0 #3B5160, inset 0 -1px 0 #030C15; }
+/* Disabled materials must take precedence over selected/hover utility colors. */
+button:disabled, input:disabled, textarea:disabled, select:disabled, [aria-disabled="true"], .ui-disabled {
+  background-color: var(--color-disabled);
+  background-image: none;
+  border-color: var(--color-ink-line);
+  color: var(--color-muted);
+  box-shadow: none;
+}
+
+html[data-locale="en"] {
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  --track-1: 0.02em;
+  --track-2: 0.04em;
+  --track-3: 0.06em;
+  --track-4: 0.08em;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
-}
-
-/*
- * 刺杀面板的入场。整局最重的一步，让屏幕先安静下来再把卡片托上来。
- *
- * 【关键帧里只写位移的增量，不要重复居中】Tailwind v4 的 translate-* 走的是**独立的
- * `translate` 属性**（`translate: var(--tw-translate-x) var(--tw-translate-y)`），
- * 不再是 v3 那样合进 `transform`。两者是分开合成的，所以这里的 `transform` 与
- * Dialog.Content 的居中互不干扰；照 v3 的老经验把 -50% 再写一遍，卡片会被多推半屏。
- * 编译产物可验：`translate-x-1\/2{...;translate:var(--tw-translate-x) var(--tw-translate-y)}`。
- *
- * 上面那条 prefers-reduced-motion 已经把 animation-duration 压到 0.01ms，
- * 这里不必再写一遍。
- */
-@keyframes dialog-veil {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes dialog-rise {
-  from {
-    opacity: 0;
-    transform: translateY(10px) scale(0.98);
-  }
-}
-
-.dialog-veil {
-  animation: dialog-veil 160ms ease-out;
-}
-
-.dialog-rise {
-  animation: dialog-rise 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-/*
- * 英文模式。由 LocaleGate 写在 <html> 上的 data-locale 驱动，组件一行都不用改。
- *
- * 字距压到中文的三分之一左右：短的全大写标签撑得开 0.3em，一个句子撑不开。
- * 字体换成一套拉丁衬线——与深色圆桌的调性一致，但字形是为拉丁字母画的。
- */
-html[data-locale="en"] {
-  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
-    "Times New Roman", serif;
-  --track-1: 0.06em;
-  --track-2: 0.08em;
-  --track-3: 0.1em;
-  --track-4: 0.12em;
-}
-
-/*
- * 浅色模式。与上面的 html[data-locale="en"] 是**同一套机制**：<html> 上一个
- * data-* 开关换掉一批变量，组件一行都不用改。并排放着是刻意的——这是一条约定，
- * 不是两次巧合。
- *
- * 【浅色下三个强调色全部压深】它们在深色底上是"亮出来"的，在纸底上必须反过来
- * "沉下去"才读得动：text-mordred 的报错、text-brass 的虚线选中、focus 的
- * 描边全都直接坐在浅底上。压深之后三者都配近白的前景色，所以下面三个 on-*
- * 取值相同——深色下它们是两个值，这不是可以合并的巧合。
- *
- * 【对比度】按 WCAG AA 正文 4.5:1 逐个验过（相对纸底 #f3ede1）：
- * vellum 14.2 · muted 4.7 · loyal 5.0 · mordred 6.2 · brass 5.0。
- * 加新 token 时请照做——这一屏有大量 text-muted 的次要文字，
- * 它是最容易掉到 4.5 以下的那一档。
- */
-html[data-theme="light"] {
-  color-scheme: light;
-
-  --color-ink: #f3ede1;
-  --color-ink-raised: #fbf8f1;
-  --color-ink-line: #d8ccb4;
-  --color-vellum: #1b2026;
-  --color-muted: #616a76;
-  --color-loyal: #2f6c8c;
-  --color-mordred: #9d332a;
-  --color-brass: #8a5c1c;
-
-  --color-on-brass: #fbf8f1;
-  --color-on-loyal: #fbf8f1;
-  --color-on-mordred: #fbf8f1;
-
-  /* 深暖褐 65%。方向与深色那份相反：浅色下也必须压暗，不能蒙白纱 */
-  --color-scrim: #2a241ba6;
-
-  /* 纸底上 8% 太淡，看不出面板被"点亮"过 */
-  --panel-ring: color-mix(in srgb, var(--color-brass) 14%, transparent);
-}
-
-/*
- * 主题切换按钮上的两个字形。
- *
- * 【为什么由 CSS 二选一，而不是让 React 按当前主题渲染一个】按钮要显示的是
- * **切过去之后**的主题，而"现在是哪套"是纯客户端状态：让 JSX 去读它，SSR 与
- * 客户端首帧就必然不一致。两个都渲染、由 CSS 藏掉一个，则 SSR 输出与水合输出
- * 完全相同，且 display:none 的那半自动退出可访问性树——和 SeatRing 窄屏降级
- * 用 CSS 断点而不用 matchMedia 是同一条理由（见 components/README.md）。
- *
- * data-theme-glyph 的值是"处于该主题时显示这一个"。深色下显示太阳（去浅色），
- * 浅色下显示月亮（回深色）。
- */
-html[data-theme="light"] [data-theme-glyph="dark"],
-html:not([data-theme="light"]) [data-theme-glyph="light"] {
-  display: none;
 }

@@ -5,7 +5,7 @@
  * **窄屏（< 640px）自动降级成 SeatList 的竖排列表**，见下面 SeatRing 的注释。
  *
  * 坐标来自 seat-ring.ts，头像来自 lib/seat-avatar.ts（都是纯函数，单独测）。这里只管画。
- * identicon 是座位身份，不承载局势：同一局不变，颜色仍完全由 tone 决定。
+ * 人物头像是公开座位标记，不承载局势：同一局不变，颜色仍完全由 tone 决定。
  *
  * 【四层信息各占一条视觉通道】一个座位可能同时是队长、在队伍里、还没投票、
  * 而且你知道他是坏人。压进一个颜色会互相盖掉，所以分开：
@@ -64,11 +64,11 @@ export interface SeatRingProps {
  */
 export const SEAT_TONE_CLASS: Record<SeatTone, string> = {
   plain: "border-ink-line bg-ink-raised text-muted",
-  self: "border-brass bg-brass/20 text-vellum",
-  evil: "border-mordred bg-mordred/25 text-vellum",
+  self: "ui-selected border-brass bg-brass-soft text-vellum",
+  evil: "border-mordred bg-mordred-soft text-vellum",
   unsure: "border-brass border-dashed bg-ink-raised text-brass",
   // 只出现在终局复盘。对局中没有任何一个座位配得上"确定是好人"
-  good: "border-loyal bg-loyal/20 text-vellum",
+  good: "border-loyal bg-loyal-soft text-vellum",
 };
 
 const INTERACTIVE_CLASS =
@@ -129,13 +129,13 @@ function Ring({
   const selected = selectedIds ? new Set(selectedIds) : null;
 
   return (
-    <div className="relative mx-auto aspect-square w-[clamp(15rem,78vw,24rem)]">
+    <div className="relative mx-auto aspect-square w-full max-w-96">
       {/* 环。inset 12% 对应 seat-ring 的 SEAT_RING_RADIUS = 38 */}
-      <div className="absolute inset-[12%] rounded-full border border-ink-line" />
+      <div className="round-table-art absolute inset-[12%] rounded-full" />
 
       {center && (
         <div className="absolute inset-0 grid place-content-center text-center">
-          {center}
+          <div className="round-table-status mx-auto max-w-36 rounded-xl px-3 py-2">{center}</div>
         </div>
       )}
 
@@ -152,10 +152,10 @@ function Ring({
           mark.onTeam && "ring-2 ring-brass ring-offset-2 ring-offset-ink",
         );
         const node = cn(
-          "relative flex size-11 flex-col items-center justify-center gap-0.5 rounded-full border",
+          "relative flex size-14 items-center justify-center rounded-full border-2",
           "transition-[background-color,border-color,color] duration-300",
           SEAT_TONE_CLASS[mark.tone],
-          mark.status === "acting" && "animate-pulse",
+          mark.status === "acting" && "ring-2 ring-brass ring-offset-2 ring-offset-ink",
           onSelect && !disabled && INTERACTIVE_CLASS,
         );
         const style = { left: `${point.leftPercent}%`, top: `${point.topPercent}%` };
@@ -172,7 +172,7 @@ function Ring({
             {mark.status === "done" && (
               <span
                 aria-hidden
-                className="absolute -bottom-0.5 -right-0.5 grid size-4 place-content-center rounded-full border border-ink bg-loyal text-[9px] leading-none text-on-loyal"
+                className="absolute -bottom-0.5 -right-0.5 grid size-4 place-content-center rounded-full border border-ink bg-loyal-fill text-[9px] leading-none text-on-loyal"
               >
                 ✓
               </span>
@@ -190,15 +190,15 @@ function Ring({
             disabled={disabled}
             onClick={() => onSelect(point.id)}
             style={style}
-            className={cn(wrapper, disabled && "cursor-not-allowed opacity-40")}
+            className={cn(wrapper, disabled && "cursor-not-allowed")}
           >
             <span className={node}>
               <SeatAvatar
                 seed={avatarSeed}
                 id={point.id}
-                className="size-5 shrink-0 fill-current opacity-75"
+                className="size-12 shrink-0"
               />
-              <span className="tabular text-[10px] leading-none">
+              <span className="tabular absolute -bottom-1 left-1/2 grid h-4 min-w-5 -translate-x-1/2 place-items-center rounded border border-ink-line bg-ink text-[10px] leading-none text-vellum">
                 {toDisplaySeatNumber(point.id)}
               </span>
             </span>
@@ -216,9 +216,9 @@ function Ring({
               <SeatAvatar
                 seed={avatarSeed}
                 id={point.id}
-                className="size-5 shrink-0 fill-current opacity-75"
+                className="size-12 shrink-0"
               />
-              <span className="tabular text-[10px] leading-none">
+              <span className="tabular absolute -bottom-1 left-1/2 grid h-4 min-w-5 -translate-x-1/2 place-items-center rounded border border-ink-line bg-ink text-[10px] leading-none text-vellum">
                 {toDisplaySeatNumber(point.id)}
               </span>
             </span>

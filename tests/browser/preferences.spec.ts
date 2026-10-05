@@ -41,18 +41,18 @@ for (const { browserLocale, locale } of [
   test.describe(browserLocale, () => {
     test.use({ locale: browserLocale });
 
-    test("first visit uses browser language and light theme even on a dark system", async ({ page }) => {
+    test("first visit uses browser language and the fixed midnight palette", async ({ page }) => {
       await page.goto("/");
       await expectLocale(page, locale);
-      await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-      await expect(page.locator("html")).toHaveCSS("color-scheme", "light");
-      await expect(page.locator("body")).toHaveCSS("background-color", "rgb(243, 237, 225)");
+      await expect(page.locator("html")).not.toHaveAttribute("data-theme", /.+/);
+      await expect(page.locator("html")).toHaveCSS("color-scheme", "dark");
+      await expect(page.locator("body")).toHaveCSS("background-color", "rgb(7, 20, 33)");
       expect(await page.evaluate(() => [
         localStorage.getItem("avalon.locale"), localStorage.getItem("avalon.theme"),
       ])).toEqual([null, null]);
       await page.reload();
       await expectLocale(page, locale);
-      await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+      await expect(page.locator("html")).not.toHaveAttribute("data-theme", /.+/);
     });
   });
 }
@@ -70,26 +70,17 @@ test("invalid saved language follows the first supported browser preference", as
 test.describe("English browser", () => {
   test.use({ locale: "en-US" });
 
-  test("manual language and theme choices survive refresh and override browser defaults", async ({ page }) => {
+  test("manual language choice survives refresh", async ({ page }) => {
     await page.goto("/");
     await expectLocale(page, "en");
-    await page.getByRole("button", { name: "Toggle theme", exact: true }).click();
     await page.getByRole("button", { name: "切换到中文", exact: true }).click();
     await expectLocale(page, "zh");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-    expect(await page.evaluate(() => [
-      localStorage.getItem("avalon.locale"), localStorage.getItem("avalon.theme"),
-    ])).toEqual(["zh", "dark"]);
     await page.reload();
     await expectLocale(page, "zh");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-    await expect(page.locator("html")).toHaveCSS("color-scheme", "dark");
-
-    await page.getByRole("button", { name: "切换主题", exact: true }).click();
+    await expect(page.locator("body")).toHaveCSS("background-color", "rgb(7, 20, 33)");
     await page.getByRole("button", { name: "Switch to English", exact: true }).click();
     await page.reload();
     await expectLocale(page, "en");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   });
 
   test("new games use the detected language and recovery preserves it after a UI language change", async ({ page }) => {
@@ -109,3 +100,21 @@ test.describe("English browser", () => {
     await expect.poll(savedLocale).toBe("en");
   });
 });
+
+for (const colorScheme of ["dark", "light"] as const) {
+  test.describe(`system ${colorScheme}`, () => {
+    test.use({ colorScheme });
+    for (const saved of ["light", "dark", "invalid"] as const) {
+      test(`ignores legacy theme ${saved}`, async ({ page }) => {
+        await page.addInitScript((value) => localStorage.setItem("avalon.theme", value), saved);
+        await page.goto("/");
+        await expect(page.locator("body")).toHaveCSS("background-color", "rgb(7, 20, 33)");
+        await expect(page.locator("html")).toHaveCSS("color-scheme", "dark");
+        await expect(page.getByRole("button", { name: /Toggle theme|切换主题/ })).toHaveCount(0);
+        await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#071421");
+        await page.reload();
+        await expect(page.locator("body")).toHaveCSS("background-color", "rgb(7, 20, 33)");
+      });
+    }
+  });
+}

@@ -58,7 +58,7 @@ export function ActionPanel() {
       ref={ref}
       aria-live="polite"
       className={cn(
-        "mt-8 w-full scroll-mb-6 rounded-xl border border-brass/60 bg-ink-raised p-5",
+        "mt-8 w-full scroll-mb-6 rounded-xl border border-brass-line ui-surface p-5",
         "shadow-[0_0_0_1px_var(--panel-ring)]",
         "lg:mt-0 lg:max-h-[65dvh] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain",
         "xl:max-h-[55dvh]",
@@ -251,7 +251,7 @@ function SeatChips({
             )}
           >
             {toDisplaySeatNumber(seat.id)}{" "}
-            <span className="text-xs opacity-70">
+            <span className="text-xs">
               {seat.isSelf ? msg.seat.you : seat.name}
             </span>
           </li>
@@ -349,10 +349,10 @@ function OptionButtons({ options, submit }: { options: ActionOption[]; submit: S
             submit(option.action);
           }}
           className={cn(
-            "rounded-lg border px-4 py-3 text-left transition-colors disabled:opacity-50",
+            "rounded-lg border px-4 py-3 text-left transition-colors ",
             option.tone === "positive"
-              ? "border-loyal/60 bg-loyal/10 hover:bg-loyal/20"
-              : "border-mordred/60 bg-mordred/10 hover:bg-mordred/20",
+              ? "border-loyal-line bg-loyal-soft hover:bg-loyal-soft"
+              : "border-mordred-line bg-mordred-soft hover:bg-mordred-fill",
           )}
         >
           <span
@@ -402,7 +402,7 @@ function TextBox({
         onKeyDown={(event) => {
           if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) onSubmit();
         }}
-        className="w-full resize-y rounded-lg border border-ink-line bg-ink px-3 py-2.5 text-sm leading-relaxed text-vellum placeholder:text-muted/80"
+        className="ui-input w-full resize-y rounded-lg border border-ink-line px-3 py-2.5 text-sm leading-relaxed text-vellum"
       />
       <div className="mt-1.5 flex items-baseline justify-between gap-3">
         <p className="text-xs leading-relaxed text-muted">{note}</p>
@@ -435,10 +435,10 @@ function PrimaryButton({
       className={cn(
         "whitespace-nowrap rounded-lg font-display text-base tracking-[var(--track-1)] transition-colors",
         fullWidth ? "w-full px-6 py-3" : "min-h-11 px-5 py-2.5",
-        "disabled:cursor-not-allowed disabled:border disabled:border-ink-line disabled:bg-transparent disabled:text-muted",
+        "disabled:cursor-not-allowed disabled:border disabled:border-ink-line disabled:bg-ink-raised disabled:text-muted",
         tone === "brass"
-          ? "bg-brass text-on-brass hover:bg-brass/85"
-          : "bg-mordred text-on-mordred hover:bg-mordred/85",
+          ? "ui-button-primary"
+          : "bg-mordred-fill text-on-mordred hover:bg-mordred-soft",
       )}
     >
       <span className="-mr-[var(--track-1)]">{children}</span>

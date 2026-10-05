@@ -13,9 +13,9 @@ import { viewAtom } from "@/store/game";
 import { describeTrack, type MissionNode, type MissionOutcome } from "./mission-track-model";
 
 const OUTCOME_CLASS: Record<MissionOutcome, string> = {
-  success: "border-loyal bg-loyal/15 text-loyal",
-  fail: "border-mordred bg-mordred/15 text-mordred",
-  current: "border-brass bg-brass/10 text-vellum",
+  success: "border-loyal bg-loyal-soft text-loyal",
+  fail: "border-mordred bg-mordred-soft text-mordred",
+  current: "border-brass bg-brass-soft text-vellum",
   upcoming: "border-ink-line bg-ink-raised text-muted",
 };
 
@@ -30,7 +30,7 @@ export function MissionTrack({ view: explicitView }: { view?: AnyView } = {}) {
   return (
     <section className="w-full">
       <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="font-display text-xs tracking-[var(--track-3)] text-muted">
+        <h2 className="text-xs font-medium text-muted">
           {msg.track.title}
         </h2>
         <p className="tabular text-xs">
@@ -74,7 +74,7 @@ function MissionNodeCell({ node }: { node: MissionNode }) {
         OUTCOME_CLASS[node.outcome],
       )}
     >
-      <p aria-hidden className="text-[10px] tracking-widest opacity-70">
+      <p aria-hidden className="text-[10px] tracking-widest">
         {node.label}
       </p>
       <p aria-hidden className="tabular mt-0.5 text-xl leading-none">
@@ -84,7 +84,7 @@ function MissionNodeCell({ node }: { node: MissionNode }) {
       {/* 【不能给固定高度】原来是 h-3（硬 12px）。窄屏上「失败 · 2 败」放不下
           会在中文字符间折行，第二行直接画到下面的兄弟节点上（没有 overflow-hidden）。
           min-h-3 保住五个节点的基线对齐，同时允许它长高 */}
-      <p aria-hidden className="mt-1 min-h-3 text-[10px] leading-tight opacity-80">
+      <p aria-hidden className="mt-1 min-h-3 text-[10px] leading-tight">
         {node.detail ?? ""}
       </p>
     </li>
@@ -127,7 +127,7 @@ function RejectMeter({
               "size-2.5 rounded-full border transition-colors",
               i < count ? "border-mordred bg-mordred" : "border-ink-line",
               // 最后一格单独描出来：撞到它就输了
-              i === max - 1 && i >= count && "border-mordred/50",
+              i === max - 1 && i >= count && "border-mordred-line",
             )}
           />
         ))}

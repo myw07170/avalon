@@ -53,8 +53,8 @@ export function SpeechFeed({ enableActions = false }: { enableActions?: boolean 
 
   return (
     <section className="w-full lg:flex lg:h-full lg:min-h-0 lg:flex-col">
-      <header className="mb-3 lg:mb-0 lg:shrink-0 lg:border-b lg:border-ink-line lg:px-5 lg:pb-4 lg:pt-18">
-        <h2 className="font-display text-xs tracking-[var(--track-3)] text-muted">
+      <header className="mb-3 lg:mb-0 lg:shrink-0 lg:border-b lg:border-ink-line lg:px-5 lg:pb-4 lg:pt-5">
+        <h2 className="text-sm font-medium text-vellum">
           {msg.feed.title}
         </h2>
       </header>
@@ -63,7 +63,7 @@ export function SpeechFeed({ enableActions = false }: { enableActions?: boolean 
         ref={boxRef}
         className={
           "max-h-[45dvh] overflow-y-auto rounded-lg border border-ink-line bg-ink-raised px-4 py-3 " +
-          "lg:min-h-0 lg:max-h-none lg:flex-1 lg:rounded-none lg:border-0 lg:bg-transparent lg:px-5 lg:py-5"
+          "lg:min-h-0 lg:max-h-none lg:flex-1 lg:rounded-none lg:border-0 lg:bg-ink-raised lg:px-5 lg:py-5"
         }
       >
         {items.length === 0 ? (

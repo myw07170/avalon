@@ -18,6 +18,8 @@ import { ROLE_TEAM, type Role } from "@/lib/game";
 import { PREVIEW_AVATAR_SEED } from "@/lib/seat-avatar";
 import { cn } from "@/lib/utils";
 import { RoleKnowledge } from "./RoleKnowledge";
+import { RoleArtwork } from "./RoleArtwork";
+import { MetalIcon } from "./HeraldicIcon";
 import { describeRole, type RoleBrief } from "./role-card-model";
 import { buildTutorialRoleViews, TUTORIAL_ROLE_ORDER } from "./tutorial-model";
 
@@ -60,19 +62,20 @@ export function TutorialModal() {
         <button
           type="button"
           aria-label={copy.triggerAria}
-          className="min-h-11 rounded-lg border border-ink-line bg-ink-raised px-3 text-xs text-muted transition-colors hover:border-muted hover:text-vellum"
+          className="ui-button"
         >
+          <MetalIcon kind="book" className="size-6" />
           {copy.trigger}
         </button>
       </Dialog.Trigger>
 
       <Dialog.Portal>
-        <Dialog.Overlay className="dialog-veil fixed inset-0 z-40 bg-scrim backdrop-blur-sm" />
+        <Dialog.Overlay className="dialog-veil fixed inset-0 z-40 bg-scrim " />
         <Dialog.Content
           className={cn(
             "dialog-rise fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2",
             "flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-4xl flex-col overflow-hidden",
-            "rounded-2xl border border-ink-line bg-ink-raised shadow-2xl",
+            "rounded-2xl border border-ink-line ui-surface ui-elevation",
           )}
         >
           <header className="shrink-0 border-b border-ink-line px-5 pb-4 pt-5 sm:px-7 sm:pt-6">
@@ -110,8 +113,8 @@ export function TutorialModal() {
                         className={cn(
                           "flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border px-2 text-xs transition-colors",
                           active
-                            ? "border-brass bg-brass/15 text-vellum"
-                            : "border-transparent text-muted hover:border-ink-line hover:text-vellum",
+                            ? "ui-selected border-brass bg-brass-soft text-vellum"
+                            : "border-ink-line text-muted hover:border-ink-line hover:text-vellum",
                         )}
                       >
                         <span className="tabular text-[10px] text-brass">{index + 1}</span>
@@ -152,7 +155,7 @@ export function TutorialModal() {
               type="button"
               onClick={() => goTo(step - 1)}
               disabled={step === 0}
-              className="min-h-11 rounded-lg border border-ink-line px-4 text-sm text-muted transition-colors hover:border-muted hover:text-vellum disabled:cursor-not-allowed disabled:opacity-35"
+              className="min-h-11 rounded-lg border border-ink-line px-4 text-sm text-muted transition-colors hover:border-muted hover:text-vellum disabled:cursor-not-allowed"
             >
               {copy.previous}
             </button>
@@ -160,7 +163,7 @@ export function TutorialModal() {
               <button
                 type="button"
                 onClick={() => goTo(step + 1)}
-                className="min-h-11 rounded-lg bg-brass px-5 text-sm text-on-brass transition-colors hover:bg-brass/85"
+                className="min-h-11 rounded-lg ui-button-primary px-5 text-sm transition-colors"
               >
                 {copy.next}
               </button>
@@ -168,7 +171,7 @@ export function TutorialModal() {
               <Dialog.Close asChild>
                 <button
                   type="button"
-                  className="min-h-11 rounded-lg bg-brass px-5 text-sm text-on-brass transition-colors hover:bg-brass/85"
+                  className="min-h-11 rounded-lg ui-button-primary px-5 text-sm transition-colors"
                 >
                   {copy.finish}
                 </button>
@@ -228,13 +231,13 @@ function GoalStep({
         headingRef={headingRef}
       />
       <div className="mx-auto mt-8 grid max-w-3xl gap-4 sm:grid-cols-2">
-        <article className="rounded-xl border border-loyal/45 bg-loyal/10 p-5">
+        <article className="rounded-xl border border-loyal-line bg-loyal-soft p-5">
           <p className="font-display text-sm tracking-[var(--track-2)] text-loyal">
             {copy.goodTitle}
           </p>
           <p className="mt-3 text-sm leading-relaxed text-vellum">{copy.goodBody}</p>
         </article>
-        <article className="rounded-xl border border-mordred/45 bg-mordred/10 p-5">
+        <article className="rounded-xl border border-mordred-line bg-mordred-soft p-5">
           <p className="font-display text-sm tracking-[var(--track-2)] text-mordred">
             {copy.evilTitle}
           </p>
@@ -299,17 +302,17 @@ function MissionStep({
         headingRef={headingRef}
       />
       <div className="mx-auto mt-8 grid max-w-3xl gap-4 sm:grid-cols-2">
-        <article className="rounded-xl border border-loyal/45 bg-loyal/10 p-5">
+        <article className="rounded-xl border border-loyal-line bg-loyal-soft p-5">
           <p className="font-display text-sm text-loyal">{copy.goodTitle}</p>
           <p className="mt-3 text-sm leading-relaxed text-vellum">{copy.goodBody}</p>
         </article>
-        <article className="rounded-xl border border-mordred/45 bg-mordred/10 p-5">
+        <article className="rounded-xl border border-mordred-line bg-mordred-soft p-5">
           <p className="font-display text-sm text-mordred">{copy.evilTitle}</p>
           <p className="mt-3 text-sm leading-relaxed text-vellum">{copy.evilBody}</p>
         </article>
       </div>
       <Callout>{copy.threshold}</Callout>
-      <div className="mx-auto mt-4 max-w-3xl rounded-xl border border-mordred/45 bg-mordred/10 p-5">
+      <div className="mx-auto mt-4 max-w-3xl rounded-xl border border-mordred-line bg-mordred-soft p-5">
         <h4 className="font-display text-base text-mordred">{copy.assassinationTitle}</h4>
         <p className="mt-2 text-sm leading-relaxed text-vellum">{copy.assassinationBody}</p>
       </div>
@@ -361,10 +364,10 @@ function RolesStep({
               className={cn(
                 "min-h-11 rounded-lg border px-3 py-2 text-sm transition-colors",
                 selected
-                  ? "border-brass bg-brass/15 text-vellum"
+                  ? "ui-selected border-brass bg-brass-soft text-vellum"
                   : team === "GOOD"
-                    ? "border-loyal/30 text-loyal hover:border-loyal/70"
-                    : "border-mordred/30 text-mordred hover:border-mordred/70",
+                    ? "border-loyal-line text-loyal hover:border-loyal-line"
+                    : "border-mordred-line text-mordred hover:border-mordred-line",
               )}
             >
               {msg.roles[candidate].label}
@@ -374,7 +377,8 @@ function RolesStep({
       </div>
 
       <div className="mt-8 grid items-start gap-8 lg:grid-cols-[18rem_minmax(0,1fr)]">
-        <aside className="rounded-xl border border-ink-line bg-ink p-5 lg:sticky lg:top-0">
+        <aside className="overflow-hidden rounded-xl border border-ink-line bg-ink p-5 lg:sticky lg:top-0">
+          <RoleArtwork role={role} className="mb-4 aspect-[4/3] w-full rounded-lg" />
           <p
             className={cn(
               "font-display text-xs tracking-[var(--track-2)]",
@@ -405,7 +409,7 @@ function RolesStep({
 
 function Callout({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mx-auto mt-5 max-w-3xl rounded-xl border border-brass/45 bg-brass/10 px-4 py-3 text-sm leading-relaxed text-vellum">
+    <p className="mx-auto mt-5 max-w-3xl rounded-xl border border-brass-line bg-brass-soft px-4 py-3 text-sm leading-relaxed text-vellum">
       {children}
     </p>
   );

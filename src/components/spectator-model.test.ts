@@ -72,6 +72,7 @@ describe("describeCast：默认全盖", () => {
     for (const seat of cast) {
       expect(seat.revealed).toBe(false);
       expect(seat.roleLabel).toBeNull();
+      expect(seat.role).toBeNull();
       expect(seat.team).toBeNull();
       // 【这一档决定了观战的圆桌一开始与落座局长得一样】
       expect(seat.tone).toBe("plain");
@@ -102,12 +103,14 @@ describe("describeCast：翻开", () => {
 
     expect(two.revealed).toBe(true);
     expect(two.roleLabel).toBe(zh.roles[role].label);
+    expect(two.role).toBe(role);
     expect(two.team).toBe(ROLE_TEAM[role]);
     expect(two.tone).toBe(ROLE_TEAM[role] === "EVIL" ? "evil" : "good");
 
     for (const other of cast.filter((s) => s.id !== 2)) {
       expect(other.revealed).toBe(false);
       expect(other.roleLabel).toBeNull();
+      expect(other.role).toBeNull();
     }
   });
 

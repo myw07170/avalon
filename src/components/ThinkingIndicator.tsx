@@ -31,7 +31,7 @@ export function ThinkingIndicator() {
       role="status"
       aria-live="polite"
       className={
-        "w-full max-w-md rounded-lg border border-brass/60 bg-brass/10 px-4 py-3 " +
+        "w-full max-w-md rounded-lg border border-brass-line bg-brass-soft px-4 py-3 " +
         "shadow-[0_0_0_1px_var(--panel-ring)]"
       }
     >

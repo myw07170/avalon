@@ -77,6 +77,15 @@ export const zh = {
     apiKey: "原模型 API Key", noCredits: "当前账号没有可用对局额度。",
     players: (count: number) => `${count} 人局`, spectator: "观战", player: (seat: number) => `${seat} 号玩家`, saved: "保存于",
   },
+  ui: {
+    navigation: "导航", menu: "打开菜单", closeMenu: "关闭菜单", menuDescription: "历史对局、AI 设置与账号",
+    lobby: "圆桌大厅", lobbyNote: "选好座位，开启一场推理与博弈。", seats: "选择座位", configuration: "对局配置",
+    overview: "总览", rounds: "复盘导航", previous: "上一轮", next: "下一轮",
+    conversation: "公开发言", reasoning: "AI 心证", noReasoning: "没有对应的 AI 心证记录。",
+    noMission: "本轮未执行任务", noMissions: "本局尚未执行任务。", noConversation: "本轮没有发言记录。",
+    roundNote: "按轮查看公开发言与对应心证，组队投票按提议顺序排列。",
+    advancedStats: "模型耗时", pending: "待继续",
+  },
   app: {
     title: "阿瓦隆",
     tagline: "一个人，一桌会说话的 AI。",
@@ -84,14 +93,7 @@ export const zh = {
     localeShort: "中",
     /** 切换按钮的 aria-label。同样指向切过去之后的语言 */
     switchTo: "切换到中文",
-    /**
-     * 主题切换按钮的 aria-label。
-     *
-     * 【这一条刻意不指向目标主题】写"切换到浅色"就要先知道现在是深色，
-     * 而那是纯客户端状态，SSR 首帧读不到（见 theme/ThemeSwitcher.tsx）。
-     * 方向由按钮上的日月字形说明。
-     */
-    toggleTheme: "切换主题",
+
   },
 
   /**
@@ -309,7 +311,7 @@ export const zh = {
         tab: "角色牌与视野",
         eyebrow: "角色视野实验台",
         title: "换一个身份，整张桌子就变了",
-        intro:"蓝色为好人阵营的角色，红色为坏人阵营的角色。下面直接展示他开局时拿到的真实受限视角。角色能力与逐条说明和正式对局完全共用。",
+        intro: "蓝色为好人阵营的角色，红色为坏人阵营的角色。下面直接展示他开局时拿到的真实受限视角。角色能力与逐条说明和正式对局完全共用。",
         pickerLabel: "选择要查看的角色",
         sampleNote: "这是独立的十人示例桌，不会读取或改变正在进行的对局。",
       },

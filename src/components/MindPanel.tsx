@@ -32,16 +32,16 @@ export function MindPanel() {
   const entries = describeMinds(view, decisions, revealed, msg);
 
   return (
-    <section className="w-full">
+    <section className="ui-panel w-full p-4 sm:p-5">
       <header className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="font-display text-xs tracking-[var(--track-3)] text-muted">
+        <h2 className="text-xs font-medium text-muted">
           {msg.spectator.mindsTitle}
         </h2>
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
-          className="rounded-lg border border-ink-line bg-ink-raised px-3 py-1.5 text-xs text-muted transition-colors hover:border-muted hover:text-vellum"
+          className="ui-button"
         >
           {open ? msg.spectator.mindsCollapse : msg.spectator.mindsExpand}
         </button>
@@ -49,7 +49,7 @@ export function MindPanel() {
 
       {open && (
         <>
-          <p className="mb-3 rounded-lg border border-brass/50 bg-brass/10 px-4 py-2.5 text-xs leading-relaxed text-brass">
+          <p className="mb-3 rounded-lg border border-brass-line bg-brass-soft px-4 py-2.5 text-xs leading-relaxed text-brass">
             {msg.spectator.mindsSpoilerNote}
           </p>
 

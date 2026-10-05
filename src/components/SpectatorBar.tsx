@@ -26,7 +26,7 @@ export function SpectatorBar() {
 
   return (
     <div className="flex w-full flex-wrap items-center justify-center gap-3">
-      <span className="font-display text-xs tracking-[var(--track-3)] text-muted">
+      <span className="text-xs font-medium text-muted">
         {msg.spectator.pauseField}
       </span>
 
@@ -37,7 +37,7 @@ export function SpectatorBar() {
         className={cn(
           "min-h-11 rounded-lg border px-5 py-2 text-sm transition-colors",
           paused
-            ? "border-brass bg-brass/15 text-vellum"
+            ? "ui-selected border-brass bg-brass-soft text-vellum"
             : "border-ink-line bg-ink-raised text-muted hover:border-muted hover:text-vellum",
         )}
       >
@@ -61,7 +61,7 @@ export function SpectatorBar() {
             className={cn(
               "min-h-11 rounded-lg border px-3 py-2 text-sm transition-colors",
               option.key === active
-                ? "border-brass bg-brass/15 text-vellum"
+                ? "ui-selected border-brass bg-brass-soft text-vellum"
                 : "border-ink-line bg-ink-raised text-muted hover:border-muted hover:text-vellum",
             )}
           >

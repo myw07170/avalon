@@ -17,6 +17,7 @@
  */
 import type { PlayerId } from "@/lib/game";
 import { useMessages } from "@/i18n/useMessages";
+import { toDisplaySeatNumber } from "@/lib/seat-number";
 import { cn } from "@/lib/utils";
 import { SEAT_TONE_CLASS, type SeatRingMark } from "./SeatRing";
 import { SeatAvatar } from "./SeatAvatar";
@@ -62,7 +63,7 @@ export function SeatList({
           SEAT_TONE_CLASS[mark.tone],
           mark.onTeam && "ring-2 ring-brass ring-offset-2 ring-offset-ink",
           onSelect && !disabled && "hover:border-muted hover:text-vellum",
-          disabled && "cursor-not-allowed opacity-40",
+          disabled && "cursor-not-allowed",
         );
 
         const inner = (
@@ -70,14 +71,14 @@ export function SeatList({
             <SeatAvatar
               seed={avatarSeed}
               id={id}
-              className="size-7 shrink-0 fill-current opacity-75"
+              className="size-10 shrink-0"
             />
 
             <span aria-hidden className="tabular w-6 shrink-0 text-center">
-              {id}
+              {toDisplaySeatNumber(id)}
             </span>
 
-            <span aria-hidden className="min-w-0 flex-1 truncate text-xs opacity-80">
+            <span aria-hidden className="min-w-0 flex-1 truncate text-xs">
               {msg.role.toneLabel[mark.tone]}
             </span>
 
@@ -93,12 +94,12 @@ export function SeatList({
                 </span>
               )}
               {mark.status === "done" && (
-                <span className="grid size-4 place-content-center rounded-full bg-loyal leading-none text-on-loyal">
+                <span className="grid size-4 place-content-center rounded-full bg-loyal-fill leading-none text-on-loyal">
                   ✓
                 </span>
               )}
               {mark.status === "acting" && (
-                <span className="animate-pulse rounded-sm border border-muted px-1 leading-tight text-muted">
+                <span className=" rounded-sm border border-muted px-1 leading-tight text-muted">
                   {msg.table.acting}
                 </span>
               )}

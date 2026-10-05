@@ -1,75 +1,58 @@
-/**
- * 两套主题的对齐，用源码断言钉死——做法与 components/leak.test.ts 一样：
- * 读自己的 CSS，查的是**结构**，不是某一次渲染出来的颜色。
- *
- * 这三条查的全是"改错了不会报错、只会静默不生效"的那类事故。CSS 没有类型
- * 系统，漏一个变量、或者把 @theme 改回 @theme inline，构建照样绿、页面照样
- * 渲染，只是浅色主题从此是个摆设。除了在这里钉住，没有别的地方拦得住。
- */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_THEME, THEME_COLOR } from "./theme";
+import { APP_THEME_COLOR } from "./theme";
+import { renderTranscriptPage } from "../lib/ai/transcript-page";
 
-/**
- * 【必须先剥注释】这个文件头顶和 globals.css 里都写着"绝对不能写成 @theme
- * inline"——那正是这条规矩被记下来的地方。不剥的话，把规矩写在注释里反而
- * 会让断言炸，于是下一个人的修法是删掉解释。leak.test.ts 踩过同一个坑，
- * 那里的原话是：**断言不该逼人删掉解释。**
- */
-const CSS = readFileSync(
-  new URL("../app/globals.css", import.meta.url),
-  "utf8",
-).replace(/\/\*[\s\S]*?\*\//g, "");
+const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+const tokens = Object.fromEntries([...css.matchAll(/--color-([a-z-]+):\s*(#[0-9a-f]{6});/gi)].map((match) => [match[1], match[2]])) as Record<string, string>;
 
-/** 取一个块的正文。`@theme {` / `html[data-theme="light"] {` 都只出现一次 */
-function blockBody(header: string): string {
-  const start = CSS.indexOf(header);
-  expect(start, `找不到 ${header}`).toBeGreaterThanOrEqual(0);
-  const open = CSS.indexOf("{", start);
-  let depth = 0;
-  for (let i = open; i < CSS.length; i++) {
-    if (CSS[i] === "{") depth++;
-    else if (CSS[i] === "}" && --depth === 0) return CSS.slice(open + 1, i);
-  }
-  throw new Error(`${header} 的花括号没有闭合`);
+function luminance(hex: string): number {
+  const channels = [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255)
+    .map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+  return channels[0]! * 0.2126 + channels[1]! * 0.7152 + channels[2]! * 0.0722;
+}
+function contrast(a: string, b: string): number {
+  const values = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (values[0]! + 0.05) / (values[1]! + 0.05);
 }
 
-/** 块里声明的 --color-* 名字。注释里出现的不算——它们没有跟着冒号 */
-function colorTokens(body: string): string[] {
-  // flatMap 而不是 map：noUncheckedIndexedAccess 下 m[1] 的类型带 undefined，
-  // 而正则里那个分组必然匹配到——用 ! 断言等于把这条信息扔掉
-  return [...body.matchAll(/(--color-[a-z0-9-]+)\s*:/g)]
-    .flatMap((m) => (m[1] === undefined ? [] : [m[1]]))
-    .sort();
-}
-
-describe("主题 token 的两套取值必须对齐", () => {
-  it("默认主题是浅色", () => {
-    expect(DEFAULT_THEME).toBe("light");
-    expect(THEME_COLOR[DEFAULT_THEME]).toBe(THEME_COLOR.light);
+describe("single midnight palette", () => {
+  it("uses the same color for the page and browser chrome, without theme overrides", () => {
+    expect(tokens.ink?.toUpperCase()).toBe(APP_THEME_COLOR);
+    expect(css).toContain("color-scheme: dark");
+    expect(css).not.toMatch(/data-theme|prefers-color-scheme/);
+    // Locale-dependent fonts still require runtime variables.
+    expect(css).not.toMatch(/@theme\s+inline/);
   });
-
-  it("@theme 不能写成 @theme inline", () => {
-    // 加上 inline，Tailwind 会把字面值内联进每一条 utility
-    // （.bg-ink{background-color:#0e1418} 而不是 var(--color-ink)），
-    // 于是 html[data-theme="light"] 下的覆盖一点作用都没有。
-    // 页面照常渲染，只是永远是深色——本次改动唯一一个不报错的失败模式。
-    // 同一个机制也管着 html[data-locale="en"] 换 --font-display。
-    expect(CSS).not.toMatch(/@theme\s+inline/);
-    expect(CSS).toMatch(/@theme\s*\{/);
+  it("keeps readable text and accent buttons at WCAG AA contrast", () => {
+    for (const background of ["ink", "ink-raised", "ink-highlight"]) {
+      for (const foreground of ["vellum", "muted", "loyal", "mordred", "brass", "success"]) {
+        expect(contrast(tokens[foreground]!, tokens[background]!), `${foreground} on ${background}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    for (const [accent, fill] of [["brass", "brass-fill"], ["brass", "brass-light"], ["loyal", "loyal-fill"], ["mordred", "mordred-fill"]] as const) {
+      expect(contrast(tokens[`on-${accent}`]!, tokens[fill]!), `text on ${fill}`).toBeGreaterThanOrEqual(4.5);
+    }
   });
-
-  it("夹具本身别悄悄扫空了", () => {
-    // 这条防的是"上面两个 indexOf 改坏了导致下面那条在空集合上全绿"
-    expect(colorTokens(blockBody("@theme"))).not.toHaveLength(0);
+  it("keeps solid selected, hovered and disabled states readable", () => {
+    for (const [foreground, background] of [["brass", "brass-soft"], ["vellum", "brass-soft"], ["loyal", "loyal-soft"], ["mordred", "mordred-soft"], ["success", "success-soft"], ["muted", "disabled"]] as const) {
+      expect(contrast(tokens[foreground]!, tokens[background]!), `${foreground} on ${background}`).toBeGreaterThanOrEqual(4.5);
+    }
+    for (const hover of ["#E7C993", "#C59D5E"]) expect(contrast(tokens["on-brass"]!, hover)).toBeGreaterThanOrEqual(4.5);
+    expect(css).not.toMatch(/transparent|rgba?\(|color-mix|opacity:|backdrop-filter|#[0-9a-f]{8}\b/i);
   });
-
-  it("深色声明的每一个颜色 token，浅色都给了一份", () => {
-    // 漏一个的症状：浅色页面上某一处突然是深色，而且只在某个阶段才看得见。
-    // 多一个的症状：浅色下有个 token 深色下根本没定义，utility 直接失效。
-    // 两个方向都要拦，所以比的是集合相等而不是包含。
-    expect(colorTokens(blockBody('html[data-theme="light"]'))).toEqual(
-      colorTokens(blockBody("@theme")),
-    );
+  it("exports the same fixed palette to offline transcripts", () => {
+    const html = renderTranscriptPage([]);
+    const offline = Object.fromEntries([...html.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-f]{6});/gi)].map((match) => [match[1], match[2]]));
+    for (const [exported, app] of [
+      ["paper", "ink"], ["surface", "ink-raised"], ["surface-top", "ink-highlight"],
+      ["ink", "vellum"], ["ink-2", "muted"], ["line", "ink-line"], ["accent", "brass"],
+      ["good", "loyal"], ["good-fill", "loyal-fill"], ["evil", "mordred"],
+      ["evil-fill", "mordred-fill"], ["ok", "success"],
+    ] as const) {
+      expect(offline[exported], exported).toBe(tokens[app]);
+    }
+    expect(html).toContain("color-scheme: dark");
+    expect(html).not.toMatch(/prefers-color-scheme|data-theme|transparent|color-mix|rgba?\(|#[0-9a-f]{8}\b/i);
   });
 });

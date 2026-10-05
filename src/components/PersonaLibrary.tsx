@@ -84,9 +84,9 @@ export function PersonaLibrary({
               onClick={() => openSeat(seat)}
               aria-label={copy.personaChooseAria(seat, persona?.name ?? copy.personaRandom)}
               className={cn(
-                "group flex min-h-16 items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
+                "group flex min-h-20 items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors",
                 persona
-                  ? "border-brass/70 bg-brass/10 text-vellum"
+                  ? "ui-selected border-brass-line bg-brass-soft text-vellum"
                   : "border-ink-line bg-ink-raised text-muted hover:border-muted hover:text-vellum",
               )}
             >
@@ -99,7 +99,7 @@ export function PersonaLibrary({
                 <SeatAvatar
                   seed={PREVIEW_AVATAR_SEED}
                   id={seat}
-                  className="size-5 fill-current opacity-80"
+                  className="size-5 "
                 />
               </span>
               <span className="min-w-0 flex-1">
@@ -111,11 +111,11 @@ export function PersonaLibrary({
                 </span>
                 {persona && (
                   <span className="mt-0.5 block truncate text-xs text-muted">
-                    {persona.traits.join(" · ")}
+                    {persona.traits.join(" ·")}
                   </span>
                 )}
               </span>
-              <span aria-hidden className="text-brass opacity-60 group-hover:opacity-100">
+              <span aria-hidden className="text-brass  ">
                 ›
               </span>
             </button>
@@ -130,12 +130,12 @@ export function PersonaLibrary({
         }}
       >
         <Dialog.Portal>
-          <Dialog.Overlay className="dialog-veil fixed inset-0 z-40 bg-scrim backdrop-blur-sm" />
+          <Dialog.Overlay className="dialog-veil fixed inset-0 z-40 bg-scrim " />
           <Dialog.Content
             className={cn(
               "dialog-rise fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2",
               "flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-5xl flex-col overflow-hidden",
-              "rounded-2xl border border-ink-line bg-ink-raised shadow-2xl",
+              "rounded-2xl border border-ink-line ui-surface ui-elevation",
             )}
           >
             <header className="shrink-0 border-b border-ink-line px-5 pb-4 pt-5 sm:px-7 sm:pt-6">
@@ -163,7 +163,7 @@ export function PersonaLibrary({
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder={copy.personaSearchPlaceholder}
-                  className="min-h-11 w-full rounded-lg border border-ink-line bg-ink px-4 text-sm text-vellum placeholder:text-muted focus:border-brass focus:outline-none"
+                  className="ui-input min-h-11 w-full rounded-lg border border-ink-line px-4 text-sm text-vellum focus:border-brass"
                 />
               </label>
             </header>
@@ -172,7 +172,7 @@ export function PersonaLibrary({
               <button
                 type="button"
                 onClick={() => choose(null)}
-                className="mb-4 flex min-h-14 w-full items-center justify-between rounded-xl border border-dashed border-brass/60 bg-brass/5 px-4 text-left text-sm text-vellum transition-colors hover:bg-brass/10"
+                className="mb-4 flex min-h-14 w-full items-center justify-between rounded-xl border border-dashed border-brass-line bg-brass-soft px-4 text-left text-sm text-vellum transition-colors hover:bg-brass-soft"
               >
                 <span>
                   <span className="block font-medium">{copy.personaRandom}</span>
@@ -200,17 +200,17 @@ export function PersonaLibrary({
                           className={cn(
                             "h-full min-h-40 w-full rounded-xl border p-4 text-left transition-colors",
                             selectedHere
-                              ? "border-brass bg-brass/15"
+                              ? "ui-selected border-brass bg-brass-soft"
                               : "border-ink-line bg-ink hover:border-muted",
-                            unavailable && "cursor-not-allowed opacity-40",
+                            unavailable && "ui-disabled",
                           )}
                         >
                           <span className="flex items-start justify-between gap-3">
-                            <span className="font-display text-xl tracking-[var(--track-1)] text-vellum">
+                            <span className="text-lg font-semibold text-vellum">
                               {persona.name}
                             </span>
                             {owner !== undefined && (
-                              <span className="tabular rounded-full border border-brass/40 px-2 py-0.5 text-[10px] text-brass">
+                              <span className="tabular rounded-full border border-brass-line px-2 py-0.5 text-[10px] text-brass">
                                 {copy.personaUsedBy(owner)}
                               </span>
                             )}

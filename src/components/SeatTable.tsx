@@ -190,7 +190,7 @@ function Legend({ seats }: { seats: SeatState[] }) {
       key: "done",
       label: msg.table.done,
       swatch: (
-        <span className="grid size-3.5 place-content-center rounded-full bg-loyal text-[8px] leading-none text-on-loyal">
+        <span className="grid size-3.5 place-content-center rounded-full bg-loyal-fill text-[8px] leading-none text-on-loyal">
           ✓
         </span>
       ),
@@ -200,7 +200,7 @@ function Legend({ seats }: { seats: SeatState[] }) {
     items.push({
       key: "evil",
       label: msg.role.toneLabel.evil,
-      swatch: <span className="size-3 rounded-full border border-mordred bg-mordred/25" />,
+      swatch: <span className="size-3 rounded-full border border-mordred bg-mordred-soft" />,
     });
   }
   if (seats.some((s) => s.tone === "unsure")) {

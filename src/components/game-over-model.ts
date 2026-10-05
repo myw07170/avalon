@@ -31,6 +31,7 @@ import { describeVoteMatrix, type VoteMatrix, type VoteTally } from "./vote-mode
 
 export interface RevealedSeat {
   id: PlayerId;
+  role: Role | null;
   /** 「3 号（孙娜）」，自己那一座带「你」 */
   label: string;
   roleLabel: string;
@@ -218,6 +219,7 @@ function seatsOf(view: AnyView, msg: Messages): RevealedSeat[] {
     return {
       id: player.id,
       label: seatLabel(view, player.id, msg),
+      role: role ?? null,
       roleLabel: role ? msg.roles[role].label : msg.gameOver.unknownRole,
       team,
       // 【终局按阵营染色，不再标 self】self 那一档是黄铜，会把你自己的阵营盖掉，

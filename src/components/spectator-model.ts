@@ -13,7 +13,7 @@
  * 【不抛】认不出的形状返回空数组或 null，与 describeTurn / describeGameOver 同一条约定。
  */
 import type { Messages } from "@/i18n/messages";
-import { ROLE_TEAM, type PlayerId, type SpectatorView, type Team } from "@/lib/game";
+import { ROLE_TEAM, type PlayerId, type Role, type SpectatorView, type Team } from "@/lib/game";
 import type { DecisionRecord } from "@/lib/ai/orchestrator";
 import type { SeatTone } from "./role-card-model";
 
@@ -28,6 +28,7 @@ export interface CastSeat {
   revealed: boolean;
   /** 未翻开时 null——牌背文案由组件画，模型这边不替它编一句 */
   roleLabel: string | null;
+  role: Role | null;
   team: Team | null;
   /** 未翻开恒为 plain：观战的圆桌默认与落座局长得一样 */
   tone: SeatTone;
@@ -50,6 +51,7 @@ export function describeCast(
         label: msg.seat.named(player.id, player.name),
         revealed: false,
         roleLabel: null,
+        role: null,
         team: null,
         tone: "plain",
       };
@@ -61,6 +63,7 @@ export function describeCast(
       label: msg.seat.named(player.id, player.name),
       revealed: true,
       roleLabel: msg.roles[role].label,
+      role,
       team,
       tone: team === "EVIL" ? "evil" : "good",
     };

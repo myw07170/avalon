@@ -23,6 +23,7 @@ import {
   viewAtom,
 } from "@/store/game";
 import { FlipCard, TableMotif } from "./FlipCard";
+import { RoleArtwork } from "./RoleArtwork";
 import { describeCast, type CastSeat } from "./spectator-model";
 
 export function IdentityDeck() {
@@ -43,7 +44,7 @@ export function IdentityDeck() {
   return (
     <section className="w-full">
       <header className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="font-display text-xs tracking-[var(--track-3)] text-muted">
+        <h2 className="text-xs font-medium text-muted">
           {msg.spectator.deckTitle}
         </h2>
         <div className="flex items-center gap-3">
@@ -53,7 +54,7 @@ export function IdentityDeck() {
           <button
             type="button"
             onClick={() => (allUp ? hideAll() : revealAll())}
-            className="rounded-lg border border-ink-line bg-ink-raised px-3 py-1.5 text-xs text-muted transition-colors hover:border-muted hover:text-vellum"
+            className="ui-button"
           >
             {allUp ? msg.spectator.hideAll : msg.spectator.revealAll}
           </button>
@@ -94,7 +95,7 @@ function Card({
       }
       className="h-28 w-20"
       back={
-        <div className="flex size-full flex-col items-center justify-center gap-2 rounded-2xl border border-ink-line bg-ink-raised px-1">
+        <div className="flex size-full flex-col items-center justify-center gap-2 rounded-2xl border border-ink-line ui-surface px-1">
           <TableMotif className="size-8" />
           <p className="tabular text-[10px] text-muted">
             {toDisplaySeatNumber(seat.id)}
@@ -104,10 +105,12 @@ function Card({
       front={
         <div
           className={cn(
-            "flex size-full flex-col items-center justify-center gap-1.5 rounded-2xl border-2 bg-ink-raised px-1.5 text-center",
-            seat.team === "EVIL" ? "border-mordred/60" : "border-loyal/60",
+            "flex size-full flex-col overflow-hidden rounded-xl border-2 bg-ink-raised text-center",
+            seat.team === "EVIL" ? "border-mordred-line" : "border-loyal-line",
           )}
         >
+          {seat.role && <RoleArtwork role={seat.role} className="min-h-0 flex-1" />}
+          <div className="shrink-0 border-t border-ink-line bg-ink-raised px-1 py-1">
           <p className="tabular text-[10px] text-muted">
             {toDisplaySeatNumber(seat.id)}
           </p>
@@ -119,6 +122,7 @@ function Card({
           >
             {seat.roleLabel}
           </p>
+          </div>
         </div>
       }
     />

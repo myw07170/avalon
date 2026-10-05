@@ -55,7 +55,7 @@ export function SpeechBubble({
         className={cn(
           "tabular mt-0.5 grid size-7 shrink-0 place-content-center rounded-full border text-xs",
           entry.isSelf
-            ? "border-brass bg-brass/20 text-vellum"
+            ? "border-brass bg-brass-soft text-vellum"
             : "border-ink-line text-muted",
         )}
       >
@@ -168,8 +168,8 @@ function VoteLine({
             className={cn(
               "tabular grid size-5 place-content-center rounded-full border text-[11px]",
               approve
-                ? "border-loyal/50 bg-loyal/15 text-vellum"
-                : "border-mordred/50 bg-mordred/15 text-vellum",
+                ? "border-loyal-line bg-loyal-soft text-vellum"
+                : "border-mordred-line bg-mordred-soft text-vellum",
               // 自己那一票跟圆桌用同一条视觉通道：黄铜 = 你
               seat.isSelf && "ring-1 ring-brass",
             )}

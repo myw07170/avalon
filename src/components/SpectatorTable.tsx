@@ -34,7 +34,7 @@ export function SpectatorTable() {
           <MissionTrack />
           <VoteMatrix />
 
-          <p className="font-display text-xs tracking-[var(--track-3)] text-muted">
+          <p className="text-xs font-medium text-muted">
             <span className="-mr-[var(--track-3)]">
               {paused ? msg.spectator.paused : msg.spectator.badge}
             </span>
