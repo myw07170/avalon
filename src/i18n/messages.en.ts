@@ -97,7 +97,7 @@ export const en: Messages = {
   auth: {
     title: "Sign in to play",
     description:
-      "The public deployment uses the remote model. Each email account starts with one free game after email confirmation.",
+      "The public deployment uses the remote model. Each account starts with 1 game credit. Confirm your email to start playing.",
     loading: "Checking your session...",
     modeLabel: "Sign in or sign up",
     signInTab: "Sign in",
@@ -136,11 +136,11 @@ export const en: Messages = {
     unknownEmail: "Signed-in account",
     creditsLoading: "Loading credits...",
     creditsTotal: (n) => `${plural(n, "1 game", `${n} games`)} left`,
-    creditsBreakdown: (free, purchased) => `free ${free} · purchased ${purchased}`,
     creditsUnavailable: "Credits unavailable",
     errorPrefix: (message) => `Authentication failed: ${message}`,
     userLlm: {
       title: "Use your own LLM",
+      closeAria: "Close your LLM settings",
       description:
         "When enabled, new remote games in this session use your OpenAI-compatible config and do not spend site game credits.",
       enabled: "Enabled",

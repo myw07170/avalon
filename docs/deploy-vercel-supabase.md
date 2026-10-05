@@ -6,7 +6,7 @@
 - Vercel
 - Supabase
 - Email + password auth with email confirmation
-- One free remote-model game per account
+- Initial balance of 1 game credit per account
 
 本地开发和 mock 模式不需要 Supabase。公开 remote 部署建议启用认证与额度限制，避免未授权请求消耗模型预算。
 
@@ -32,6 +32,24 @@ the application. It adds the account's single active-save slot and backend-only
 transaction RPC. No additional environment variables are needed. Do not expose
 the new tables or RPC to `anon` or `authenticated`. See [game recovery](game-recovery.md)
 for lease behavior, compatibility, and isolated database/browser tests.
+
+For unified account credits, apply `20261005194426_unified_game_credits.sql` together
+with the matching application release. It merges each existing account's free and
+purchased balances into `user_credits.games_remaining`, removes the old balance
+columns, and gives new accounts a default balance of 1. Keep the historical
+migrations unchanged and apply all files in order for a new database.
+
+Pause credit reads and game-start requests and let in-flight requests finish before
+applying this migration. Deploy the matching application before resuming requests:
+the previous application expects the removed columns and the old API response.
+Existing sessions, account read permissions, and per-game AI call limits are preserved.
+
+Alternatively, keep the site available by first deploying a temporary compatibility
+version that reads either database schema and supplies both API response contracts.
+Apply the migration, then promote the final single-balance application. This was the
+release sequence used on October 5, 2026. The final application retains no legacy
+balance fields. Keep the local migration filename's version aligned with the version
+recorded in `supabase_migrations.schema_migrations`.
 
 ## Vercel
 
@@ -85,5 +103,5 @@ Vercel only applies environment variable changes to new deployments. After chang
 - Sign in.
 - Start one remote game successfully.
 - Refresh the page and continue the same session.
-- Try starting a second remote game; it should be blocked because the free credit is already spent.
+- Try starting a second remote game; it should be blocked because the initial credit is already spent.
 - Sign out; `/api/ai` should reject calls without a valid session.

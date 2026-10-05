@@ -3,6 +3,132 @@ import { messagesFor } from "../../src/i18n/messages";
 import { ROLE_ORDER } from "../../src/lib/game";
 
 for (const locale of ["zh", "en"] as const) {
+  for (const width of [390, 1280]) {
+    test.describe(`${locale} own LLM settings at ${width}px`, () => {
+      test.use({ locale: locale === "zh" ? "zh-CN" : "en-US", viewport: { width, height: 700 }, reducedMotion: "reduce" });
+
+      test("sidebar LLM dialog keeps session config independent of model calls", async ({ page }) => {
+        const msg = messagesFor(locale);
+        const llm = msg.auth.userLlm;
+        const errors: string[] = [];
+        const modelRequests: string[] = [];
+        page.on("pageerror", error => errors.push(error.message));
+        await page.route("**/api/ai", route => {
+          modelRequests.push(route.request().url());
+          return route.abort();
+        });
+        await page.goto("/");
+        await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
+
+        const openMenu = async () => {
+          if (width < 1024) await page.getByRole("button", { name: msg.ui.menu, exact: true }).click();
+        };
+        await openMenu();
+        const trigger = page.getByRole("button", { name: llm.title, exact: true });
+        const modelSwitch = page.getByRole("switch", { name: msg.setup.modelCallsAria, exact: true });
+        await expect(trigger).toContainText(llm.off);
+        await expect(modelSwitch).toHaveAttribute("aria-checked", "false");
+        expect(await trigger.evaluate(element => element.previousElementSibling?.getAttribute("role"))).toBe("switch");
+
+        await trigger.click();
+        const dialog = page.getByRole("dialog", { name: llm.title, exact: true });
+        const key = dialog.getByLabel(llm.apiKey, { exact: true });
+        const model = dialog.getByLabel(llm.model, { exact: true });
+        const save = dialog.getByRole("button", { name: llm.save, exact: true });
+        await expect(dialog).toBeVisible();
+        await expect(key).toHaveAttribute("type", "password");
+        await save.click();
+        await expect(dialog.getByRole("alert")).toHaveText(llm.error.API_KEY_REQUIRED);
+        await key.fill("sk-browser-test-only");
+        await save.click();
+        await expect(dialog.getByRole("alert")).toHaveText(llm.error.MODEL_REQUIRED);
+        await dialog.getByRole("combobox", { name: llm.provider, exact: true }).selectOption("custom");
+        await model.fill("test-model");
+        await save.click();
+        await expect(dialog.getByRole("alert")).toHaveText(llm.error.BASE_URL_REQUIRED);
+        await dialog.getByLabel(llm.baseUrl, { exact: true }).fill("https://example.test/v1");
+        await dialog.getByLabel(llm.temperature, { exact: true }).fill("default");
+        await dialog.getByLabel(llm.maxTokens, { exact: true }).fill("700");
+        await dialog.getByRole("textbox", { name: llm.extraBody, exact: true }).fill('{ "model": "override" }');
+        await save.click();
+        await expect(dialog.getByRole("alert")).toHaveText(llm.error.EXTRA_BODY_RESERVED);
+        await dialog.getByRole("textbox", { name: llm.extraBody, exact: true }).fill('{ "reasoning_effort": "minimal" }');
+        await save.click();
+        await expect(dialog).toBeVisible();
+        await expect(dialog.getByRole("status")).toHaveText(llm.saved);
+        await expect(dialog.getByRole("status")).toBeVisible();
+        await expect(dialog.getByRole("button", { name: llm.disable, exact: true })).toBeInViewport();
+        await expect(dialog.getByRole("button", { name: llm.clear, exact: true })).toBeInViewport();
+        await expect(dialog.getByRole("alert")).toHaveCount(0);
+        await page.screenshot({ path: `test-results/ui/llm-${locale}-${width}.png` });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+
+        await page.keyboard.press("Escape");
+        await expect(dialog).toHaveCount(0);
+        await expect(trigger).toBeFocused();
+        await expect(trigger).toContainText(llm.enabled);
+        await expect(modelSwitch).toHaveAttribute("aria-checked", "false");
+        await modelSwitch.click();
+        await expect(modelSwitch).toHaveAttribute("aria-checked", "true");
+        await expect(trigger).toContainText(llm.enabled);
+        await modelSwitch.click();
+        await trigger.click();
+        await expect(key).toHaveValue("sk-browser-test-only");
+        await expect(model).toHaveValue("test-model");
+        await model.fill("unsaved-model");
+        await dialog.getByRole("button", { name: llm.closeAria, exact: true }).click();
+        await expect(trigger).toBeFocused();
+        await trigger.click();
+        await expect(model).toHaveValue("unsaved-model");
+        await dialog.getByRole("button", { name: llm.disable, exact: true }).click();
+        await expect(dialog.getByRole("status")).toHaveText(llm.disabled);
+        await expect(key).toHaveValue("sk-browser-test-only");
+        await expect(model).toHaveValue("unsaved-model");
+        await expect(dialog.getByRole("button", { name: llm.disable, exact: true })).toBeDisabled();
+        await page.keyboard.press("Escape");
+        await expect(trigger).toContainText(llm.off);
+        await trigger.click();
+        await save.click();
+        await dialog.getByRole("button", { name: llm.clear, exact: true }).click();
+        await expect(dialog.getByRole("status")).toHaveText(llm.cleared);
+        await expect(key).toHaveValue("");
+        await expect(model).toHaveValue("");
+        await expect(dialog.getByRole("combobox", { name: llm.provider, exact: true })).toHaveValue("openai");
+        await key.fill("sk-browser-test-only");
+        await model.fill("test-model");
+        await save.click();
+        await page.keyboard.press("Escape");
+
+        if (width >= 1024) {
+          await page.getByRole("button", { name: msg.history.collapseSidebar, exact: true }).click();
+          await expect(trigger).toHaveAttribute("title", llm.title);
+          await trigger.click();
+          await expect(key).toHaveValue("sk-browser-test-only");
+          await page.keyboard.press("Escape");
+          await expect(trigger).toBeFocused();
+          await page.getByRole("button", { name: msg.history.expandSidebar, exact: true }).click();
+          await expect(trigger).toContainText(llm.enabled);
+        } else {
+          await expect(page.getByRole("dialog", { name: msg.app.title, exact: true })).toBeVisible();
+          await page.keyboard.press("Escape");
+          await expect(page.getByRole("button", { name: msg.ui.menu, exact: true })).toBeFocused();
+        }
+
+        expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }).includes("sk-browser-test-only"))).toBe(false);
+        await page.reload();
+        await openMenu();
+        await expect(trigger).toContainText(llm.off);
+        await trigger.click();
+        await expect(key).toHaveValue("");
+        await expect(model).toHaveValue("");
+        expect(modelRequests).toEqual([]);
+        expect(errors).toEqual([]);
+      });
+    });
+  }
+}
+
+for (const locale of ["zh", "en"] as const) {
   for (const width of [390, 768, 1280, 1440]) {
     test.describe(`${locale} lobby at ${width}px`, () => {
       test.use({ locale: locale === "zh" ? "zh-CN" : "en-US", viewport: { width, height: 950 }, reducedMotion: "reduce" });

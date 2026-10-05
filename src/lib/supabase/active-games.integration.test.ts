@@ -64,7 +64,7 @@ describe("active game SQL and authenticated routes", () => {
     const first = await startActiveGame(user, payload);
     const duplicate = await startActiveGame(user, payload);
     expect(duplicate).toEqual(first);
-    const credits = await db.query<{ remaining: number }>("select free_games_remaining as remaining from public.user_credits where user_id=$1", [user]);
+    const credits = await db.query<{ remaining: number }>("select games_remaining as remaining from public.user_credits where user_id=$1", [user]);
     expect(credits.rows[0]!.remaining).toBe(0);
     await expect(startActiveGame(user, { ...payload, snapshot: savedGame() })).rejects.toMatchObject({ code: "GAME_EXISTS" });
     const resumed = await resumeRoute(request("POST", { gameId: snapshot.gameId, writerId: crypto.randomUUID(), takeover: true }));
@@ -99,7 +99,7 @@ describe("active game SQL and authenticated routes", () => {
   it("custom-model sessions preserve game credits and never store an API key", async () => {
     const snapshot = { ...savedGame(), aiMode: "remote" as const, model: { provider: "openai" as const, model: "test-model" } };
     const first = (await startActiveGame(user, { snapshot, writerId: crypto.randomUUID() }))!;
-    const credits = await db.query<{ remaining: number }>("select free_games_remaining as remaining from public.user_credits where user_id=$1", [user]);
+    const credits = await db.query<{ remaining: number }>("select games_remaining as remaining from public.user_credits where user_id=$1", [user]);
     expect(credits.rows[0]!.remaining).toBe(1);
     expect(JSON.stringify(first.snapshot)).not.toContain("apiKey");
     await expect(authorizeActiveGameAiCall(user, first.snapshot.gameSessionId!, JSON.stringify(first.handle), "platform")).rejects.toThrow();

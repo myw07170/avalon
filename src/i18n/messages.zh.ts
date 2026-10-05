@@ -132,7 +132,7 @@ export const zh = {
 
   auth: {
     title: "登录后开局",
-    description: "公开部署使用远程模型。每个邮箱账号默认有 1 局免费额度，确认邮箱后即可开始。",
+    description: "公开部署使用远程模型。每个账号初始额度为 1 局，确认邮箱后即可开始。",
     loading: "正在确认登录状态…",
     modeLabel: "登录或注册",
     signInTab: "登录",
@@ -168,12 +168,11 @@ export const zh = {
     unknownEmail: "已登录账号",
     creditsLoading: "正在读取额度…",
     creditsTotal: (n: number) => `剩余额度：${n} 局`,
-    creditsBreakdown: (free: number, purchased: number) =>
-      `免费 ${free} · 购买 ${purchased}`,
     creditsUnavailable: "额度暂时不可用",
     errorPrefix: (message: string) => `认证失败：${message}`,
     userLlm: {
       title: "自带 LLM",
+      closeAria: "关闭自带 LLM 设置",
       description:
         "启用后，本次会话的 remote 对局使用你提供的 OpenAI-compatible 配置，不消耗站内对局额度。",
       enabled: "已启用",

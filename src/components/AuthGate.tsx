@@ -61,17 +61,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       if (
         typeof body === "object" &&
         body !== null &&
-        "freeGamesRemaining" in body &&
-        "purchasedGamesRemaining" in body &&
-        "totalGamesRemaining" in body &&
-        typeof body.freeGamesRemaining === "number" &&
-        typeof body.purchasedGamesRemaining === "number" &&
-        typeof body.totalGamesRemaining === "number"
+        "gamesRemaining" in body &&
+        typeof body.gamesRemaining === "number"
       ) {
         setCredits({
-          freeGamesRemaining: body.freeGamesRemaining,
-          purchasedGamesRemaining: body.purchasedGamesRemaining,
-          totalGamesRemaining: body.totalGamesRemaining,
+          gamesRemaining: body.gamesRemaining,
         });
         return;
       }

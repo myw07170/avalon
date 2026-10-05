@@ -1,0 +1,14 @@
+.git
+.next
+node_modules
+.pnpm-store
+.vercel
+.env*
+!.env.local.example
+coverage
+test-results
+playwright-report
+transcripts
+.tmp
+supabase/.temp
+*.tsbuildinfo

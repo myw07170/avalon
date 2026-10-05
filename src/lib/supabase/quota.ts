@@ -1,9 +1,7 @@
 import { createSupabaseAdminClient } from "./route";
 
 export interface CreditsSnapshot {
-  freeGamesRemaining: number;
-  purchasedGamesRemaining: number;
-  totalGamesRemaining: number;
+  gamesRemaining: number;
 }
 
 export class QuotaError extends Error {
@@ -84,7 +82,7 @@ export async function readUserCredits(userId: string): Promise<CreditsSnapshot> 
   const supabase = createSupabaseAdminClient();
   const { error: insertError } = await supabase
     .from("user_credits")
-    .insert({ user_id: userId, free_games_remaining: 1 })
+    .insert({ user_id: userId })
     .select("user_id")
     .single();
 
@@ -94,21 +92,14 @@ export async function readUserCredits(userId: string): Promise<CreditsSnapshot> 
 
   const { data, error } = await supabase
     .from("user_credits")
-    .select("free_games_remaining,purchased_games_remaining")
+    .select("games_remaining")
     .eq("user_id", userId)
     .single();
 
   if (error) throw new QuotaError("CONFIG_MISSING", error.message);
 
-  const freeGamesRemaining =
-    typeof data.free_games_remaining === "number" ? data.free_games_remaining : 0;
-  const purchasedGamesRemaining =
-    typeof data.purchased_games_remaining === "number" ? data.purchased_games_remaining : 0;
-
   return {
-    freeGamesRemaining,
-    purchasedGamesRemaining,
-    totalGamesRemaining: freeGamesRemaining + purchasedGamesRemaining,
+    gamesRemaining: typeof data.games_remaining === "number" ? data.games_remaining : 0,
   };
 }
 

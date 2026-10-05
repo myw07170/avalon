@@ -55,18 +55,14 @@ describe("/api/credits", () => {
       responseHeaders: new Headers(),
     });
     routeMocks.readUserCredits.mockResolvedValue({
-      freeGamesRemaining: 1,
-      purchasedGamesRemaining: 2,
-      totalGamesRemaining: 3,
+      gamesRemaining: 3,
     });
 
     const response = await get();
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      freeGamesRemaining: 1,
-      purchasedGamesRemaining: 2,
-      totalGamesRemaining: 3,
+      gamesRemaining: 3,
     });
     expect(routeMocks.readUserCredits).toHaveBeenCalledWith("user-1");
   });

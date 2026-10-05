@@ -48,7 +48,7 @@ test.beforeAll(async () => {
       }
       if (url.pathname === "/rest/v1/user_credits") {
         if (req.method === "POST") { reply({ code: "23505", message: "duplicate" }, 409); return; }
-        const result = await db.query("select free_games_remaining,purchased_games_remaining from public.user_credits where user_id=$1", [userId]);
+        const result = await db.query("select games_remaining from public.user_credits where user_id=$1", [userId]);
         reply(result.rows[0]); return;
       }
       if (url.pathname === "/rest/v1/game_sessions") { reply([]); return; }
@@ -70,13 +70,30 @@ async function signIn(page: Page) {
   await expect(page.getByRole("button", { name: "入座", exact: true })).toBeVisible();
 }
 
-test("two browsers recover the same paid session, take over, and keep the original quota", async ({ browser }) => {
+async function expectAccountCredits(page: Page, remaining: number) {
+  const response = await page.request.get("/api/credits");
+  expect(response.status()).toBe(200);
+  expect(await response.json()).toEqual({ gamesRemaining: remaining });
+  await page.getByRole("button", { name: "账户信息", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "账户信息", exact: true });
+  await expect(dialog.getByText(`剩余额度：${remaining} 局`, { exact: true })).toBeVisible();
+  await expect(dialog.getByText(/免费|购买/)).toHaveCount(0);
+  await expect(dialog.getByLabel("API Key", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByText("自带 LLM", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByText(testUser.email, { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "修改密码", exact: true })).toBeEnabled();
+  await expect(dialog.getByRole("button", { name: "登出", exact: true })).toBeEnabled();
+  await dialog.getByRole("button", { name: "关闭账户信息", exact: true }).click();
+}
+
+test("two browsers recover the same platform session, take over, and keep the original quota", async ({ browser }) => {
   const firstContext = await browser.newContext({ locale: "zh-CN" });
   const secondContext = await browser.newContext({ locale: "zh-CN" });
   const first = await firstContext.newPage();
   const second = await secondContext.newPage();
   try {
     await signIn(first);
+    await expectAccountCredits(first, 1);
     await first.getByRole("button", { name: "入座", exact: true }).click();
     await expect(first.getByRole("button", { name: "保存并退出", exact: true })).toBeVisible();
     const stored = await db.query<{ game_session_id: string; snapshot: { gameId: string } }>("select game_session_id,snapshot from public.active_games where user_id=$1", [userId]);
@@ -102,8 +119,9 @@ test("two browsers recover the same paid session, take over, and keep the origin
     await expect(second.getByRole("heading", { name: "未结束的对局" })).toBeVisible();
     const row = await db.query<{ game_session_id: string }>("select game_session_id from public.active_games where user_id=$1", [userId]);
     expect(row.rows[0]!.game_session_id).toBe(sessionId);
-    const credits = await db.query<{ remaining: number }>("select free_games_remaining as remaining from public.user_credits where user_id=$1", [userId]);
+    const credits = await db.query<{ remaining: number }>("select games_remaining as remaining from public.user_credits where user_id=$1", [userId]);
     expect(credits.rows[0]!.remaining).toBe(0);
+    await expectAccountCredits(second, 0);
     const sessions = await db.query<{ count: number }>("select count(*)::int as count from public.game_sessions where user_id=$1", [userId]);
     expect(sessions.rows[0]!.count).toBe(1);
   } finally { await firstContext.close(); await secondContext.close(); }
