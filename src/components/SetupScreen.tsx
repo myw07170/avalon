@@ -64,6 +64,8 @@ export function SetupScreen({ draft, onDraftChange }: SetupScreenProps) {
   const preview = previewSetup(draft);
   const seated = draft.humanSeat !== null;
   const roleTallies = tallyRoles(preview.roles);
+  const hasNotices =
+    preview.errors.length > 0 || preview.warnings.length > 0 || !seated || Boolean(storeError);
 
   /**
    * 开局。落座与观战走同一条路——差别只有 humanSeat 是不是 null，
@@ -109,16 +111,32 @@ export function SetupScreen({ draft, onDraftChange }: SetupScreenProps) {
   return (
     <main className="mx-auto flex w-full max-w-7xl min-w-0 flex-1 flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
       <header className="border-b border-ink-line pb-5">
-        <h1 className="-mr-[var(--track-4)] font-display text-3xl tracking-[var(--track-2)] sm:text-4xl">
-          {msg.ui.lobby}
-        </h1>
+        <div className="flex items-center justify-between gap-3 sm:gap-6">
+          <h1 className="min-w-0 -mr-[var(--track-4)] font-display text-3xl tracking-[var(--track-2)] sm:text-4xl">
+            {msg.ui.lobby}
+          </h1>
+          <button
+            type="button"
+            onClick={start}
+            disabled={!preview.canStart || starting || !recoveryChecked || recoverySummary !== null}
+            className={cn(
+              "min-h-11 shrink-0 whitespace-nowrap rounded-lg px-3 py-2.5 font-display text-sm tracking-[var(--track-3)] transition-colors sm:min-w-40 sm:px-6 sm:py-3.5 sm:text-lg",
+              "ui-button-primary",
+              "disabled:cursor-not-allowed disabled:bg-ink-raised disabled:text-muted",
+            )}
+          >
+            <span className="-mr-[var(--track-3)]">
+              {starting ? msg.setup.starting : seated ? msg.setup.submit : msg.setup.spectate}
+            </span>
+          </button>
+        </div>
         <p className="mt-2 text-sm leading-relaxed text-muted">{msg.ui.lobbyNote}</p>
       </header>
 
       <RecoveryCard />
-      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] xl:items-start">
-        <section className="ui-panel min-w-0 p-5 sm:p-6">
-          <h2 className="ui-section-title mb-4">{msg.ui.seats}</h2>
+      <div className="grid min-w-0 gap-5 xl:grow xl:shrink-0 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] xl:items-stretch">
+        <section className="ui-panel flex min-w-0 flex-col gap-5 p-5 sm:p-6">
+          <h2 className="ui-section-title border-b border-ink-line pb-4">{msg.ui.seats}</h2>
           <RoundTable
             playerCount={draft.playerCount}
             humanSeat={draft.humanSeat}
@@ -129,111 +147,98 @@ export function SetupScreen({ draft, onDraftChange }: SetupScreenProps) {
               onDraftChange((d) => (d.humanSeat === null ? withSeat(d) : withSpectator(d)))
             }
           />
-
         </section>
         <div className="ui-panel flex min-w-0 flex-col gap-5 p-5 sm:p-6">
           <h2 className="ui-section-title border-b border-ink-line pb-4">{msg.ui.configuration}</h2>
-          <Field label={msg.setup.playerCount}>
-            <div role="radiogroup" aria-label={msg.setup.playerCount} className="flex gap-2">
-              {PLAYER_COUNTS.map((count) => (
-                <Choice
-                  key={count}
-                  checked={count === draft.playerCount}
-                  onSelect={() => onDraftChange((d) => withPlayerCount(d, count))}
-                  className="tabular flex-1 py-2.5 text-base"
-                >
-                  {count}
-                </Choice>
-              ))}
-            </div>
-          </Field>
-
-          {preview.freeEvilSlots > 0 && (
-            <Field label={msg.setup.freeEvilSlots(preview.freeEvilSlots)}>
-              <div
-                role="radiogroup"
-                aria-label={msg.setup.freeEvilAria}
-                className="grid grid-cols-2 gap-2"
-              >
-                {preview.evilOptions.map((option, index) => (
+          <div className="flex min-w-0 flex-1 flex-col justify-between gap-5">
+            <Field label={msg.setup.playerCount}>
+              <div role="radiogroup" aria-label={msg.setup.playerCount} className="flex gap-2">
+                {PLAYER_COUNTS.map((count) => (
                   <Choice
-                    key={option.join("+")}
-                    checked={index === draft.evilOptionIndex}
-                    onSelect={() => onDraftChange((d) => withEvilOption(d, index))}
-                    className="min-h-11 px-3 py-2.5 text-xs"
+                    key={count}
+                    checked={count === draft.playerCount}
+                    onSelect={() => onDraftChange((d) => withPlayerCount(d, count))}
+                    className="tabular flex-1 py-2.5 text-base"
                   >
-                    {option.map((role) => msg.roles[role].label).join(" +")}
+                    {count}
                   </Choice>
                 ))}
               </div>
-              <ul className="mt-3 space-y-1.5">
-                {dedupe(preview.selectedEvil).map((role) => (
-                  <li key={role} className="text-xs leading-relaxed text-muted">
-                    <span className="text-mordred">{msg.roles[role].label}</span>
-                    {msg.gameOver.opinionLine("", msg.roles[role].ability)}
+            </Field>
+
+            {preview.freeEvilSlots > 0 && (
+              <Field label={msg.setup.freeEvilSlots(preview.freeEvilSlots)}>
+                <div
+                  role="radiogroup"
+                  aria-label={msg.setup.freeEvilAria}
+                  className="flex flex-wrap gap-2"
+                >
+                  {preview.evilOptions.map((option, index) => (
+                    <Choice
+                      key={option.join("+")}
+                      checked={index === draft.evilOptionIndex}
+                      onSelect={() => onDraftChange((d) => withEvilOption(d, index))}
+                      className="min-h-11 grow basis-auto whitespace-nowrap px-2 py-2.5 text-xs"
+                    >
+                      {option.map((role) => msg.roles[role].label).join(" +")}
+                    </Choice>
+                  ))}
+                </div>
+                <ul className="mt-3 space-y-1.5">
+                  {dedupe(preview.selectedEvil).map((role) => (
+                    <li key={role} className="text-xs leading-relaxed text-muted">
+                      <span className="text-mordred">{msg.roles[role].label}</span>
+                      {msg.gameOver.opinionLine("", msg.roles[role].ability)}
+                    </li>
+                  ))}
+                </ul>
+              </Field>
+            )}
+
+            <Field label={msg.setup.rolesField}>
+              <ul className="flex flex-wrap gap-2">
+                {roleTallies.map((entry) => (
+                  <li
+                    key={entry.role}
+                    className={cn(
+                      "rounded-full border px-2.5 py-1 text-xs",
+                      entry.team === "GOOD"
+                        ? "border-loyal-line text-loyal"
+                        : "border-mordred-line text-mordred",
+                    )}
+                  >
+                    {msg.roles[entry.role].label}
+                    {entry.count > 1 && <span className="tabular"> ×{entry.count}</span>}
                   </li>
                 ))}
               </ul>
             </Field>
-          )}
 
-          <Field label={msg.setup.rolesField}>
-            <ul className="flex flex-wrap gap-2">
-              {roleTallies.map((entry) => (
-                <li
-                  key={entry.role}
-                  className={cn(
-                    "rounded-full border px-2.5 py-1 text-xs",
-                    entry.team === "GOOD"
-                      ? "border-loyal-line text-loyal"
-                      : "border-mordred-line text-mordred",
-                  )}
-                >
-                  {msg.roles[entry.role].label}
-                  {entry.count > 1 && <span className="tabular"> ×{entry.count}</span>}
-                </li>
-              ))}
-            </ul>
-          </Field>
+            <Field label={msg.setup.missionsField}>
+              <MissionTable missions={preview.missions} />
+            </Field>
 
-
-          <Field label={msg.setup.missionsField}>
-            <MissionTable missions={preview.missions} />
-          </Field>
-
-          <div className="mt-auto flex flex-col gap-3 border-t border-ink-line pt-5">
-            {preview.errors.map((issue) => (
-              <Notice key={issue.code} tone="error">
-                {msg.configIssue[issue.code](issue.params)}
-              </Notice>
-            ))}
-            {preview.warnings.map((issue) => (
-              <Notice key={issue.code} tone="warning">
-                {msg.setup.balanceNote(msg.configIssue[issue.code](issue.params))}
-              </Notice>
-            ))}
-            {/* 【观战不是错误，所以不用 error 那一档】它是一种正常的对局形态，
-            红字会让人以为自己配错了什么 */}
-            {!seated && <Notice tone="warning">{msg.setup.spectateHint}</Notice>}
-            {!seated && aiMode === "remote" && (
-              <Notice tone="warning">{msg.setup.spectateCostNote}</Notice>
+            {hasNotices && (
+              <div className="flex flex-col gap-3 border-t border-ink-line pt-5">
+                {preview.errors.map((issue) => (
+                  <Notice key={issue.code} tone="error">
+                    {msg.configIssue[issue.code](issue.params)}
+                  </Notice>
+                ))}
+                {preview.warnings.map((issue) => (
+                  <Notice key={issue.code} tone="warning">
+                    {msg.setup.balanceNote(msg.configIssue[issue.code](issue.params))}
+                  </Notice>
+                ))}
+                {/* 【观战不是错误，所以不用 error 那一档】它是一种正常的对局形态，
+                红字会让人以为自己配错了什么 */}
+                {!seated && <Notice tone="warning">{msg.setup.spectateHint}</Notice>}
+                {!seated && aiMode === "remote" && (
+                  <Notice tone="warning">{msg.setup.spectateCostNote}</Notice>
+                )}
+                {storeError && <Notice tone="error">{storeError}</Notice>}
+              </div>
             )}
-            {storeError && <Notice tone="error">{storeError}</Notice>}
-
-            <button
-              type="button"
-              onClick={start}
-              disabled={!preview.canStart || starting || !recoveryChecked || recoverySummary !== null}
-              className={cn(
-                "mt-1 w-full rounded-lg px-6 py-3.5 font-display text-lg tracking-[var(--track-3)] transition-colors",
-                "ui-button-primary",
-                "disabled:cursor-not-allowed disabled:bg-ink-raised disabled:text-muted",
-              )}
-            >
-              <span className="-mr-[var(--track-3)]">
-                {starting ? msg.setup.starting : seated ? msg.setup.submit : msg.setup.spectate}
-              </span>
-            </button>
           </div>
         </div>
       </div>
@@ -261,34 +266,36 @@ function RoundTable({
   const msg = useMessages();
 
   return (
-    <div>
-      <SeatRing
-        count={playerCount}
-        avatarSeed={PREVIEW_AVATAR_SEED}
-        marks={humanSeat === null ? [] : [{ id: humanSeat, tone: "self" }]}
-        onSelect={onSeat}
-        seatLabel={(id, mark) =>
-          mark.tone === "self" ? msg.setup.seatAriaSelf(id) : msg.setup.seatAria(id)
-        }
-        center={
-          <>
-            <p className="tabular text-sm text-loyal">{msg.setup.goodCount(good)}</p>
-            <p className="tabular mt-1 text-sm text-mordred">
-              {msg.setup.evilCount(evil)}
-            </p>
-          </>
-        }
-      />
+    <div className="flex min-w-0 flex-1 flex-col justify-evenly gap-4">
+      <div className="min-w-0">
+        <SeatRing
+          count={playerCount}
+          avatarSeed={PREVIEW_AVATAR_SEED}
+          marks={humanSeat === null ? [] : [{ id: humanSeat, tone: "self" }]}
+          onSelect={onSeat}
+          seatLabel={(id, mark) =>
+            mark.tone === "self" ? msg.setup.seatAriaSelf(id) : msg.setup.seatAria(id)
+          }
+          center={
+            <>
+              <p className="tabular text-sm text-loyal">{msg.setup.goodCount(good)}</p>
+              <p className="tabular mt-1 text-sm text-mordred">
+                {msg.setup.evilCount(evil)}
+              </p>
+            </>
+          }
+        />
+      </div>
 
-      <p className="mt-4 text-center text-xs text-muted">
-        {humanSeat === null
-          ? msg.setup.seatHintIdle
-          : msg.setup.seatHintSeated(humanSeat)}
-      </p>
+      <div className="flex flex-col items-center gap-3">
+        <p className="text-center text-xs text-muted">
+          {humanSeat === null
+            ? msg.setup.seatHintIdle
+            : msg.setup.seatHintSeated(humanSeat)}
+        </p>
 
-      {/* 【起身要有个说得出名字的按钮】「再点一次自己的座位」是既有行为，
-          但只有点过的人才知道，而观战是一种对局形态，不该靠试出来 */}
-      <div className="mt-3 flex justify-center">
+        {/* 【起身要有个说得出名字的按钮】「再点一次自己的座位」是既有行为，
+            但只有点过的人才知道，而观战是一种对局形态，不该靠试出来 */}
         <button
           type="button"
           onClick={onToggleSpectate}

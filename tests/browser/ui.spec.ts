@@ -3,7 +3,7 @@ import { messagesFor } from "../../src/i18n/messages";
 import { ROLE_ORDER } from "../../src/lib/game";
 
 for (const locale of ["zh", "en"] as const) {
-  for (const width of [390, 768, 1440]) {
+  for (const width of [390, 768, 1280, 1440]) {
     test.describe(`${locale} lobby at ${width}px`, () => {
       test.use({ locale: locale === "zh" ? "zh-CN" : "en-US", viewport: { width, height: 950 }, reducedMotion: "reduce" });
       test("responsive lobby, menu, tutorial, identity and saved-game placement", async ({ page }) => {
@@ -15,8 +15,75 @@ for (const locale of ["zh", "en"] as const) {
         await page.goto("/");
         await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
         await expect(page.getByRole("heading", { name: msg.ui.lobby })).toBeVisible();
+        await page.evaluate(() => document.fonts.ready);
         const overflow = () => page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
         expect(await overflow()).toBe(false);
+        const lobbyHeader = page.getByRole("main").locator(":scope > header");
+        const checkPanels = async () => {
+          const layout = await page.getByRole("main").evaluate((main) => ({
+            boxes: Array.from(main.querySelectorAll<HTMLElement>(":scope > .grid > .ui-panel"), (element) => {
+              const box = element.getBoundingClientRect();
+              return { y: box.y, height: box.height, bottom: box.bottom, clipped: element.scrollHeight > element.clientHeight };
+            }),
+            bottom: main.getBoundingClientRect().bottom,
+            padding: parseFloat(getComputedStyle(main).paddingBottom),
+            pageHeight: document.documentElement.scrollHeight,
+            scrollY,
+          }));
+          const boxes = layout.boxes;
+          expect(boxes).toHaveLength(2);
+          const [seats, setup] = boxes;
+          if (width >= 1280) {
+            expect(Math.abs(seats!.y - setup!.y)).toBeLessThanOrEqual(1);
+            expect(Math.abs(seats!.height - setup!.height)).toBeLessThanOrEqual(1);
+            expect(Math.abs(setup!.bottom + layout.padding - layout.bottom)).toBeLessThanOrEqual(1);
+            expect(Math.abs(layout.bottom + layout.scrollY - layout.pageHeight)).toBeLessThanOrEqual(1);
+            expect(boxes.every((box) => !box.clipped)).toBe(true);
+          } else {
+            expect(setup!.y).toBeGreaterThanOrEqual(seats!.y + seats!.height);
+          }
+          expect(await overflow()).toBe(false);
+        };
+        const checkStartPosition = async (name: string) => {
+          await expect(page.getByRole("button", { name, exact: true })).toHaveCount(1);
+          const title = await lobbyHeader.getByRole("heading", { name: msg.ui.lobby }).boundingBox();
+          const button = await lobbyHeader.getByRole("button", { name, exact: true }).boundingBox();
+          expect(title).not.toBeNull();
+          expect(button).not.toBeNull();
+          expect(button!.x).toBeGreaterThanOrEqual(title!.x + title!.width);
+          expect(Math.abs(title!.y + title!.height / 2 - button!.y - button!.height / 2)).toBeLessThanOrEqual(1);
+        };
+        await checkStartPosition(msg.setup.submit);
+        for (const count of [5, 6, 7, 8, 9, 10]) {
+          await page.getByRole("radio", { name: String(count), exact: true }).click();
+          await expect(page.getByRole("radio", { name: String(count), exact: true })).toHaveAttribute("aria-checked", "true");
+          await checkPanels();
+          if (count >= 7) {
+            const choices = page.getByRole("radiogroup", { name: msg.setup.freeEvilAria }).getByRole("radio");
+            const boxes = await choices.evaluateAll((elements) => elements.map((element) => {
+              const box = element.getBoundingClientRect();
+              return { y: box.y, height: box.height, clipped: element.scrollWidth > element.clientWidth };
+            }));
+            for (const box of boxes) {
+              expect(box.height).toBeGreaterThanOrEqual(44);
+              expect(box.clipped).toBe(false);
+              if (width >= 1440 || (locale === "zh" && width >= 1280)) {
+                expect(Math.abs(box.y - boxes[0]!.y)).toBeLessThanOrEqual(1);
+              }
+            }
+            for (let index = 0; index < boxes.length; index++) {
+              await choices.nth(index).click();
+              await expect(choices.nth(index)).toHaveAttribute("aria-checked", "true");
+              await checkPanels();
+            }
+            await choices.first().click();
+          }
+        }
+        await page.getByRole("button", { name: msg.setup.standUp, exact: true }).click();
+        await checkStartPosition(msg.setup.spectate);
+        await checkPanels();
+        await page.getByRole("button", { name: msg.setup.sitDown, exact: true }).click();
+        await checkPanels();
         await page.getByRole("radio", { name: "10", exact: true }).click();
         await expect(page.getByRole("radio", { name: "10", exact: true })).toHaveAttribute("aria-checked", "true");
         await expect(page.getByRole("radio", { name: "10", exact: true })).not.toHaveCSS("box-shadow", "none");
@@ -27,6 +94,27 @@ for (const locale of ["zh", "en"] as const) {
         if (width >= 640) await expect(page.locator(".round-table-art").first()).toHaveCSS("background-image", /round-table\.png/);
         await expect(page.getByRole("button", { name: msg.setup.submit, exact: true })).toHaveCSS("background-image", /linear-gradient/);
         await expect(page.getByRole("button", { name: msg.setup.submit, exact: true })).toHaveCSS("border-top-width", "1px");
+        if (width >= 1280) {
+          for (const height of [600, 950, 1200]) {
+            await page.setViewportSize({ width, height });
+            for (const count of [5, 10]) {
+              await page.getByRole("radio", { name: String(count), exact: true }).click();
+              await expect(page.getByRole("radio", { name: String(count), exact: true })).toHaveAttribute("aria-checked", "true");
+              await checkPanels();
+              await page.getByRole("button", { name: msg.setup.standUp, exact: true }).click();
+              await expect(page.getByRole("button", { name: msg.setup.spectate, exact: true })).toBeVisible();
+              await checkPanels();
+              await page.getByRole("button", { name: msg.setup.sitDown, exact: true }).click();
+              await expect(page.getByRole("button", { name: msg.setup.submit, exact: true })).toBeVisible();
+              await checkPanels();
+            }
+            expect(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight)).toBe(height === 600);
+            await page.evaluate(() => window.scrollTo(0, 0));
+            await page.screenshot({ path: `test-results/ui/lobby-${locale}-${width}-${height}.png`, fullPage: true });
+          }
+          await page.setViewportSize({ width, height: 950 });
+        }
+        await page.evaluate(() => window.scrollTo(0, 0));
         await page.screenshot({ path: `test-results/ui/lobby-${locale}-${width}.png`, fullPage: true });
 
         if (width < 1024) {
@@ -49,7 +137,9 @@ for (const locale of ["zh", "en"] as const) {
           await expect(page.getByRole("button", { name: msg.ui.menu, exact: true })).toBeHidden();
           await page.getByRole("button", { name: msg.history.collapseSidebar, exact: true }).click();
           await expect(page.getByRole("button", { name: msg.history.expandSidebar, exact: true })).toBeVisible();
+          await checkPanels();
           await page.getByRole("button", { name: msg.history.expandSidebar, exact: true }).click();
+          await checkPanels();
         }
 
         await page.getByRole("button", { name: msg.tutorial.triggerAria, exact: true }).click();
@@ -83,6 +173,12 @@ for (const locale of ["zh", "en"] as const) {
         const recovery = page.getByRole("region", { name: msg.recovery.title, exact: true });
         await expect(recovery).toBeVisible();
         await expect(page.getByRole("main").getByRole("region", { name: msg.recovery.title })).toBeVisible();
+        await checkPanels();
+        if (width >= 1280) {
+          await page.setViewportSize({ width, height: 1200 });
+          await checkPanels();
+          await page.setViewportSize({ width, height: 950 });
+        }
         await expect(page.getByRole("button", { name: msg.setup.submit, exact: true })).toBeDisabled();
         await expect(page.getByRole("button", { name: msg.setup.submit, exact: true })).toHaveCSS("background-image", "none");
         await expect(page.getByRole("button", { name: msg.setup.submit, exact: true })).toHaveCSS("background-color", "rgb(19, 37, 50)");
