@@ -9,7 +9,8 @@
  */
 import { useAtomValue, useSetAtom } from "jotai";
 import { useMessages } from "@/i18n/useMessages";
-import { errorAtom, pausedAtom, restartGameAtom } from "@/store/game";
+import { pausedAtom, restartGameAtom } from "@/store/game";
+import { AiCallError } from "./AiCallError";
 import { IdentityDeck } from "./IdentityDeck";
 import { InGameLayout } from "./InGameLayout";
 import { MindPanel } from "./MindPanel";
@@ -20,7 +21,6 @@ import { SpeechFeed } from "./SpeechFeed";
 import { VoteMatrix } from "./VoteMatrix";
 
 export function SpectatorTable() {
-  const error = useAtomValue(errorAtom);
   const paused = useAtomValue(pausedAtom);
   const reset = useSetAtom(restartGameAtom);
   const msg = useMessages();
@@ -49,11 +49,7 @@ export function SpectatorTable() {
           <SpectatorBar />
           <MindPanel />
 
-          {error && (
-            <p role="alert" className="max-w-md text-center text-sm text-mordred">
-              {error}
-            </p>
-          )}
+          <AiCallError />
 
           <button
             type="button"

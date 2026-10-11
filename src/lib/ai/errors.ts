@@ -24,8 +24,10 @@ export type AiErrorCode =
   | "CONFIG_MISSING"
   /** provider 返回 4xx（鉴权失败、模型名不存在、余额不足）。重试没有意义 */
   | "PROVIDER_REJECTED"
-  /** 429 / 5xx / 网络不通 / 超时。重试过了仍然不行 */
+  /** 429 / 5xx / 网络不通。重试过了仍然不行 */
   | "PROVIDER_UNAVAILABLE"
+  /** The model did not finish within the request's time budget. */
+  | "PROVIDER_TIMEOUT"
   /** 传进来的 AiDecisionRequest 形状不对。只可能来自 HTTP 边界的外部输入 */
   | "BAD_REQUEST"
   /** 公开部署要求先登录 */

@@ -96,6 +96,29 @@ If a Qwen model rejects `enable_thinking`, use `LLM_EXTRA_BODY={"thinking_budget
 
 Vercel only applies environment variable changes to new deployments. After changing Supabase Auth URLs or Vercel env vars, redeploy.
 
+### Bring your own reasoning model
+
+The checked-in `vercel.json` enables Fluid compute and configures `/api/ai` for
+300 seconds with request cancellation. After deploying, verify the AI function's
+maximum duration is 300 seconds in Vercel's deployment details. Platform-credit
+games retain their existing 54-second provider budget.
+
+BYOK games share a 270-second budget across all attempts, including response-body
+reads. The browser has a 315-second safety timeout. Exhausting the budget pauses
+the game at its checkpoint and shows Retry and Save and exit; retrying uses the
+same game/session and preserves completed decisions.
+
+For QwenCloud Token Plan, choose Qwen and set the model to `qwen3.8-max` and Base
+URL to `https://token-plan.maas.qwencloudapi.com/compatible-mode/v1`. Use the Key
+issued for that endpoint. Leave Extra body empty to preserve the model's default
+deep thinking; platform `LLM_EXTRA_BODY` is not inherited by BYOK games. Reasoning
+context is returned to the provider only for validation retries within a request,
+and is never added to saves, decision debug, or UI.
+
+References: [QwenCloud thinking](https://docs.qwencloud.com/developer-guides/text-generation/thinking),
+[Vercel Fluid compute](https://vercel.com/docs/fluid-compute),
+[Vercel duration](https://vercel.com/docs/functions/configuring-functions/duration).
+
 ## Manual Acceptance
 
 - Sign up with email and password.

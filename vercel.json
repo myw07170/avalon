@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "fluid": true,
+  "functions": {
+    "src/app/api/ai/route.ts": {
+      "maxDuration": 300,
+      "supportsCancellation": true
+    }
+  }
+}

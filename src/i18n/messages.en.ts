@@ -652,6 +652,7 @@ export const en: Messages = {
       "The model service refused the call; usually the key, the model name, or the balance",
     PROVIDER_UNAVAILABLE:
       "Could not reach the model service, or it is temporarily down. Try again shortly",
+    PROVIDER_TIMEOUT: "The model did not finish thinking in time. Your progress is retained; you can retry",
     BAD_REQUEST: "The model service could not process this request; details are in the browser console",
     AUTH_REQUIRED: "Sign in before starting a remote model game",
     GAME_SESSION_REQUIRED: "This remote game session is no longer valid. Start a new game",

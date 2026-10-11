@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createConfig } from "../game/config";
 import { getLegalActions } from "../game/legal";
 import { createRng } from "../game/rng";
@@ -138,6 +138,33 @@ describe("正常路径", () => {
 });
 
 describe("失败就抛，不兜底", () => {
+  it("preserves the provider timeout code", async () => {
+    await expect(createRemoteAiClient({ fetchFn: async () => Response.json({ code: "PROVIDER_TIMEOUT" }, { status: 502 }) })
+      .decide(makeReq())).rejects.toMatchObject({ code: "PROVIDER_TIMEOUT" });
+  });
+
+  it.each(["fetch", "body"])("BYOK's 315s safety timeout also covers %s", async stage => {
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+    try {
+      let entered!: () => void;
+      const started = new Promise<void>(resolve => { entered = resolve; });
+      const call = createRemoteAiClient({
+        userLlmConfig: { provider: "qwen", model: "qwen3.8-max", apiKey: "test-only" },
+        fetchFn: async () => {
+          entered();
+          return stage === "fetch" ? new Promise<Response>(() => {}) : new Response(new ReadableStream());
+        },
+      }).decide(makeReq());
+      const rejected = expect(call).rejects.toMatchObject({ code: "PROVIDER_TIMEOUT" });
+      await started;
+      await Promise.resolve();
+      controller.abort(new DOMException("Timeout", "TimeoutError"));
+      await rejected;
+      expect(timeout).toHaveBeenCalledWith(315_000);
+    } finally { timeout.mockRestore(); }
+  });
+
   it("非 2xx 抛 AiError，并带上服务端给的那句话", async () => {
     const fetchFn: FetchFn = () =>
       Promise.resolve(Response.json({ error: "上游模型调用失败（PROVIDER_REJECTED）" }, { status: 502 }));

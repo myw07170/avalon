@@ -17,6 +17,7 @@ import {
 } from "../game/types";
 import {
   createAiClient,
+  callProvider,
   extractJson,
   providerConfigFromUserConfig,
   readMaxRetries,
@@ -116,7 +117,7 @@ interface FakeProvider {
 
 /** 按顺序吐出预设的回合。每个回合要么是一段模型正文，要么是一个 HTTP 状态码/异常 */
 type Turn =
-  | { content: string }
+  | { content: string; reasoning_content?: string }
   | { status: number; error?: { code?: string; param?: string; message?: string } }
   | { throws: string };
 
@@ -138,7 +139,7 @@ function fakeProvider(turns: Turn[]): FakeProvider {
       );
     }
     return Promise.resolve(
-      Response.json({ choices: [{ message: { content: turn.content } }] }),
+      Response.json({ choices: [{ message: { content: turn.content, reasoning_content: turn.reasoning_content } }] }),
     );
   };
   return { fetchFn, calls };
@@ -441,6 +442,93 @@ describe("LLM_EXTRA_BODY", () => {
 });
 
 describe("用户自带 LLM 配置", () => {
+  it("validation retries return reasoning only to the provider, preserving callProvider's string interface", async () => {
+    const provider = fakeProvider([
+      { content: "invalid", reasoning_content: "private-thought-one" },
+      { content: "still invalid", reasoning_content: "private-thought-two" },
+      { content: VOTE_JSON, reasoning_content: "private-thought-three" },
+    ]);
+    const result = await createAiClient(CONFIG(provider.fetchFn)).decide(makeReq(build(), 2, "VOTE"));
+    expect(provider.calls[2]?.body.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: "assistant", content: "invalid", reasoning_content: "private-thought-one" }),
+      expect.objectContaining({ role: "assistant", content: "still invalid", reasoning_content: "private-thought-two" }),
+    ]));
+    expect(JSON.stringify(result)).not.toContain("private-thought");
+    expect(await callProvider(CONFIG(provider.fetchFn), [{ role: "user", content: "JSON" }])).toBe(VOTE_JSON);
+  });
+
+  it("retries spend only the remaining total budget", async () => {
+    vi.useFakeTimers();
+    try {
+      const timeouts: number[] = [];
+      vi.spyOn(AbortSignal, "timeout").mockImplementation(ms => {
+        timeouts.push(ms);
+        return new AbortController().signal;
+      });
+      let calls = 0;
+      const fetchFn: FetchFn = async () => {
+        calls++;
+        if (calls === 1) {
+          vi.setSystemTime(Date.now() + 100_000);
+          return new Response("Unavailable", { status: 503 });
+        }
+        return Response.json({ choices: [{ message: { content: VOTE_JSON } }] });
+      };
+      await createAiClient({ ...CONFIG(fetchFn), timeoutMs: 270_000, deadlineAt: Date.now() + 270_000 })
+        .decide(makeReq(build(), 2, "VOTE"));
+      expect(timeouts).toEqual([270_000, 170_000]);
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it.each([200, 503])("body reads respect the deadline and do not retry when exhausted (HTTP %s)", async status => {
+    vi.useFakeTimers();
+    try {
+      const controller = new AbortController();
+      vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+      const fetchFn = vi.fn<FetchFn>(async () => new Response(new ReadableStream(), { status }));
+      const call = createAiClient({ ...CONFIG(fetchFn), deadlineAt: Date.now() + 270_000 })
+        .decide(makeReq(build(), 2, "VOTE"));
+      const rejected = expect(call).rejects.toMatchObject({ code: "PROVIDER_TIMEOUT" });
+      await Promise.resolve();
+      vi.setSystemTime(Date.now() + 270_000);
+      controller.abort(new DOMException("Timeout", "TimeoutError"));
+      await rejected;
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it.each(["fetch", "body"])("caller cancellation interrupts %s without retrying", async stage => {
+    const controller = new AbortController();
+    let entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const fetchFn = vi.fn<FetchFn>(async (_url, init) => {
+      expect(init.signal).not.toBe(controller.signal);
+      entered();
+      return stage === "fetch" ? new Promise<Response>(() => {}) : new Response(new ReadableStream());
+    });
+    const call = createAiClient({ ...CONFIG(fetchFn), signal: controller.signal })
+      .decide(makeReq(build(), 2, "VOTE"));
+    const rejected = expect(call).rejects.toMatchObject({ name: "AbortError" });
+    await started;
+    await Promise.resolve();
+    controller.abort();
+    await rejected;
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("an exhausted deadline makes no upstream call", async () => {
+    const fetchFn = vi.fn<FetchFn>();
+    await expect(createAiClient({ ...CONFIG(fetchFn), deadlineAt: Date.now() - 1 })
+      .decide(makeReq(build(), 2, "VOTE"))).rejects.toMatchObject({ code: "PROVIDER_TIMEOUT" });
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
   it("provider 默认 baseUrl 与请求字段按现有协议发送", async () => {
     const provider = fakeProvider([{ content: VOTE_JSON }]);
     const config = {

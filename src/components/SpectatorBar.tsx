@@ -13,12 +13,13 @@
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useMessages } from "@/i18n/useMessages";
 import { cn } from "@/lib/utils";
-import { paceMsAtom, pausedAtom, togglePauseAtom } from "@/store/game";
+import { paceMsAtom, pausedAtom, runStatusAtom, togglePauseAtom } from "@/store/game";
 import { PACE_OPTIONS, paceKeyOf } from "./spectator-model";
 
 export function SpectatorBar() {
   const [paceMs, setPaceMs] = useAtom(paceMsAtom);
   const paused = useAtomValue(pausedAtom);
+  const status = useAtomValue(runStatusAtom);
   const togglePause = useSetAtom(togglePauseAtom);
   const msg = useMessages();
 
@@ -34,6 +35,7 @@ export function SpectatorBar() {
         type="button"
         onClick={() => togglePause()}
         aria-pressed={paused}
+        disabled={status === "interrupted"}
         className={cn(
           "min-h-11 rounded-lg border px-5 py-2 text-sm transition-colors",
           paused

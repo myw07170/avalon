@@ -22,11 +22,12 @@ import { isAuthRequired } from "@/lib/supabase/config";
 import { consumeAiCall, QuotaError, recordUserAiCall } from "@/lib/supabase/quota";
 import { ActiveGameError, authorizeActiveGameAiCall } from "@/lib/supabase/active-games";
 
-/** 一次请求内可能跑到 3 次模型调用，平台默认的 10s 不够 */
-export const maxDuration = 60;
+/** BYOK reasoning models need more time; deployment must enable Fluid compute. */
+export const maxDuration = 300;
 
-/** 留 6s 给鉴权、额度、JSON 解析与响应写回，避免被 Vercel 直接 504 */
-const PROVIDER_TIMEOUT_BUDGET_MS = maxDuration * 1000 - 6000;
+/** Keep the platform's old budget; BYOK reserves 30s for the rest of the route. */
+const PLATFORM_TIMEOUT_BUDGET_MS = 54_000;
+const USER_TIMEOUT_BUDGET_MS = 270_000;
 
 /**
  * 错误响应。
@@ -42,6 +43,7 @@ const fail = (status: number, code: AiErrorCode, error: string, headers?: Header
   Response.json({ code, error }, { status, headers });
 
 export async function POST(request: Request): Promise<Response> {
+  const startedAt = Date.now();
   let responseHeaders: Headers | undefined;
   let authenticatedUserId: string | null = null;
   let gameSessionId: string | null = null;
@@ -98,13 +100,15 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const maxRetries = Math.min(parsed.data.maxRetries, serverMaxRetries);
-  const effectiveTimeoutMs = Math.max(
+  const budgetMs = userLlmConfig ? USER_TIMEOUT_BUDGET_MS : PLATFORM_TIMEOUT_BUDGET_MS;
+  const effectiveTimeoutMs = userLlmConfig ? budgetMs : Math.max(
     1,
-    Math.floor(PROVIDER_TIMEOUT_BUDGET_MS / (maxRetries + 1)),
+    Math.floor(budgetMs / (maxRetries + 1)),
   );
   if (config.timeoutMs === undefined || config.timeoutMs > effectiveTimeoutMs) {
     config = { ...config, timeoutMs: effectiveTimeoutMs };
   }
+  config = { ...config, deadlineAt: startedAt + budgetMs, signal: request.signal };
 
   const req = {
     ...requestData,
@@ -123,6 +127,7 @@ export async function POST(request: Request): Promise<Response> {
     }
     return Response.json(await createAiClient(config).decide(req), { headers: responseHeaders });
   } catch (error) {
+    if (request.signal.aborted) return new Response(null, { status: 499, headers: responseHeaders });
     if (error instanceof ActiveGameError) return fail(error.status, error.code === "AI_CALL_LIMIT_REACHED" ? "AI_CALL_LIMIT" : "GAME_SESSION_REQUIRED", error.code, responseHeaders);
     if (error instanceof QuotaError) {
       if (error.code === "AI_CALL_LIMIT") {

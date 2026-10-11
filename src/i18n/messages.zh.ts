@@ -738,6 +738,7 @@ export const zh = {
     CONFIG_MISSING: "服务端还没配好真实模型，先在 .env.local 里配 provider 和 key，或改用 mock",
     PROVIDER_REJECTED: "模型服务拒绝了这次调用，多半是 key、模型名或余额的问题",
     PROVIDER_UNAVAILABLE: "连不上模型服务，或者它暂时不可用。过一会儿再试",
+    PROVIDER_TIMEOUT: "模型未能在时间限制内完成思考。当前进度已保留，可以重试",
     BAD_REQUEST: "这次请求模型服务没法处理，详情在浏览器控制台",
     AUTH_REQUIRED: "请先登录，再开始远程模型局",
     GAME_SESSION_REQUIRED: "这局远程模型 session 已失效，请回到开局页重新开始",

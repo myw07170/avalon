@@ -7,7 +7,8 @@ import { Menu, X, LogOut, RotateCcw } from "lucide-react";
 import { LocaleGate } from "@/i18n/LocaleGate";
 import { useMessages } from "@/i18n/useMessages";
 import { isClientAuthRequired } from "@/lib/supabase/config";
-import { errorAtom, isSpectatingAtom, restartGameAtom, runStatusAtom, saveAndExitAtom } from "@/store/game";
+import { isSpectatingAtom, restartGameAtom, runStatusAtom, saveAndExitAtom } from "@/store/game";
+import { AiCallError } from "./AiCallError";
 import { AppHeader } from "./AppHeader";
 import { GameOverPanel } from "./GameOverPanel";
 import { InGameLayout } from "./InGameLayout";
@@ -41,7 +42,7 @@ function Screen() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [setupDraft, setSetupDraft] = useState<SetupDraft>(() => defaultDraft());
   const lobby = status === "idle" || status === "error";
-  const playing = status === "ready" || status === "running";
+  const playing = status === "ready" || status === "running" || status === "interrupted";
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSidebarCollapsed(readSavedAccountSidebarCollapsed(window.localStorage)), 0);
@@ -74,14 +75,15 @@ function Screen() {
       </div>;
       break;
     case "ready": content = spectating ? <SpectatorIntro /> : <RoleCard />; break;
-    case "running": content = spectating ? <SpectatorTable /> : <Table />; break;
+    case "running":
+    case "interrupted": content = spectating ? <SpectatorTable /> : <Table />; break;
     case "finished": content = <GameOverPanel />; break;
   }
 
   return <Dialog.Root open={menuOpen && lobby} onOpenChange={setMenuOpen}>
     <AppHeader leading={lobby && <Dialog.Trigger asChild><button type="button" className="ui-button px-2.5 lg:hidden" aria-label={msg.ui.menu}><Menu className="size-5" aria-hidden /></button></Dialog.Trigger>}
       actions={playing && <>
-        {status === "running" && !spectating && <button type="button" onClick={() => reset()} className="ui-button" aria-label={msg.shell.restart}><RotateCcw className="size-4" aria-hidden /><span className="hidden sm:inline">{msg.shell.restart}</span></button>}
+        {(status === "running" || status === "interrupted") && !spectating && <button type="button" onClick={() => reset()} className="ui-button" aria-label={msg.shell.restart}><RotateCcw className="size-4" aria-hidden /><span className="hidden sm:inline">{msg.shell.restart}</span></button>}
         <button type="button" onClick={() => void saveExit()} className="ui-button" aria-label={msg.recovery.saveExit}><LogOut className="size-4" aria-hidden /><span className="hidden sm:inline">{msg.recovery.saveExit}</span></button>
       </>} />
     {content}
@@ -101,8 +103,6 @@ function Screen() {
 
 /** 对局中。圆桌与右下操作台共享组队草稿，其余人类操作也统一从右栏进入。 */
 function Table() {
-  const error = useAtomValue(errorAtom);
-
   return (
     <TeamDraftProvider>
       <AssassinationDraftProvider>
@@ -117,11 +117,7 @@ function Table() {
           conversation={<SpeechFeed enableActions />}
           controls={
             <>
-              {error && (
-                <p role="alert" className="max-w-md text-center text-sm text-mordred">
-                  {error}
-                </p>
-              )}
+              <AiCallError />
             </>
           }
         />

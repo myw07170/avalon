@@ -333,7 +333,7 @@ export const isSpectatingAtom = atom(
  * ACKNOWLEDGE 不走 onHumanAction（decisionKindOf 返回 null 时直接落地），
  * 循环一旦起跑，ROLE_REVEAL 会被瞬间跳过，翻牌动效根本没有停留时间。
  */
-export type RunStatus = "idle" | "ready" | "running" | "finished" | "error";
+export type RunStatus = "idle" | "ready" | "running" | "interrupted" | "finished" | "error";
 
 export const runStatusAtom = atom<RunStatus>("idle");
 
@@ -1069,8 +1069,11 @@ export const runGameAtom = atom(null, async (get, set) => {
     controller.abort();
     if (error instanceof SaveError) reportSaveError(set, error);
     else set(errorSourceAtom, sourceOfError(error));
-    set(runStatusAtom, get(gameStateAtom)?.phase === "GAME_OVER" ? "finished" : "error");
-    if (get(persistenceAtom)) await set(refreshRecoveryAtom);
+    const modelInterrupted = error instanceof AiError && [
+      "CONFIG_MISSING", "PROVIDER_REJECTED", "PROVIDER_UNAVAILABLE", "PROVIDER_TIMEOUT",
+    ].includes(error.code);
+    set(runStatusAtom, get(gameStateAtom)?.phase === "GAME_OVER" ? "finished" : modelInterrupted ? "interrupted" : "error");
+    if (!modelInterrupted && get(persistenceAtom)) await set(refreshRecoveryAtom);
   } finally {
     // 只清理自己那一局。中途 reset 再开新局时，这段跑得比新局晚，
     // 不加这道判断会把新局的 pendingTurn 一起抹掉
@@ -1080,6 +1083,14 @@ export const runGameAtom = atom(null, async (get, set) => {
       set(thinkingAtom, EMPTY_THINKING);
     }
   }
+});
+
+/** Resume the existing checkpoint without dealing again or creating a session. */
+export const retryAiTurnAtom = atom(null, async (get, set) => {
+  if (get(runStatusAtom) !== "interrupted" || get(abortAtom) || get(recoveryBusyAtom)) return;
+  set(errorSourceAtom, null);
+  set(runStatusAtom, "ready");
+  await set(runGameAtom);
 });
 
 async function saveFinishedReview(get: Getter, set: Setter): Promise<void> {

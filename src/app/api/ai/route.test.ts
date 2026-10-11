@@ -5,7 +5,7 @@ import { createRng } from "@/lib/game/rng";
 import { createGame, makePlaceholderPersonas } from "@/lib/game/setup";
 import { toPlayerView } from "@/lib/game/view";
 import { createPending, type GameState, type Role } from "@/lib/game/types";
-import { POST } from "./route";
+import { maxDuration, POST } from "./route";
 vi.mock("@/lib/supabase/active-games", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/supabase/active-games")>(),
   authorizeActiveGameAiCall: vi.fn().mockResolvedValue(false),
@@ -440,6 +440,55 @@ describe("公开部署鉴权与额度", () => {
 });
 
 describe("maxRetries 被服务端夹住", () => {
+  it("QwenCloud reasoning can finish after 18s without inheriting platform settings", async () => {
+    vi.useFakeTimers();
+    try {
+      configureEnv({ LLM_TIMEOUT_MS: "18000", LLM_EXTRA_BODY: '{"enable_thinking":false}', LLM_MAX_TOKENS: "700" });
+      const timeout = vi.spyOn(AbortSignal, "timeout");
+      const upstream = vi.fn(async (_url: string, _init: RequestInit) => {
+        await new Promise(resolve => setTimeout(resolve, 20_000));
+        return Response.json({ choices: [{ message: { content: VOTE_JSON, reasoning_content: "private-thought" } }] });
+      });
+      vi.stubGlobal("fetch", upstream);
+      const response = post({ ...validBody(), userLlmConfig: {
+        provider: "qwen", model: "qwen3.8-max", apiKey: "sk-user-secret-key",
+        baseUrl: "https://token-plan.maas.qwencloudapi.com/compatible-mode/v1",
+      } });
+      await vi.advanceTimersByTimeAsync(20_000);
+      const result = await response;
+      expect(result.status).toBe(200);
+      expect(maxDuration).toBe(300);
+      expect(timeout).toHaveBeenCalledWith(270_000);
+      expect(upstream).toHaveBeenCalledTimes(1);
+      expect(upstream.mock.calls[0]?.[0]).toBe("https://token-plan.maas.qwencloudapi.com/compatible-mode/v1/chat/completions");
+      const body = JSON.parse(upstream.mock.calls[0]![1].body as string);
+      expect(body).toMatchObject({ model: "qwen3.8-max" });
+      expect(body).not.toHaveProperty("enable_thinking");
+      expect(body).not.toHaveProperty("max_tokens");
+      expect(await result.text()).not.toContain("private-thought");
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("a cancelled incoming request stops upstream and is not retried", async () => {
+    const controller = new AbortController();
+    let entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const upstream = vi.fn(async (_url: string, init: RequestInit) => {
+      entered();
+      expect(init.signal).toBeDefined();
+      return new Promise<Response>(() => {});
+    });
+    vi.stubGlobal("fetch", upstream);
+    const response = POST(new Request("http://localhost/api/ai", {
+      method: "POST", signal: controller.signal,
+      body: JSON.stringify({ ...validBody(), userLlmConfig: { provider: "qwen", model: "qwen3.8-max", apiKey: "test" } }),
+    }));
+    await started;
+    controller.abort();
+    expect((await response).status).toBe(499);
+    expect(upstream).toHaveBeenCalledTimes(1);
+  });
+
   it("provider timeout 会按 Vercel 函数时长预算夹住，避免 60s 硬超时", async () => {
     configureEnv({ LLM_TIMEOUT_MS: "120000", LLM_MAX_RETRIES: "2" });
     stubProvider(VOTE_JSON);
@@ -467,7 +516,9 @@ describe("maxRetries 被服务端夹住", () => {
     const response = await post(validBody(0));
 
     expect(response.status).toBe(200);
-    expect(timeouts).toEqual([54_000]);
+    expect(timeouts).toHaveLength(1);
+    expect(timeouts[0]).toBeGreaterThan(53_000);
+    expect(timeouts[0]).toBeLessThanOrEqual(54_000);
   });
 
   it("请求里写 99，实际调用次数仍按 LLM_MAX_RETRIES 算", async () => {

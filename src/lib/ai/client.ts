@@ -20,6 +20,7 @@ import { buildPrompt } from "./prompt";
 import { PROMPT_COPY } from "./prompt-copy";
 import { safeParseAiPayload } from "./schema";
 import { AiError } from "./errors";
+import { withAbort } from "./abort";
 import {
   USER_LLM_PROVIDER_BASE_URLS,
   userLlmConfigSchema,
@@ -47,6 +48,10 @@ export interface LlmProviderConfig {
   model: string;
   /** 单次调用超时。Next 的 BFF 指南明确要求给外部调用设超时 */
   timeoutMs?: number;
+  /** Absolute request deadline shared by all attempts, set only by the server. */
+  deadlineAt?: number;
+  /** The incoming HTTP request's cancellation signal. */
+  signal?: AbortSignal;
   /**
    * 输出上限。undefined → **请求里根本不发这个字段**（保持 provider 默认）。
    *
@@ -207,9 +212,8 @@ function readExtraBody(): Record<string, unknown> | undefined {
  * LLM_TIMEOUT_MS：单次调用超时，留空取 30s。
  *
  * 【推理模型要调大】gpt-5 系列在吐 JSON 之前会先烧一大段 reasoning token，
- * 30s 经常不够；超时算 PROVIDER_UNAVAILABLE，会重试，于是一次决策白等 90s。
- * 【走 /api/ai 时它受 route.ts 的 maxDuration=60 压制】那条路上把它调过 60s 没有意义，
- * 真正需要长超时的是 real-game.test.ts 那种直接在 Node 里跑整局的场景。
+ * 30s 经常不够；超时算 PROVIDER_TIMEOUT，仅在剩余总预算允许时重试。
+ * 平台模型经 /api/ai 调用仍受 54s 总预算约束；自带模型有独立的 270s 总预算。
  */
 function readTimeoutMs(): number {
   const raw = process.env.LLM_TIMEOUT_MS?.trim();
@@ -381,14 +385,17 @@ function normalizeAiSeatNumbers(kind: AiDecisionKind, payload: unknown): unknown
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
+  /** Provider-only retry context; never included in decision debug or saves. */
+  reasoning_content?: string;
 }
 
 /**
  * 发一次请求，拿回模型的原文。
  *
- * 错误分成两类，这个区分决定了上层要不要重试：
+ * 错误分类决定了上层要不要重试：
  * - 4xx（429 除外）→ PROVIDER_REJECTED，改配置才能好，重试纯属浪费
- * - 429 / 5xx / 网络不通 / 超时 → PROVIDER_UNAVAILABLE，可以重试
+ * - 429 / 5xx / 网络不通 → PROVIDER_UNAVAILABLE，可以重试
+ * - 超时 → PROVIDER_TIMEOUT，仅在总预算未耗尽时重试
  *
  * 抛出的消息里绝不带 apiKey，也不原样回传 provider 的响应体。
  */
@@ -397,63 +404,76 @@ export async function callProvider(
   config: LlmProviderConfig,
   messages: ChatMessage[],
 ): Promise<string> {
+  return (await callProviderMessage(config, messages)).content;
+}
+
+async function callProviderMessage(
+  config: LlmProviderConfig,
+  messages: ChatMessage[],
+): Promise<ChatMessage> {
+  config.signal?.throwIfAborted();
+  const remainingMs = config.deadlineAt === undefined ? Infinity : config.deadlineAt - Date.now();
+  if (remainingMs <= 0) {
+    throw new AiError("模型调用已超时", "PROVIDER_TIMEOUT", { provider: config.provider });
+  }
+  const timeout = AbortSignal.timeout(Math.min(config.timeoutMs ?? DEFAULT_TIMEOUT_MS, remainingMs));
+  const signal = config.signal ? AbortSignal.any([config.signal, timeout]) : timeout;
   const fetchFn = config.fetchFn ?? (globalThis.fetch as FetchFn);
   const url = `${config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
   const temperature = config.temperature === undefined ? DEFAULT_TEMPERATURE : config.temperature;
 
-  let response: Response;
   try {
-    response = await fetchFn(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: config.model,
-        messages,
-        // null 时整个字段都不出现，而不是发个 null——provider 会把 null 当非法值
-        ...(temperature === null ? {} : { temperature }),
-        // OpenAI 的 json_object 模式要求 messages 里出现 "JSON" 字样。
-        // prompt.ts 的【输出格式】段写的"只输出一个 JSON 对象"正好满足，别改没了
-        response_format: { type: "json_object" },
-        // 同 temperature：没配就整个字段不出现，而不是发个 undefined
-        ...(config.maxTokens === undefined ? {} : { max_tokens: config.maxTokens }),
-        // 放在最后：不支持 json_object 的模型得能把它换掉。
-        // model / messages 在 readExtraBody 里已经拦住了
-        ...config.extraBody,
-      }),
-      signal: AbortSignal.timeout(config.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+    return await withAbort(signal, async () => {
+      const response = await fetchFn(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: config.model,
+          messages,
+          // null omits the field so the provider can choose its default.
+          ...(temperature === null ? {} : { temperature }),
+          response_format: { type: "json_object" },
+          ...(config.maxTokens === undefined ? {} : { max_tokens: config.maxTokens }),
+          // Explicit provider options take precedence, except model/messages.
+          ...config.extraBody,
+        }),
+        signal,
+      });
+
+      if (!response.ok) {
+        const retryable = response.status === 429 || response.status >= 500;
+        const hint = await readErrorSlugs(response);
+        throw new AiError(
+          `${config.provider} 返回 HTTP ${response.status}` +
+            (hint.code === undefined ? "" : `（${hint.code}${hint.param ? ` / ${hint.param}` : ""}）`),
+          retryable ? "PROVIDER_UNAVAILABLE" : "PROVIDER_REJECTED",
+          { provider: config.provider, status: response.status, ...hint },
+        );
+      }
+
+      const body: unknown = await response.json();
+      const message = readMessage(body);
+      if (message === undefined) {
+        throw new AiError(
+          `${config.provider} 的响应里没有 choices[0].message.content`,
+          "PROVIDER_UNAVAILABLE",
+          { provider: config.provider },
+        );
+      }
+      return message;
     });
   } catch (cause) {
-    throw new AiError(
-      `调用 ${config.provider} 失败：${cause instanceof Error ? cause.message : "未知原因"}`,
-      "PROVIDER_UNAVAILABLE",
-      { provider: config.provider },
-    );
+    config.signal?.throwIfAborted();
+    if (timeout.aborted) {
+      throw new AiError("模型调用已超时", "PROVIDER_TIMEOUT", { provider: config.provider });
+    }
+    if (cause instanceof AiError) throw cause;
+    // Fetch/JSON errors can contain upstream text or credentials. Keep them private.
+    throw new AiError(`调用 ${config.provider} 失败`, "PROVIDER_UNAVAILABLE", { provider: config.provider });
   }
-
-  if (!response.ok) {
-    const retryable = response.status === 429 || response.status >= 500;
-    const hint = await readErrorSlugs(response);
-    throw new AiError(
-      `${config.provider} 返回 HTTP ${response.status}` +
-        (hint.code === undefined ? "" : `（${hint.code}${hint.param ? ` / ${hint.param}` : ""}）`),
-      retryable ? "PROVIDER_UNAVAILABLE" : "PROVIDER_REJECTED",
-      { provider: config.provider, status: response.status, ...hint },
-    );
-  }
-
-  const body: unknown = await response.json();
-  const content = readContent(body);
-  if (content === undefined) {
-    throw new AiError(
-      `${config.provider} 的响应里没有 choices[0].message.content`,
-      "PROVIDER_UNAVAILABLE",
-      { provider: config.provider },
-    );
-  }
-  return content;
 }
 
 /**
@@ -488,15 +508,17 @@ async function readErrorSlugs(
   return { code: slug("code"), param: slug("param") };
 }
 
-/** 只取一个字段，不给整个响应写 schema——那是 provider 的事，我们只要正文 */
-function readContent(body: unknown): string | undefined {
+/** Retain only the answer and optional provider-only reasoning context. */
+function readMessage(body: unknown): ChatMessage | undefined {
   if (typeof body !== "object" || body === null) return undefined;
   const choices = (body as { choices?: unknown }).choices;
   if (!Array.isArray(choices)) return undefined;
   const message = (choices[0] as { message?: unknown } | undefined)?.message;
   if (typeof message !== "object" || message === null) return undefined;
   const content = (message as { content?: unknown }).content;
-  return typeof content === "string" ? content : undefined;
+  if (typeof content !== "string") return undefined;
+  const reasoning = (message as { reasoning_content?: unknown }).reasoning_content;
+  return { role: "assistant", content, ...(typeof reasoning === "string" ? { reasoning_content: reasoning } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -537,9 +559,13 @@ export function createAiClient(config: LlmProviderConfig): AiClient {
       for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
         attempts += 1;
 
+        let answer: ChatMessage;
         try {
-          raw = await callProvider(config, messages);
+          answer = await callProviderMessage(config, messages);
+          raw = answer.content;
         } catch (error) {
+          config.signal?.throwIfAborted();
+          if (config.deadlineAt !== undefined && Date.now() >= config.deadlineAt) throw error;
           // 配置类错误重试多少次都是同一个结果，立刻抛
           if (error instanceof AiError && error.code === "PROVIDER_REJECTED") throw error;
           if (attempt === maxAttempts - 1) throw error;
@@ -559,7 +585,7 @@ export function createAiClient(config: LlmProviderConfig): AiClient {
 
         // 带着反馈重问，而不是原样再发一遍。
         // safeParseAiPayload 返回字符串而不是 ZodError，当初就是为这一步准备的
-        messages.push({ role: "assistant", content: raw });
+        messages.push(answer);
         messages.push({
           role: "user",
           // 【这句话是注回模型的，所以它属 prompt 语料不属 UI 文案】

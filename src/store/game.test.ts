@@ -14,7 +14,8 @@ import { PREVIEW_AVATAR_SEED } from "@/lib/seat-avatar";
 import { toDisplaySeatNumber } from "@/lib/seat-number";
 import { describeTurn } from "@/components/action-panel-model";
 import { describeGameOver } from "@/components/game-over-model";
-import type { GameAction, PlayerId } from "@/lib/game/types";
+import type { AiDecisionKind, AiDecisionRequest, GameAction, PlayerId } from "@/lib/game/types";
+import { createMockAiClient } from "@/lib/ai/mock";
 import type { HumanTurn } from "@/lib/ai/orchestrator";
 import {
   aiModeAtom,
@@ -37,6 +38,7 @@ import {
   revealedSeatsAtom,
   reviewDecisionsAtom,
   runGameAtom,
+  retryAiTurnAtom,
   runStatusAtom,
   seatAvatarSeedAtom,
   submitActionAtom,
@@ -77,6 +79,107 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
  * 正常一局的宏任务数约等于人类回合数，离这个数很远。
  */
 const MAX_TICKS = 5000;
+
+describe("interrupted remote games", () => {
+  it.each([null, SEAT])("keeps the deal and retries the current AI turn for human seat %s", async humanSeat => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const store = createStore();
+    store.set(aiModeAtom, "remote");
+    store.set(paceMsAtom, 0);
+    const config = { provider: "qwen" as const, model: "qwen3.8-max", apiKey: "test-key" };
+    store.set(createGameAtom, { config: createConfig(5, { seed: 1 }), avatarSeed: AVATAR_SEED, humanSeat, userLlmConfig: config, gameSessionId: "same-session" });
+    const players = store.get(gameStateAtom)!.players;
+    const mock = createMockAiClient(createRng(42));
+    let failed = false;
+    let failAgain = false;
+    const requests: AiDecisionRequest<AiDecisionKind>[] = [];
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      if (url !== "/api/ai") return Response.json({ ok: true });
+      const body = JSON.parse(init.body as string);
+      requests.push(body);
+      expect(body.userLlmConfig).toEqual(config);
+      expect(init.headers).toMatchObject({ "X-Game-Session-Id": "same-session" });
+      if (!failed || failAgain) {
+        failed = true;
+        return Response.json({ code: "PROVIDER_TIMEOUT" }, { status: 502 });
+      }
+      return Response.json(await mock.decide(body));
+    });
+    const firstRun = store.set(runGameAtom);
+    for (let n = 0; n < 100 && store.get(runStatusAtom) === "running"; n++) {
+      const turn = store.get(humanTurnAtom);
+      if (turn) store.set(submitActionAtom, turn.legalActions[0]!);
+      await tick();
+    }
+    await firstRun;
+    expect(store.get(runStatusAtom)).toBe("interrupted");
+    expect(store.get(thinkingAtom)).toEqual([]);
+    expect(store.get(humanTurnAtom)).toBeNull();
+    expect(store.get(errorAtom)).toContain("PROVIDER_TIMEOUT");
+    expect(store.get(gameStateAtom)!.players).toEqual(players);
+    const firstRequest = requests[0]!;
+    // Stop on the same AI turn again so the before/after request can be compared.
+    failAgain = true;
+    await Promise.all([store.set(retryAiTurnAtom), store.set(retryAiTurnAtom)]);
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).toEqual(firstRequest);
+    expect(store.get(runStatusAtom)).toBe("interrupted");
+    failAgain = false;
+    const retry = store.set(retryAiTurnAtom);
+    for (let n = 0; n < MAX_TICKS && store.get(runStatusAtom) === "running"; n++) {
+      const turn = store.get(humanTurnAtom);
+      if (turn) store.set(submitActionAtom, turn.legalActions[0]!);
+      await tick();
+    }
+    await retry;
+    expect(store.get(runStatusAtom)).toBe("finished");
+    expect(store.get(errorAtom)).toBeNull();
+    expect(store.get(gameStateAtom)!.players).toEqual(players);
+    vi.restoreAllMocks();
+  });
+
+  it("a failed concurrent vote retries only the missing answer", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const store = createStore();
+    store.set(aiModeAtom, "remote");
+    store.set(paceMsAtom, 0);
+    store.set(createGameAtom, { config: createConfig(5, { seed: 1 }), avatarSeed: AVATAR_SEED, humanSeat: null });
+    const mock = createMockAiClient(createRng(42));
+    const voteCalls = new Map<number, number>();
+    let failedSeat: number | null = null;
+    let failedMission: number | null = null;
+    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+      const req: AiDecisionRequest<AiDecisionKind> = JSON.parse(init.body as string);
+      if (req.kind === "VOTE" && (failedMission === null || req.view.missionIndex === failedMission)) {
+        failedMission = req.view.missionIndex;
+        const seat = req.view.selfId;
+        voteCalls.set(seat, (voteCalls.get(seat) ?? 0) + 1);
+        if (failedSeat === null) {
+          failedSeat = seat;
+          // Let the other seats' answers reach their checkpoint before failing.
+          await tick();
+          return Response.json({ code: "PROVIDER_UNAVAILABLE" }, { status: 502 });
+        }
+      }
+      return Response.json(await mock.decide(req));
+    });
+    await store.set(runGameAtom);
+    expect(store.get(runStatusAtom)).toBe("interrupted");
+    expect(voteCalls.size).toBe(5);
+    const before = new Map(voteCalls);
+    // Observe the next checkpoint after the retried vote, then reset to avoid counting later rounds.
+    const stop = store.sub(gameStateAtom, () => {
+      if (store.get(gameStateAtom)?.phase !== "TEAM_VOTE") store.set(togglePauseAtom);
+    });
+    const retry = store.set(retryAiTurnAtom);
+    for (let n = 0; n < 100 && !store.get(pausedAtom); n++) await tick();
+    stop();
+    for (const [seat, count] of before) expect(voteCalls.get(seat)).toBe(count + (seat === failedSeat ? 1 : 0));
+    store.set(resetGameAtom);
+    await retry;
+    vi.restoreAllMocks();
+  });
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();

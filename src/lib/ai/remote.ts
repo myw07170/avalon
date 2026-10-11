@@ -8,6 +8,7 @@
  * "模型说了胡话"这一种情况，把网络故障也算进 fallback 率，那个指标就废了。
  */
 import { AiError, type AiErrorCode } from "./errors";
+import { withAbort } from "./abort";
 import type { UserLlmConfig } from "./user-config";
 import type {
   AiClient,
@@ -51,39 +52,40 @@ export function createRemoteAiClient(options: RemoteAiClientOptions = {}): AiCli
     ): Promise<AiDecisionResult<K>> {
       const fetchFn = options.fetchFn ?? (globalThis.fetch as FetchFn);
 
-      let response: Response;
+      const timeout = options.userLlmConfig ? AbortSignal.timeout(315_000) : undefined;
+      const signal = options.signal && timeout
+        ? AbortSignal.any([options.signal, timeout])
+        : options.signal ?? timeout;
       try {
-        response = await fetchFn(endpoint, {
-          method: "POST",
-          headers: { ...headers, ...(options.activeGameHeader?.() ? { "X-Active-Game": options.activeGameHeader()! } : {}) },
-          body: JSON.stringify({
-            ...req,
-            ...(options.userLlmConfig ? { userLlmConfig: options.userLlmConfig } : {}),
-          }),
-          // 没配 signal 时整个字段不出现，而不是发个 undefined
-          ...(options.signal ? { signal: options.signal } : {}),
+        return await withAbort(signal, async () => {
+          const activeGame = options.activeGameHeader?.();
+          const response = await fetchFn(endpoint, {
+            method: "POST",
+            headers: { ...headers, ...(activeGame ? { "X-Active-Game": activeGame } : {}) },
+            body: JSON.stringify({
+              ...req,
+              ...(options.userLlmConfig ? { userLlmConfig: options.userLlmConfig } : {}),
+            }),
+            ...(signal ? { signal } : {}),
+          });
+
+          if (!response.ok) {
+            // Preserve the route's error code for localized player messages.
+            const { code, detail } = await readError(response);
+            throw new AiError(`${endpoint} 返回 HTTP ${response.status}：${detail}`, code, {
+              endpoint,
+              status: response.status,
+            });
+          }
+
+          return (await response.json()) as AiDecisionResult<K>;
         });
       } catch (cause) {
-        throw new AiError(
-          `请求 ${endpoint} 失败：${cause instanceof Error ? cause.message : "未知原因"}`,
-          "PROVIDER_UNAVAILABLE",
-          { endpoint },
-        );
+        options.signal?.throwIfAborted();
+        if (timeout?.aborted) throw new AiError("模型请求已超时", "PROVIDER_TIMEOUT", { endpoint });
+        if (cause instanceof AiError) throw cause;
+        throw new AiError(`请求 ${endpoint} 失败`, "PROVIDER_UNAVAILABLE", { endpoint });
       }
-
-      if (!response.ok) {
-        // route handler 的错误响应形如 { code, error }。
-        // 【code 要原样带上】玩家看到的那句话按它在 src/i18n 里查——退回
-        // PROVIDER_UNAVAILABLE 的话，"服务端没配 key" 会被说成 "上游暂时不可用"，
-        // 而这两件事该做的处置完全不同。error 只进 console，不显示给玩家
-        const { code, detail } = await readError(response);
-        throw new AiError(`${endpoint} 返回 HTTP ${response.status}：${detail}`, code, {
-          endpoint,
-          status: response.status,
-        });
-      }
-
-      return (await response.json()) as AiDecisionResult<K>;
     },
   };
 }
@@ -92,6 +94,7 @@ const AI_ERROR_CODES: readonly AiErrorCode[] = [
   "CONFIG_MISSING",
   "PROVIDER_REJECTED",
   "PROVIDER_UNAVAILABLE",
+  "PROVIDER_TIMEOUT",
   "BAD_REQUEST",
   "AUTH_REQUIRED",
   "GAME_SESSION_REQUIRED",
